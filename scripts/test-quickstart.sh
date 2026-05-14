@@ -8,8 +8,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
+COMPOSE_SMOKE_OVERRIDE=""
+TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
 CREATED_ENV_FILE=false
+CREATED_TRANSCODER_DATA_DIR=false
 PYTHON_RUNNER=()
+COMPOSE_RUNTIME_ARGS=("-f" "$COMPOSE_FILE")
 
 SMOKE_IMAGE_SOURCE=build
 SMOKE_LIVE_MODE=development
@@ -21,14 +25,42 @@ export BITRIVER_VIEWER_IMAGE_DIGEST=""
 export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
 export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
 
+if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
+  COMPOSE_SMOKE_OVERRIDE="$(mktemp)"
+  host_uid="$(id -u)"
+  host_gid="$(id -g)"
+  cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML
+services:
+  srs-config:
+    user: "${host_uid}:${host_gid}"
+  ome-config:
+    user: "${host_uid}:${host_gid}"
+  ome-health-token-check:
+    user: "${host_uid}:${host_gid}"
+  transcoder:
+    user: "${host_uid}:${host_gid}"
+YAML
+  COMPOSE_RUNTIME_ARGS+=("-f" "$COMPOSE_SMOKE_OVERRIDE")
+fi
+
 cleanup() {
   rm -f "$COMPOSE_CONFIG_OUTPUT"
-  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps >/dev/null 2>&1; then
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
+  if docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps >/dev/null 2>&1; then
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "$COMPOSE_SMOKE_OVERRIDE" ]]; then
+    rm -f "$COMPOSE_SMOKE_OVERRIDE"
   fi
 
   if [ "$CREATED_ENV_FILE" = true ]; then
     rm -f "$ENV_FILE"
+  fi
+
+  if [ "$CREATED_TRANSCODER_DATA_DIR" = true ]; then
+    rmdir "$TRANSCODER_DATA_DIR/public/live" "$TRANSCODER_DATA_DIR/public/uploads" 2>/dev/null || true
+    rmdir "$TRANSCODER_DATA_DIR/public" "$TRANSCODER_DATA_DIR/live" "$TRANSCODER_DATA_DIR/uploads" 2>/dev/null || true
+    rmdir "$TRANSCODER_DATA_DIR" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -80,7 +112,7 @@ BITRIVER_OME_API=http://ome:8081
 BITRIVER_OME_HTTP_PORT=8081
 BITRIVER_OME_SIGNALLING_PORT=9000
 BITRIVER_TRANSCODER_API=http://transcoder:9000
-BITRIVER_TRANSCODER_PUBLIC_BASE_URL=http://localhost:9080
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://example.com/hls
 BITRIVER_TRANSCODER_HOST_PORT=9001
 BITRIVER_INGEST_HEALTH=/healthz
 BITRIVER_SRS_RTMP_PORT=1935
@@ -101,8 +133,13 @@ BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
 fi
 
+if [ ! -d "$TRANSCODER_DATA_DIR" ]; then
+  CREATED_TRANSCODER_DATA_DIR=true
+fi
+mkdir -p "$TRANSCODER_DATA_DIR/live" "$TRANSCODER_DATA_DIR/uploads" "$TRANSCODER_DATA_DIR/public/live" "$TRANSCODER_DATA_DIR/public/uploads"
+
 echo "Rendering docker compose config..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >"$COMPOSE_CONFIG_OUTPUT"
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" config >"$COMPOSE_CONFIG_OUTPUT"
 
 if ! command -v go >/dev/null 2>&1; then
   echo "error: go is required to render the OME config" >&2
@@ -289,8 +326,16 @@ if healthcheck_token and legacy_token and healthcheck_token != legacy_token:
 print("OME config validation passed.")
 PY
 
-echo "Starting docker compose stack..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --pull never
+echo "Building local docker compose images..."
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
+
+echo "Pulling missing third-party runtime images..."
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore-buildable --policy missing
+
+dump_compose_diagnostics() {
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=60 bitriver-live viewer srs-controller transcoder postgres-migrations srs-config ome-config ome-health-token-check postgres redis >&2 || true
+}
 
 set -a
 # shellcheck disable=SC1090
@@ -299,10 +344,34 @@ set +a
 
 WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
 
+start_compose_services() {
+  local label="$1"
+  shift
+
+  echo "Starting $label..."
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never "$@"; then
+    echo "error: docker compose $label failed to start" >&2
+    dump_compose_diagnostics
+    exit 1
+  fi
+}
+
+start_compose_services_without_deps() {
+  local label="$1"
+  shift
+
+  echo "Starting $label..."
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never --no-deps "$@"; then
+    echo "error: docker compose $label failed to start" >&2
+    dump_compose_diagnostics
+    exit 1
+  fi
+}
+
 wait_for_health_check() {
   local service_name="$1"
 
-  container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q "$service_name")
+  container_id=$(docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -q "$service_name")
   if [ -z "$container_id" ]; then
     echo "error: no container found for service $service_name" >&2
     return 2
@@ -318,6 +387,7 @@ wait_for_health_check() {
     ;;
   unhealthy)
     echo "error: service $service_name reported unhealthy" >&2
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=80 "$service_name" >&2 || true
     docker inspect "$container_id"
     return 2
     ;;
@@ -342,18 +412,116 @@ wait_for_health() {
   exit 1
 }
 
-SERVICES_WITH_HEALTHCHECKS=(
-  bitriver-live
-  srs-controller
-  srs
-  ome
-  transcoder
+wait_for_completed_check() {
+  local service_name="$1"
+
+  container_id=$(docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a -q "$service_name")
+  if [ -z "$container_id" ]; then
+    echo "error: no container found for service $service_name" >&2
+    return 2
+  fi
+
+  status=$(docker inspect -f '{{.State.Status}}' "$container_id")
+  exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$container_id")
+  WAIT_FOR_COMPLETED_LAST_STATUS="$status"
+
+  case "$status" in
+  exited)
+    if [ "$exit_code" = "0" ]; then
+      echo "Service $service_name completed successfully."
+      return 0
+    fi
+    echo "error: service $service_name exited with code $exit_code" >&2
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=80 "$service_name" >&2 || true
+    return 2
+    ;;
+  *)
+    return 1
+    ;;
+  esac
+}
+
+wait_for_completed() {
+  local service_name="$1"
+  WAIT_FOR_COMPLETED_LAST_STATUS="unknown"
+
+  if bounded_poll "$WAIT_TIMEOUT" 5 wait_for_completed_check "$service_name"; then
+    return 0
+  fi
+
+  poll_rc=$?
+  if [ "$poll_rc" -eq 124 ]; then
+    echo "error: timed out waiting for $service_name to complete (last status: $WAIT_FOR_COMPLETED_LAST_STATUS)" >&2
+  fi
+  exit 1
+}
+
+curl_endpoint_check() {
+  local label="$1"
+  local url="$2"
+
+  if curl -fsSL "$url" >/dev/null; then
+    echo "$label endpoint is reachable."
+    return 0
+  fi
+
+  return 1
+}
+
+wait_for_endpoint() {
+  local label="$1"
+  local url="$2"
+
+  if bounded_poll "$WAIT_TIMEOUT" 5 curl_endpoint_check "$label" "$url"; then
+    return 0
+  fi
+
+  echo "error: timed out waiting for $label endpoint at $url" >&2
+  dump_compose_diagnostics
+  exit 1
+}
+
+DEPENDENCY_SERVICES=(
   postgres
   redis
+  srs
+  srs-controller
+  ome
+  transcoder
+  postgres-migrations
 )
 
-echo "Waiting for services to report healthy..."
-for service in "${SERVICES_WITH_HEALTHCHECKS[@]}"; do
+APPLICATION_SERVICES=(
+  bitriver-live
+  viewer
+  transcoder-public
+)
+
+DEPENDENCY_SERVICES_WITH_HEALTHCHECKS=(
+  postgres
+  redis
+  srs
+  srs-controller
+  ome
+  transcoder
+)
+
+APPLICATION_SERVICES_WITH_HEALTHCHECKS=(
+  bitriver-live
+)
+
+start_compose_services "dependency services" "${DEPENDENCY_SERVICES[@]}"
+
+echo "Waiting for dependency services to report healthy..."
+for service in "${DEPENDENCY_SERVICES_WITH_HEALTHCHECKS[@]}"; do
+  wait_for_health "$service"
+done
+wait_for_completed "postgres-migrations"
+
+start_compose_services_without_deps "application services" "${APPLICATION_SERVICES[@]}"
+
+echo "Waiting for application services to report healthy..."
+for service in "${APPLICATION_SERVICES_WITH_HEALTHCHECKS[@]}"; do
   wait_for_health "$service"
 done
 
@@ -361,7 +529,7 @@ API_PORT=${BITRIVER_LIVE_PORT:-8080}
 VIEWER_PATH=${NEXT_VIEWER_BASE_PATH:-/viewer}
 
 echo "CURLing API and viewer endpoints..."
-curl -fsS "http://localhost:${API_PORT}/healthz" >/dev/null
-curl -fsSL "http://localhost:${API_PORT}${VIEWER_PATH}" >/dev/null
+wait_for_endpoint "API health" "http://localhost:${API_PORT}/healthz"
+wait_for_endpoint "viewer" "http://localhost:${API_PORT}${VIEWER_PATH}"
 
 echo "Quickstart compose smoke checks passed."

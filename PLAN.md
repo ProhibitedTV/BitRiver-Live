@@ -1,4 +1,91 @@
 ## Scope (current change)
+- Get PR #1233 ready for merge by fixing the current failing CI checks without widening the chat-control feature scope.
+- Address the Ubuntu test-all gate failures reproduced locally and in Actions logs:
+  - `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with an output path even though that helper now delegates to the default generated OME path.
+  - `internal/server/security_headers_test.go` expects the default CSP header, but `SecurityConfig.withDefaults()` currently fills every default security header except `ContentSecurityPolicy`.
+- Address the follow-up CI contract failure where `scripts/check-contract-invariants.sh` selects `deploy/.env.example` for Compose substitution but Compose still tries to load service-level `env_file: ../.env`.
+- Address the next follow-up CI failures from run `25827555245`:
+  - Shell lint now fails on existing scripts that use `CDPATH= cd` and on callback/trap-only functions that ShellCheck cannot prove reachable.
+  - The later `scripts/verify.sh` Docker Compose validation still falls back to `deploy/.env.example`, which does not satisfy Compose's service-level `env_file: ../.env` requirement when the root `.env` is absent in CI.
+- Address the subsequent quickstart smoke failure where a clean GitHub runner starts Compose with `--pull never` before third-party runtime images such as `redis:7-alpine` and `debian:12-slim` exist locally.
+- Address the latest quickstart smoke failure where the Linux runner's host bind mount can leave `deploy/transcoder-data` unwritable for the `transcoder` container's fixed UID.
+- Address the follow-up quickstart smoke race where the final proxied viewer curl can run before the viewer sidecar is ready, even after container health dependencies have turned green.
+- Address the remaining quickstart startup race by booting Compose dependencies first, waiting for their health/completion, and only then starting the API/viewer layer.
+- Address the recurring image vulnerability scan failure by downloading the Trivy archive with retries to a file before extraction instead of streaming a possibly truncated response into `tar`.
+- Address the latest CI run `25830088634` failures:
+  - The phased smoke now reaches healthy dependencies but misses the exited `postgres-migrations` one-shot because `docker compose ps -q` only reports running containers in this context.
+  - The hardened Trivy download now fails deterministically because the pinned `v0.50.1` GitHub release asset returns 404; update to the current official immutable `v0.70.0` Linux archive.
+  - With Trivy `v0.70.0`, the scanner reaches first-party Go binaries and blocks on Go stdlib `CVE-2025-68121` from the `golang:1.21` builder images; rebuild all first-party Go binaries from a fixed Go patch line while leaving the module target at `go 1.21`.
+  - After explicit dependency health/completion waits, application startup should not ask Compose to re-evaluate or restart the one-shot dependency chain.
+  - The refreshed scan then reports Debian runtime package CVEs in the API image and `github.com/jackc/pgx/v5` `CVE-2026-33816`; move the static Go runtime image to Alpine and bump the real pgx module requirement to the fixed version.
+  - The next image scan blocker is `next` `CVE-2025-29927`; bump the viewer Next.js packages within the existing 13.5 patch line to `13.5.11`.
+
+## Assumptions
+- The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
+- Restoring the default CSP in `withDefaults()` preserves the existing viewer proxy behavior because `/viewer` route responses still receive the viewer-specific inline-script CSP in the proxy path.
+- No deployment contract changes are needed.
+- The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
+- The user's approval covers the required script/check behavior changes needed to get the PR ready, including the narrow `scripts/verify.sh` fallback repair.
+- The quickstart smoke should still build first-party images from the working tree before pulling missing non-buildable runtime images, because some helper services reuse locally built images without declaring their own `build:` block.
+- The user's follow-up approval covers the workflow hardening needed for the recurring Trivy install failure, including moving off the broken old Trivy release asset.
+
+## Risks
+- Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
+- OME renderer tests should keep using the temp workspace output rather than accidentally writing to the real repository generated config.
+- The contract check must not overwrite an operator's real root `.env`.
+- Shell lint fixes should stay mechanical and narrow so they do not change deploy smoke semantics.
+- The verify fallback must clean up only a temporary `.env` it created and must leave real operator `.env` files untouched.
+- Pulling missing third-party images in `scripts/test-quickstart.sh` adds network dependency to the Docker smoke, but the CI runner already needs network to build/pull base layers and scan images.
+- The temporary quickstart smoke Compose override must remain test-only; it should not alter `deploy/docker-compose.yml` or the production helper-service user contract.
+- Running the `transcoder` service as the host UID/GID in the smoke override must stay limited to the smoke harness so the deployment contract's fixed runtime UID remains unchanged.
+- Polling the final viewer/API curls should not hide persistent routing failures; diagnostics must include Compose status and relevant service logs when the endpoint never becomes reachable.
+- Phased quickstart startup should preserve the deployed service graph while avoiding Compose's early dependency-failure short-circuit on slow hosted runners.
+- Trivy install hardening touches CI workflow behavior; the version bump should stay limited to a known official GitHub release asset and avoid changing scanner policy.
+- One-shot completion waiting should include stopped containers without changing application-service health behavior.
+- Bumping Docker builder images should not imply raising the source checkout's minimum Go version or changing `go.mod`.
+- Starting application services with `--no-deps` depends on the preceding explicit health/completion waits staying complete and ordered.
+- Moving the API runtime image from Debian to Alpine must preserve `curl` for the existing Compose healthcheck and the non-root runtime user.
+- Bumping pgx affects real Postgres builds because Docker drops the local stub replacement; local stubbed tests should remain unaffected.
+- Next.js patch updates must keep the viewer on the existing major/minor line and preserve lint/build behavior.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
+- `& 'C:\Program Files\Git\bin\bash.exe' -lc 'PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH" ./scripts/check-contract-invariants.sh'`
+- `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'`
+- `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./scripts -count=1`
+- `git diff --check`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
+- Recheck PR #1233 GitHub Actions after pushing.
+
+## Scope (current change)
+- Address GitHub issue #1220 by reducing live chat chrome and making secondary chat actions less dominant.
+- Keep chat data contracts unchanged while updating only the viewer `ChatPanel` presentation and tests.
+- Consolidate settings and pop-out into a compact chat options menu, make pop-out a direct action, and keep connection status visible without using a permanent header pill.
+- Move message reporting out of the message bubble flow into a modal/sheet so the thread does not jump when a report form opens.
+- Replace the signed-out disabled composer with a clear sign-in CTA state.
+
+## Assumptions
+- The user wants the next oldest open product issue after merged PR #1232, which is issue #1220.
+- A focused viewer-only implementation is preferable to touching `internal/chat/websocket.go`, since the issue is about UI clutter and current backend contracts already cover chat/report submission.
+- Current chat tests already provide enough mocked API/WebSocket coverage to validate the intended behavior without adding backend tests.
+- The repo viewer gate still has unrelated Go/backend failures from the prior run; this change should record that separately if it persists.
+
+## Risks
+- Refactoring chat controls can break keyboard/focus behavior if the new options menu is not dismissible by outside click and Escape.
+- Moving reports into a modal can break report submission tests unless the selected message state is handled carefully.
+- Removing the disabled signed-out composer changes existing assertions in Jest and Playwright, so auth-required tests must be updated together.
+- Chat panel CSS is global and shared with channel layouts, so style changes should stay scoped to `chat-panel`/`chat-message` selectors.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx`
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_BROWSERS_PATH=0 npx.cmd playwright test tests/channel-chat-playback.spec.ts` with a temporary standalone viewer server
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Address GitHub issue #1217 by reducing persistent viewer navbar density and clarifying the primary navigation/action hierarchy.
 - Keep the default header viewer-first: public discovery routes and search stay prominent, while creator/admin/account/preferences actions move into compact account/site menu surfaces.
 - Keep route behavior stable for sign-in, create-account, profile, creator setup/go-live, admin control center, and theme switching.

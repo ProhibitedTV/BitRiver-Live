@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/deploy/docker-compose.yml"
 ENV_FILE="$ROOT_DIR/.env"
 

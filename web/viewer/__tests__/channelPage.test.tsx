@@ -290,9 +290,9 @@ describe("ChannelPage", () => {
     expect(subscribeChannelMock).not.toHaveBeenCalled();
     expect(await screen.findByText(/redirecting to sign in/i)).toBeInTheDocument();
 
-    const textarea = await screen.findByRole("textbox", { name: /chat message/i });
-    expect(textarea).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /sign in to chat/i })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /chat message/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Send a chat message" })).not.toBeInTheDocument();
 
     const tipButton = screen.getByRole("button", { name: /send a tip/i });
     await act(async () => {

@@ -1,3 +1,209 @@
+## Scoped change: PR #1233 CI readiness
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose failing PR checks
+  - Acceptance criteria:
+    - Fetch PR #1233 status and failing job logs where available.
+    - Record the specific failing commands and root causes in `PLAN.md`/`TASKS.md`.
+    - Distinguish code failures from transient or workflow-level failures.
+
+- [x] Task 2 - Fix Ubuntu test-all gate failures
+  - Acceptance criteria:
+    - OME render tests use the current renderer helper/API correctly.
+    - Default server security config applies the default CSP to non-viewer routes.
+    - Viewer route CSP behavior remains covered by existing tests.
+
+- [-] Task 3 - Validate locally and update the PR branch
+  - Acceptance criteria:
+    - Focused Go tests pass.
+    - Repo viewer gate passes locally or records any remaining blocker.
+    - Changes are committed, pushed, and PR #1233 is updated for merge readiness.
+
+- [x] Task 4 - Fix CI contract env fallback
+  - Acceptance criteria:
+    - Contract invariants Compose validation works in CI when root `.env` is absent.
+    - The fallback does not overwrite a real root `.env`.
+    - Temporary fallback `.env` files are cleaned up.
+
+- [x] Task 5 - Fix remaining shell lint and verify Compose fallback failures
+  - Acceptance criteria:
+    - Shell scripts touched by the failing lint output no longer emit the reported ShellCheck findings.
+    - `scripts/verify.sh` validates Docker Compose with a temporary root `.env` when CI has no committed root `.env`.
+    - The verify fallback does not overwrite a real root `.env` and cleans temporary files on exit.
+
+- [x] Task 6 - Fix clean-runner quickstart smoke image pulls
+  - Acceptance criteria:
+    - `scripts/test-quickstart.sh` can start Compose on a clean runner without assuming third-party images are already cached.
+    - First-party services still build from the source checkout during the quickstart smoke.
+    - The change is validated with syntax/unit checks and confirmed in the next CI run.
+
+- [-] Task 7 - Fix final quickstart smoke and image scan failures
+  - Acceptance criteria:
+    - The quickstart smoke prepares the host transcoder bind mount and test-only Unix user override so the transcoder can become healthy on Linux CI.
+    - The smoke fixture uses the same non-loopback transcoder public URL used by the CI image build fixture.
+    - The final API and proxied viewer checks poll until ready instead of racing service startup.
+    - Compose startup is phased so dependency health/completion is checked before starting the API/viewer layer.
+    - Trivy installation in CI retries and extracts a complete archive before scanning.
+    - The one-shot `postgres-migrations` completion waiter can inspect stopped containers after Compose starts dependencies.
+    - The Trivy install pin targets an available official release asset.
+    - First-party Go Docker images build binaries with a Go patch line that includes the `CVE-2025-68121` stdlib fix.
+    - Application services start after explicit dependency validation without Compose reprocessing the dependency graph.
+    - The API runtime image and pgx dependency no longer produce blocking critical Trivy findings.
+    - Viewer Next.js packages are on the fixed 13.5 patch line for `CVE-2025-29927`.
+    - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
+
+### Execution log (PR #1233 CI readiness)
+- Task 1 complete: `gh auth status` is still blocked by an invalid local GitHub token, so Actions inspection used the GitHub connector. PR #1233's CI run failed in `Ubuntu test-all gate` and `Image vulnerability scan`. The Ubuntu gate failed on `cmd/bitriver/env_validation_test.go` calling `renderOMEFromEnv` with the old five-argument shape and `internal/server/security_headers_test.go` receiving an empty default CSP header. The image scan failed while installing Trivy with `gzip: stdin: unexpected end of file`; no workflow edit is planned unless it recurs after a fresh push.
+- Task 1 checks:
+  - `gh auth status` - failed due invalid local token for `ProhibitedTV`.
+  - GitHub connector: fetched PR #1233 metadata and workflow run `25826344573`.
+  - GitHub connector: fetched failing job logs for `Ubuntu test-all gate` and `Image vulnerability scan`.
+  - `rg -n "renderOMEFromEnv|Content-Security-Policy|SecurityHeaders|securityHeaders|security header|CSP|default-src" cmd internal PLAN.md TASKS.md`
+  - `Get-Content cmd/bitriver/env_validation_test.go | Select-Object -Skip 500 -First 120`
+  - `Get-Content cmd/bitriver/ome_render.go | Select-Object -First 180`
+  - `Get-Content internal/server/security.go | Select-Object -First 180`
+  - `Get-Content internal/server/server.go | Select-Object -Skip 250 -First 100`
+  - `Get-Content internal/server/security_headers_test.go`
+- Task 2 complete: updated the OME render tests to call `renderOMEFromEnvOutput` when they need a temp output path, and restored default CSP population in `SecurityConfig.withDefaults()` after frame-ancestor defaults are resolved. Viewer routes still skip the API/admin default CSP in middleware and keep the dedicated viewer proxy CSP coverage.
+- Task 2 checks:
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver ./internal/server -count=1` - blocked by a pre-existing Windows Go cache path issue.
+  - `New-Item -ItemType Directory -Force -Path .codex-tmp\go-cache; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./cmd/bitriver ./internal/server -count=1` - passed.
+- Task 3 validation so far:
+  - `$env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; & 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - did not reach project checks because Git Bash could not find `dirname` when launched without login PATH setup.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - reached project checks and stopped at the contract stage because this workstation has no usable Python interpreter (`py -0p` reports no installed Pythons).
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./... -count=1 -timeout=120s` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+- Task 4 in progress: the fresh PR run showed the previous Go failures fixed, then failed in `scripts/check-contract-invariants.sh` because `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config` still loads the Compose service-level `env_file: ../.env`, which is absent in CI.
+- Task 4 complete: `scripts/check-contract-invariants.sh` now creates a temporary root `.env` from `deploy/.env.example` only when `.env` is missing, uses that file for Compose config validation, and removes it on exit. The script does not overwrite a real root `.env`.
+- Task 4 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/check-contract-invariants.sh'` - passed.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc './scripts/check-contract-invariants.sh'` - Compose validation and generated docs check passed locally with real root `.env`; stopped at missing local Python interpreter.
+  - Temporary no-`.env` fixture running `./scripts/check-contract-invariants.sh` - Compose validation reached the later Python step and the temporary root `.env` was cleaned up.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+- Task 5 complete: normalized the reported `CDPATH` assignments, narrowed `deploy-smoke.sh` ShellCheck suppressions to trap/polling callback functions, removed the unused smoke result variable, and changed `scripts/verify.sh` to create a temporary root `.env` from `deploy/.env.example` only around Docker Compose config validation when the root `.env` is absent.
+- Task 5 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'` - passed.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'command -v shellcheck || true'` - shellcheck is not installed locally, so CI must perform the actual lint confirmation.
+  - Temporary no-`.env` fixture sourcing `scripts/verify.sh` and running `run_docker_compose_config_validation` - Compose config rendered, fallback message printed, and the temporary root `.env` was cleaned up.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python interpreter.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
+- Task 6 complete: `scripts/test-quickstart.sh` now builds local Compose images first, pulls missing non-buildable runtime images, and then starts the stack with `--no-build --pull never`. Building before pulling avoids fetching helper services such as `bitriver-live/ome-config:local`, which are reused by non-buildable healthcheck jobs after the local image is built.
+- Task 6 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'` - passed.
+  - `docker compose --env-file .env -f deploy/docker-compose.yml pull --ignore-buildable --policy missing --dry-run` - blocked on this workstation by Docker config/buildx access permissions before validating the Compose pull plan.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
+  - Fresh CI run `25828160170` confirmed the first pull ordering was wrong because `ome-health-token-check` reused the locally built `bitriver-live/ome-config:local` image without its own `build:` block. Follow-up syntax, scripts test, and diff-check commands passed after reordering build/pull/start.
+  - Fresh CI run `25828368236` confirmed the build/pull/start order was correct and then failed in Linux bind-mount writes for the one-shot `srs-config` and `ome-config` jobs. The smoke now adds a temporary Unix-only Compose override so those repo-writing helper jobs run as the host UID/GID while leaving `deploy/docker-compose.yml` unchanged.
+  - Follow-up `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+- Task 7 in progress: CI run `25828715591` advanced through build/pull/config jobs and then failed because `bitriver-transcoder` became unhealthy during quickstart smoke startup. The same run still failed `Image vulnerability scan` while streaming the Trivy archive into `tar` (`gzip: stdin: unexpected end of file`), so the recurring scanner install failure is now in scope with the user's approval.
+- Task 7 follow-up: CI run `25829197707` moved past shell lint and guards, but the Ubuntu gate still failed late in quickstart smoke after OME and core services were starting. The smoke's final API/viewer curls are one-shot checks, so they can race the viewer sidecar even after dependency healthchecks are green.
+- Task 7 second follow-up: CI run `25829744630` still failed during `docker compose up` before the script's own health waits could isolate the service. The smoke should start dependency services first, wait for health and migration completion explicitly, and then start the API/viewer services.
+- Task 7 local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown/workflow files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+  - Follow-up after endpoint polling: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+  - Follow-up after phased Compose startup: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+- Task 7 latest diagnosis: CI run `25830088634` got all dependency health checks green, then failed at `postgres-migrations` completion with `error: no container found for service postgres-migrations`; the script was querying only running containers even though the migration job is expected to be stopped/exited. The same run's image scan failed in `Install Trivy` because `https://github.com/aquasecurity/trivy/releases/download/v0.50.1/trivy_0.50.1_Linux-64bit.tar.gz` returned 404 across retries. The official Trivy releases page shows `v0.70.0` as the current immutable release with Linux tarball assets.
+- Task 7 latest fixes: `wait_for_completed_check` now queries stopped containers with `docker compose ps -a -q` before inspecting one-shot exit status, and the CI Trivy install pin now targets `v0.70.0`.
+- Task 7 latest local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown/workflow files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+- Task 7 image-scan follow-up: CI run `25830437975` confirmed Trivy `v0.70.0` installs and the separate `ome-config` OS-package scan passes, then failed in the blocking first-party scan because the `ome-config` Go binary was built with Go `v1.21.13` and Trivy reported stdlib `CVE-2025-68121` fixed by Go `1.24.13`, `1.25.7`, and newer. The fix should update all first-party Go Docker builder images from `golang:1.21*` to a fixed patch line while keeping `go.mod` at `go 1.21`.
+- Task 7 Ubuntu follow-up: CI run `25830437975` moved past the `postgres-migrations` lookup and showed the migration job completing successfully in diagnostics. The remaining Ubuntu failure happens after dependencies are already validated, so application startup should use `--no-deps` to avoid Compose reprocessing the dependency graph and one-shot job during the second phase.
+- Task 7 second follow-up fixes: all first-party Go Docker builders now use Go `1.25.7` builder images, and application service startup now uses `docker compose up --no-deps` after the script has explicitly validated dependency health and migration completion.
+- Task 7 second follow-up local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+- Task 7 image-scan second follow-up: CI run `25830760564` cleared the Go stdlib CVE and then failed on `ghcr.io/bitriver-live/bitriver-live:ci` because the Debian runtime layer contains critical package findings and the real Postgres binary embeds `github.com/jackc/pgx/v5 v5.7.4` with `CVE-2026-33816` fixed in `v5.9.0`.
+- Task 7 third follow-up fixes: the API runtime image now uses Alpine `3.23` with `curl` preserved for healthchecks, SRS/transcoder Alpine runtime stages now use Alpine `3.23`, and the real pgx module requirement plus checksum are updated to `github.com/jackc/pgx/v5 v5.9.0`.
+- Task 7 third follow-up local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./... -count=1 -timeout=120s` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+- Task 7 image-scan third follow-up: CI run `25831129289` moved past the API runtime and pgx blockers, then failed on viewer `next 13.5.6` with `CVE-2025-29927`; the viewer now uses the patched `13.5.11` release from the same 13.5 line.
+
+## Scoped change: issue #1220 chat controls and signed-out chat UX
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the chat-control diagnosis and scoped implementation plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1220 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before chat source edits begin.
+    - The read-only pass identifies current header controls, settings/popout dialogs, inline report form, signed-out composer, tests, and CSS surfaces.
+
+- [x] Task 2 - Consolidate secondary chat controls into a compact options menu
+  - Acceptance criteria:
+    - Chat header shows title plus only viewer-relevant counts by default.
+    - Pop-out and display settings are discoverable from one compact options control.
+    - The options menu supports outside-click and Escape dismissal.
+    - Pop-out opens directly without a confirmation modal.
+
+- [x] Task 3 - Move reporting and signed-out chat into calmer surfaces
+  - Acceptance criteria:
+    - Report actions open a modal/sheet instead of expanding inline inside message bubbles.
+    - Report submit/cancel/error behavior remains intact.
+    - Signed-out chat shows one clear sign-in CTA instead of a disabled composer.
+
+- [x] Task 4 - Update focused tests and docs
+  - Acceptance criteria:
+    - ChatPanel tests cover the options menu, direct pop-out action, settings toggles, report modal, and signed-out CTA.
+    - Playwright chat auth coverage reflects the new signed-out state.
+    - User-visible viewer behavior is documented where appropriate.
+
+- [x] Task 5 - Run validation and record results
+  - Acceptance criteria:
+    - Focused Jest, lint, build, targeted Playwright, and the repo viewer gate are run or explicitly recorded with unrelated blockers.
+    - `TASKS.md` records command results and any residual warnings.
+
+### Execution log (issue #1220 chat controls and signed-out chat UX)
+- Task 1 complete: closed issue #1217 as completed after confirming merged PR #1232, selected the next oldest open product issue (#1220), created branch `codex/issue-1220-chat-controls`, and reviewed `web/viewer/components/ChatPanel.tsx`, `web/viewer/__tests__/chatPanel.test.tsx`, `web/viewer/tests/channel-chat-playback.spec.ts`, channel auth smoke coverage, chat CSS, and viewer docs before editing.
+- Task 1 checks:
+  - `git pull --ff-only origin main`
+  - GitHub connector: fetched PR #1232 and closed issue #1217 with `state_reason=completed`
+  - GitHub connector: searched open issues and selected issue #1220
+  - `git checkout -b codex/issue-1220-chat-controls`
+  - `Get-Content web/viewer/components/ChatPanel.tsx`
+  - `Get-Content web/viewer/__tests__/chatPanel.test.tsx`
+  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 2400 -First 230`
+  - `Get-Content web/viewer/tests/channel-chat-playback.spec.ts`
+  - `rg -n "chat-panel|chat-header|chat-actions|chat-settings|chat-popout|report|composer|settings|popout|viewer count|Live sync|Refreshing" web/viewer/styles web/viewer/__tests__ web/viewer/tests web/viewer/components/ChatPanel.tsx`
+- Task 2 complete: replaced permanent header controls with a compact chat options menu, kept counts visible in the header, moved connection status into the menu, preserved avatar/timestamp toggles, and made pop-out open directly from the menu.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+- Task 3 complete: moved message reporting into a dedicated dialog with Escape/focus handling and replaced the signed-out disabled composer with a sign-in CTA card.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+- Task 4 complete: updated ChatPanel, ChannelPage, and Playwright chat/auth coverage for the compact options menu, direct pop-out action, report dialog, and signed-out sign-in CTA; documented the chat control contract in `web/viewer/README.md`.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx` - passed 19 tests.
+  - `npm.cmd --prefix web/viewer run lint` - passed with no ESLint warnings or errors.
+  - `npm.cmd --prefix web/viewer run build` - passed; existing Browserslist/deopt warnings were emitted by Next.js.
+  - `npx.cmd playwright test tests/channel-chat-playback.spec.ts` against the standalone build - passed 4 tests.
+  - `npx.cmd playwright test tests/channel.spec.ts` against the standalone build - passed 8 tests.
+- Task 5 complete: ran the viewer-focused gate commands and recorded the remaining repository gate blockers.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx` - passed 19 tests.
+  - `npm.cmd --prefix web/viewer run lint` - passed with no ESLint warnings or errors.
+  - `npm.cmd --prefix web/viewer run build` - passed; existing Browserslist/deopt warnings were emitted by Next.js.
+  - `npx.cmd playwright test tests/channel-chat-playback.spec.ts` against the standalone build - passed 4 tests.
+  - `npx.cmd playwright test tests/channel.spec.ts` against the standalone build - passed 8 tests.
+  - `npm.cmd --prefix web/viewer run lint` after final cleanup - passed with no ESLint warnings or errors.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - failed before viewer checks on existing backend blockers: `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with the old five-argument signature, and `internal/server/security_headers_test.go` still expects CSP headers that the current server responses do not set.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+
 ## Scoped change: issue #1217 navbar density and action hierarchy
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

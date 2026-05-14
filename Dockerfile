@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM golang:1.21 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.7 AS builder
 WORKDIR /src
 
 ARG TARGETOS=linux
@@ -34,10 +34,8 @@ RUN ./scripts/check-postgres-pgx.sh postgres
 RUN go build -tags postgres -o /out/bitriver-live ./cmd/server
 RUN go build -tags postgres -o /out/bootstrap-admin ./cmd/tools/bootstrap-admin
 
-FROM --platform=$TARGETPLATFORM debian:12-slim AS runtime
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
+FROM --platform=$TARGETPLATFORM alpine:3.23 AS runtime
+RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /app
 
@@ -45,7 +43,7 @@ COPY --from=builder /out/bitriver-live /app/bitriver-live
 COPY --from=builder /out/bootstrap-admin /app/bootstrap-admin
 COPY --from=builder /src/deploy/migrations /app/deploy/migrations
 
-RUN useradd -r -u 65532 appuser && chown appuser /app
+RUN adduser -D -H -u 65532 appuser && chown appuser /app
 
 USER appuser
 

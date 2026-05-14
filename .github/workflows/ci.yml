@@ -413,9 +413,13 @@ jobs:
 
       - name: Install Trivy
         run: |
-          TRIVY_VERSION=0.50.1
-          curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
-            | tar -xz
+          set -euo pipefail
+          TRIVY_VERSION=0.70.0
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          curl --fail --location --retry 5 --retry-delay 2 --retry-all-errors --output "$archive" "$url"
+          test -s "$archive"
+          tar -xzf "$archive" trivy
           sudo install trivy /usr/local/bin/trivy
 
       - name: Verify ome-config has no OS-package CVEs

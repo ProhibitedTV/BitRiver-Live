@@ -77,8 +77,7 @@ export function ChatPanel({
   const [sending, setSending] = useState(false);
   const [pausedForAuth, setPausedForAuth] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
-  const [showPopoutDialog, setShowPopoutDialog] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [showAvatars, setShowAvatars] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [reportingMessageId, setReportingMessageId] = useState<string | undefined>();
@@ -86,12 +85,10 @@ export function ChatPanel({
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportError, setReportError] = useState<string | undefined>();
   const [reportNotice, setReportNotice] = useState<string | undefined>();
-  const popoutTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const popoutDialogRef = useRef<HTMLElement | null>(null);
-  const settingsDialogRef = useRef<HTMLElement | null>(null);
-  const popoutHeadingRef = useRef<HTMLHeadingElement | null>(null);
-  const settingsHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const optionsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const optionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const reportDialogRef = useRef<HTMLElement | null>(null);
+  const reportHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const [socketReady, setSocketReady] = useState(false);
 
@@ -443,34 +440,6 @@ export function ChatPanel({
 
   const shouldShowSignInPrompt = authRequired && !authLoading && !user;
 
-  const closePopoutDialog = (restoreFocus = true) => {
-    setShowPopoutDialog(false);
-    if (restoreFocus) {
-      popoutTriggerRef.current?.focus({ preventScroll: true });
-    }
-  };
-
-  const closeSettingsDialog = (restoreFocus = true) => {
-    setShowSettings(false);
-    if (restoreFocus) {
-      settingsTriggerRef.current?.focus({ preventScroll: true });
-    }
-  };
-
-  const handlePopout = () => {
-    closeSettingsDialog(false);
-    setShowPopoutDialog(true);
-  };
-
-  const handleSettingsToggle = () => {
-    if (showSettings) {
-      closeSettingsDialog();
-      return;
-    }
-    closePopoutDialog(false);
-    setShowSettings(true);
-  };
-
   const openPopoutWindow = () => {
     if (typeof window === "undefined") {
       return;
@@ -480,51 +449,70 @@ export function ChatPanel({
       "bitriver-chat-popout",
       "width=420,height=720,noopener,noreferrer"
     );
-    closePopoutDialog();
+    setOptionsOpen(false);
+    optionsTriggerRef.current?.focus({ preventScroll: true });
   };
 
-  useEffect(() => {
-    if (showPopoutDialog) {
-      popoutHeadingRef.current?.focus({ preventScroll: true });
+  const selectedReportMessage = useMemo(() => {
+    if (!reportingMessageId) {
+      return undefined;
     }
-  }, [showPopoutDialog]);
+    return messageEntries.find((entry) => entry.message.id === reportingMessageId)?.message;
+  }, [messageEntries, reportingMessageId]);
 
   useEffect(() => {
-    if (showSettings) {
-      settingsHeadingRef.current?.focus({ preventScroll: true });
-    }
-  }, [showSettings]);
-
-  useEffect(() => {
-    if (!showPopoutDialog && !showSettings) {
+    if (!optionsOpen || typeof document === "undefined") {
       return;
     }
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
+    const closeOptions = (restoreFocus = true) => {
+      setOptionsOpen(false);
+      if (restoreFocus) {
+        optionsTriggerRef.current?.focus({ preventScroll: true });
       }
-      event.preventDefault();
-      if (showPopoutDialog) {
-        closePopoutDialog();
-        return;
-      }
-      closeSettingsDialog();
     };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [showPopoutDialog, showSettings]);
+    const handleOutsideInteraction = (event: PointerEvent | MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (optionsTriggerRef.current?.contains(target) || optionsMenuRef.current?.contains(target)) {
+        return;
+      }
+      closeOptions(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeOptions();
+      }
+    };
+    document.addEventListener("pointerdown", handleOutsideInteraction);
+    document.addEventListener("click", handleOutsideInteraction);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideInteraction);
+      document.removeEventListener("click", handleOutsideInteraction);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [optionsOpen]);
 
   useEffect(() => {
-    const activeDialog = showPopoutDialog
-      ? popoutDialogRef.current
-      : showSettings
-        ? settingsDialogRef.current
-        : null;
-    if (!activeDialog) {
+    if (!selectedReportMessage) {
       return;
     }
+    reportHeadingRef.current?.focus({ preventScroll: true });
+
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeReportForm();
+        return;
+      }
       if (event.key !== "Tab") {
+        return;
+      }
+      const activeDialog = reportDialogRef.current;
+      if (!activeDialog) {
         return;
       }
       const focusableSelectors =
@@ -566,9 +554,10 @@ export function ChatPanel({
         first.focus();
       }
     };
-    activeDialog.addEventListener("keydown", handleKeyDown);
-    return () => activeDialog.removeEventListener("keydown", handleKeyDown);
-  }, [showPopoutDialog, showSettings]);
+    const activeDialog = reportDialogRef.current;
+    activeDialog?.addEventListener("keydown", handleKeyDown);
+    return () => activeDialog?.removeEventListener("keydown", handleKeyDown);
+  }, [selectedReportMessage]);
 
   const renderSkeletons = () => (
     <ul className="chat-skeletons">
@@ -586,7 +575,6 @@ export function ChatPanel({
 
   return (
     <section className="chat-panel">
-      {/* Header actions open the pop-out dialog and toggle the local settings modal state. */}
       <header className="chat-panel__header">
         <div className="chat-panel__title">
           <h3>Live chat</h3>
@@ -597,43 +585,55 @@ export function ChatPanel({
               </span>
             )}
             <span className="pill pill--ghost">
-            {messageEntries.length} messages
-            </span>
-            <span className="pill pill--ghost">
-              {socketReady ? "Live sync" : "Refreshing"}
+              {messageEntries.length} messages
             </span>
           </div>
         </div>
         <div className="chat-panel__actions" aria-label="Chat actions">
           <button
             type="button"
-            className="icon-button"
-            aria-label="Open pop-out chat window"
-            onClick={handlePopout}
-            ref={popoutTriggerRef}
+            className="secondary-button chat-panel__options-trigger"
+            aria-label="Open chat options"
+            aria-expanded={optionsOpen}
+            aria-controls="chat-options-menu"
+            onClick={() => setOptionsOpen((open) => !open)}
+            ref={optionsTriggerRef}
           >
-            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-              <path
-                fill="currentColor"
-                d="M4 4h6v2H6v8h8v-4h2v6H4V4Zm6-1.5H18v8h-2V5.91l-4.4 4.4-1.42-1.42L14.59 4H10V2.5Z"
-              />
-            </svg>
+            Options
           </button>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={showSettings ? "Close chat settings" : "Open chat settings"}
-            aria-pressed={showSettings}
-            onClick={handleSettingsToggle}
-            ref={settingsTriggerRef}
+          <div
+            id="chat-options-menu"
+            className={`chat-panel__options-menu${optionsOpen ? " chat-panel__options-menu--open" : ""}`}
+            ref={optionsMenuRef}
+            hidden={!optionsOpen}
+            aria-label="Chat options"
           >
-            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-              <path
-                fill="currentColor"
-                d="M9.6 2h.8l.6 1.7c.3.1.6.3.9.4l1.6-.9.6.6-.9 1.6c.1.3.3.6.4.9L16.4 8v.8l-1.7.6c-.1.3-.3.6-.4.9l.9 1.6-.6.6-1.6-.9c-.3.1-.6.3-.9.4L10.4 18h-.8l-.6-1.7c-.3-.1-.6-.3-.9-.4l-1.6.9-.6-.6.9-1.6c-.1-.3-.3-.6-.4-.9L2 10.8V10l1.7-.6c.1-.3.3-.6.4-.9L3.2 6.9l.6-.6 1.6.9c.3-.1.6-.3.9-.4L9.6 2Zm.4 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"
+            <div className="chat-panel__connection">
+              <span className={`chat-panel__connection-dot${socketReady ? " chat-panel__connection-dot--live" : ""}`} aria-hidden="true" />
+              <span>{socketReady ? "Live sync" : "Refreshing chat"}</span>
+            </div>
+            <button type="button" className="chat-panel__menu-action" onClick={openPopoutWindow}>
+              Open pop-out chat
+            </button>
+            <label className="chat-panel__menu-setting">
+              <span>Show avatars</span>
+              <input
+                type="checkbox"
+                checked={showAvatars}
+                onChange={(event) => setShowAvatars(event.target.checked)}
+                aria-label="Toggle chat avatars"
               />
-            </svg>
-          </button>
+            </label>
+            <label className="chat-panel__menu-setting">
+              <span>Show timestamps</span>
+              <input
+                type="checkbox"
+                checked={showTimestamps}
+                onChange={(event) => setShowTimestamps(event.target.checked)}
+                aria-label="Toggle chat message timestamps"
+              />
+            </label>
+          </div>
         </div>
       </header>
       {/* Gate the thread UI behind loading skeletons, retry errors, and auth-required sign-in prompts. */}
@@ -653,17 +653,7 @@ export function ChatPanel({
           {reportError}
         </div>
       )}
-      {!loading && !error && shouldShowSignInPrompt && (
-        <div className="surface stack" role="status">
-          <p className="muted">Sign in to view and participate in chat.</p>
-          <div>
-            <button type="button" className="primary-button" onClick={() => void signIn()}>
-              Sign in
-            </button>
-          </div>
-        </div>
-      )}
-      {!loading && !error && (
+      {!loading && !error && (!shouldShowSignInPrompt || messageEntries.length > 0) && (
         <div className="chat-panel__body">
           {messageEntries.length === 0 ? (
             <div className="chat-panel__empty surface">
@@ -721,7 +711,6 @@ export function ChatPanel({
                       {group.messages.map(({ message }) => {
                         const targetId = message.user?.id?.trim() ?? "";
                         const canReportMessage = Boolean(user && targetId && targetId !== user.id);
-                        const isReportingMessage = reportingMessageId === message.id;
                         return (
                           <div key={message.id} className="chat-message__line">
                             <p>
@@ -739,35 +728,14 @@ export function ChatPanel({
                               {message.message}
                             </p>
                             {canReportMessage ? (
-                              <button type="button" className="chat-message__report-button" onClick={() => openReportForm(message)}>
+                              <button
+                                type="button"
+                                className="chat-message__report-button"
+                                onClick={() => openReportForm(message)}
+                                aria-label={`Report message from ${message.user?.displayName ?? message.user?.id ?? "chat participant"}`}
+                              >
                                 Report
                               </button>
-                            ) : null}
-                            {isReportingMessage ? (
-                              <form
-                                className="chat-message__report-form"
-                                onSubmit={(event) => handleReportSubmit(event, message)}
-                                aria-label={`Report chat message ${message.id}`}
-                              >
-                                <label className="sr-only" htmlFor={`chat-report-reason-${message.id}`}>
-                                  Report reason
-                                </label>
-                                <textarea
-                                  id={`chat-report-reason-${message.id}`}
-                                  value={reportReason}
-                                  onChange={(event) => setReportReason(event.target.value)}
-                                  placeholder="Reason for report"
-                                  rows={2}
-                                />
-                                <div className="chat-message__report-actions">
-                                  <button type="button" className="ghost-button" onClick={closeReportForm} disabled={reportSubmitting}>
-                                    Cancel
-                                  </button>
-                                  <button type="submit" className="accent-button" disabled={reportSubmitting}>
-                                    {reportSubmitting ? "Submitting..." : "Submit report"}
-                                  </button>
-                                </div>
-                              </form>
                             ) : null}
                           </div>
                         );
@@ -780,160 +748,95 @@ export function ChatPanel({
           )}
         </div>
       )}
-      <form
-        className="chat-panel__form"
-        onSubmit={handleSend}
-        aria-label="Send a chat message"
-      >
-        <label htmlFor="chat-input" className="sr-only">
-          Chat message
-        </label>
-        <textarea
-          id="chat-input"
-          name="message"
-          placeholder={
-            user ? "Share your thoughts" : "Sign in to participate in chat"
-          }
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          disabled={isComposerDisabled}
-          rows={3}
-          aria-disabled={!user}
-        />
-        <div className="chat-panel__toolbar">
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={isComposerDisabled || content.trim().length === 0}
-          >
-            {sending ? "Sending..." : "Send"}
+      {user ? (
+        <form
+          className="chat-panel__form"
+          onSubmit={handleSend}
+          aria-label="Send a chat message"
+        >
+          <label htmlFor="chat-input" className="sr-only">
+            Chat message
+          </label>
+          <textarea
+            id="chat-input"
+            name="message"
+            placeholder="Share your thoughts"
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            disabled={isComposerDisabled}
+            rows={3}
+            aria-disabled={false}
+          />
+          <div className="chat-panel__toolbar">
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={isComposerDisabled || content.trim().length === 0}
+            >
+              {sending ? "Sending..." : "Send"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="chat-panel__signin-card surface" role="status">
+          <p className="muted">Sign in to view and participate in chat.</p>
+          <button type="button" className="primary-button" onClick={() => void signIn()}>
+            Sign in to chat
           </button>
         </div>
-      </form>
-      {showPopoutDialog && (
+      )}
+      {selectedReportMessage && (
         <div
           className="chat-panel__dialog-backdrop"
           role="presentation"
-          onClick={() => closePopoutDialog()}
+          onClick={closeReportForm}
         >
           <section
             className="chat-panel__dialog surface"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="chat-popout-title"
+            aria-labelledby="chat-report-title"
             onClick={(event) => event.stopPropagation()}
-            ref={popoutDialogRef}
+            ref={reportDialogRef}
           >
             <header className="chat-panel__dialog-header">
-              <h4 id="chat-popout-title" tabIndex={-1} ref={popoutHeadingRef}>Pop out chat</h4>
+              <h4 id="chat-report-title" tabIndex={-1} ref={reportHeadingRef}>Report chat message</h4>
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => closePopoutDialog()}
-                aria-label="Close pop-out chat dialog"
+                onClick={closeReportForm}
+                aria-label="Close report dialog"
               >
                 x
               </button>
             </header>
             <p className="muted">
-              Open the chat in a separate window so you can keep up with the
-              conversation while browsing elsewhere.
+              Send this message to moderators for review. Reports are not posted back into chat.
             </p>
-            <div className="chat-panel__dialog-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => closePopoutDialog()}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="accent-button"
-                onClick={openPopoutWindow}
-                aria-label="Open chat in new window"
-              >
-                Open window
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {showSettings && (
-        <div
-          className="chat-panel__dialog-backdrop"
-          role="presentation"
-          onClick={() => closeSettingsDialog()}
-        >
-          <section
-            className="chat-panel__dialog surface"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="chat-settings-title"
-            onClick={(event) => event.stopPropagation()}
-            ref={settingsDialogRef}
-          >
-            <header className="chat-panel__dialog-header">
-              <h4 id="chat-settings-title" tabIndex={-1} ref={settingsHeadingRef}>Chat settings</h4>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => closeSettingsDialog()}
-                aria-label="Close chat settings"
-              >
-                x
-              </button>
-            </header>
-            <div className="chat-panel__settings stack">
-              <label className="chat-panel__setting">
-                <div className="chat-panel__setting-text">
-                  <span>Show avatars</span>
-                  <p className="muted">
-                    Display profile photos next to each chat participant.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={showAvatars}
-                  onChange={(event) => setShowAvatars(event.target.checked)}
-                  aria-label="Toggle chat avatars"
+            <form
+              className="chat-panel__report-form"
+              onSubmit={(event) => handleReportSubmit(event, selectedReportMessage)}
+              aria-label={`Report chat message ${selectedReportMessage.id}`}
+            >
+              <label className="chat-panel__report-field" htmlFor={`chat-report-reason-${selectedReportMessage.id}`}>
+                <span>Report reason</span>
+                <textarea
+                  id={`chat-report-reason-${selectedReportMessage.id}`}
+                  value={reportReason}
+                  onChange={(event) => setReportReason(event.target.value)}
+                  placeholder="Reason for report"
+                  rows={4}
                 />
               </label>
-              <label className="chat-panel__setting">
-                <div className="chat-panel__setting-text">
-                  <span>Show timestamps</span>
-                  <p className="muted">
-                    Keep message times visible inside the conversation bubbles.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={showTimestamps}
-                  onChange={(event) => setShowTimestamps(event.target.checked)}
-                  aria-label="Toggle chat message timestamps"
-                />
-              </label>
-            </div>
-            <div className="chat-panel__dialog-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  setShowAvatars(true);
-                  setShowTimestamps(true);
-                }}
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                className="accent-button"
-                onClick={() => closeSettingsDialog()}
-                aria-label="Save chat settings"
-              >
-                Done
-              </button>
-            </div>
+              <div className="chat-panel__dialog-actions">
+                <button type="button" className="ghost-button" onClick={closeReportForm} disabled={reportSubmitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="accent-button" disabled={reportSubmitting}>
+                  {reportSubmitting ? "Submitting..." : "Submit report"}
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       )}

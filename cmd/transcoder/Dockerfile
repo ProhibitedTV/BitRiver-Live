@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM golang:1.21-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine AS build
 WORKDIR /src
 
 RUN apk add --no-cache ca-certificates git openssh-client
@@ -18,10 +18,10 @@ COPY third_party ./third_party
 RUN GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/transcoder ./cmd/transcoder
 
-FROM alpine:3.19 AS ffmpeg
+FROM alpine:3.23 AS ffmpeg
 RUN apk add --no-cache ffmpeg
 
-FROM --platform=$TARGETPLATFORM alpine:3.19 AS runtime
+FROM --platform=$TARGETPLATFORM alpine:3.23 AS runtime
 RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /app
