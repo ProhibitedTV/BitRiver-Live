@@ -1,3 +1,70 @@
+## Scoped change: issue #1227 following sidebar focus
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the route-aware following plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1227 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies shell placement, following state components, CSS grid behavior, and existing unit/Playwright coverage.
+
+- [x] Task 2 - Make following placement route-aware
+  - Acceptance criteria:
+    - Discovery routes keep a desktop following sidebar and mobile following entry.
+    - Channel watch and creator routes render without following side chrome.
+    - Wide no-sidebar routes use a one-column content layout instead of the desktop shell grid.
+
+- [x] Task 3 - Keep following states useful but lightweight
+  - Acceptance criteria:
+    - Guest, empty, error, loading, and populated states continue to render through shared following components.
+    - Empty/unauthenticated following states do not add extra watch-page chrome.
+    - Existing sign-in and retry behavior remains intact.
+
+- [x] Task 4 - Update tests and browser coverage
+  - Acceptance criteria:
+    - Unit tests cover sidebar visibility by route and focus management when the drawer is available.
+    - Following state tests still cover guest, empty, error, and populated states.
+    - Playwright covers desktop discovery rail alignment and mobile watch pages without the following drawer entry.
+
+- [x] Task 5 - Run validation and record results
+  - Acceptance criteria:
+    - Focused Jest, lint, build, targeted Playwright, and the repo viewer gate are run or blockers are recorded.
+    - `TASKS.md` records command results and any residual warnings.
+
+### Execution log (issue #1227 following sidebar focus)
+- Task 1 complete: confirmed PR #1233 merged and issue #1220 was already closed by GitHub, fast-forwarded local `main` to merge commit `7fa76a18`, selected open issue #1227, and created branch `codex/issue-1227-following-focus`.
+- Task 1 checks:
+  - `git status --short --branch`
+  - GitHub connector: fetched PR #1233 and issue #1220 state.
+  - GitHub connector: listed recent issues and fetched issues #1224, #1225, and #1227.
+  - `git fetch origin --prune`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1227-following-focus`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+  - `Get-Content web/viewer/components/following/useFollowingChannels.ts`
+  - `Get-Content web/viewer/__tests__/followingSidebar.test.tsx`
+  - `Get-Content web/viewer/__tests__/viewerShell.test.tsx`
+  - `rg -n "viewer-shell|viewer-sidebar|following-sidebar|following-state|following" web/viewer/styles/globals.css`
+- Task 2 complete: `ViewerShell` now enables the following sidebar/drawer only on discovery routes (`/`, `/browse`, and `/videos`) and applies a `viewer-shell--following-disabled` layout on watch/creator-style routes. The wide CSS grid now has a one-column override when the sidebar is disabled.
+- Task 3 complete: following state rendering still flows through the shared loading, guest, empty, error, and populated components; signed-out and empty states no longer add any following chrome to channel watch routes because the shell does not mount the drawer there.
+- Task 2/3 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx --silent` - passed, 3 suites and 12 tests.
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx --silent` - passed after adding creator-route coverage, 3 suites and 13 tests.
+- Task 4 checks so far:
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` - passed, 1 suite and 19 tests.
+- Task 4 complete: unit coverage now asserts the shell hides following side chrome on channel watch and creator workflow routes, the channel mobile browser spec asserts watch pages no longer expose `Show following`, and homepage browser coverage covers guest, empty, and populated following sidebar/drawer states.
+- Task 5 complete: focused unit, channel, lint, build, targeted Playwright, diff-check, and repo viewer gate were run. The repo viewer gate still stops on this host's missing Python prerequisite before viewer checks.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Browserslist and Next.js client-render deopt warnings.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts tests/channel.spec.ts` - first run passed 10/11 and exposed a stale homepage selector; follow-up homepage-only run exposed stale subheader alignment; after aligning the spec to the current hero DOM and shell behavior, the combined run passed 13 tests.
+  - `git diff --check` - passed with expected CRLF normalization warnings.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because no required Python interpreter is installed.
+
 ## Scoped change: PR #1233 CI readiness
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

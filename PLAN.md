@@ -1,4 +1,31 @@
 ## Scope (current change)
+- Address GitHub issue #1227 by making the following surface route-aware instead of globally persistent.
+- Keep following discovery available from home/browse/videos while removing persistent side chrome from channel watch and creator workflows.
+- Make the mobile following entry less dominant by showing it only on discovery surfaces; watch pages should prioritize video, chat, details, and creator actions.
+- Keep API contracts, auth behavior, and deployment configuration unchanged.
+- Add focused unit and Playwright coverage for route placement and guest/empty/populated following states.
+
+## Assumptions
+- The navbar's primary `Following` route remains the durable entry point when the shell does not render a sidebar.
+- Discovery pages still benefit from a following rail because it can personalize browsing without competing with playback.
+- Channel watch and creator routes should not reserve desktop width or mobile vertical space for following.
+- The existing following data hook and state components are sufficient; the change should mostly reshape shell placement and tests.
+
+## Risks
+- `ViewerShell` is mounted around every viewer route, so route matching must avoid hiding following on discovery routes accidentally.
+- Removing the sidebar from watch pages can break tests that assumed the mobile `Show following` button always exists.
+- Desktop CSS currently defines a two-column grid when the viewport is wide; no-sidebar routes need an explicit one-column override.
+- Playwright coverage depends on the standalone viewer fixtures exposing enough following API responses to distinguish guest, empty, and populated states.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Get PR #1233 ready for merge by fixing the current failing CI checks without widening the chat-control feature scope.
 - Address the Ubuntu test-all gate failures reproduced locally and in Actions logs:
   - `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with an output path even though that helper now delegates to the default generated OME path.
