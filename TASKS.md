@@ -50,6 +50,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - First-party Go Docker images build binaries with a Go patch line that includes the `CVE-2025-68121` stdlib fix.
     - Application services start after explicit dependency validation without Compose reprocessing the dependency graph.
     - The API runtime image and pgx dependency no longer produce blocking critical Trivy findings.
+    - Viewer Next.js packages are on the fixed 13.5 patch line for `CVE-2025-29927`.
     - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
 
 ### Execution log (PR #1233 CI readiness)
@@ -129,6 +130,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+- Task 7 image-scan third follow-up: CI run `25831129289` moved past the API runtime and pgx blockers, then failed on viewer `next 13.5.6` with `CVE-2025-29927`; the viewer now uses the patched `13.5.11` release from the same 13.5 line.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 

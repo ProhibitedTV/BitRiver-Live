@@ -18,6 +18,7 @@
   - With Trivy `v0.70.0`, the scanner reaches first-party Go binaries and blocks on Go stdlib `CVE-2025-68121` from the `golang:1.21` builder images; rebuild all first-party Go binaries from a fixed Go patch line while leaving the module target at `go 1.21`.
   - After explicit dependency health/completion waits, application startup should not ask Compose to re-evaluate or restart the one-shot dependency chain.
   - The refreshed scan then reports Debian runtime package CVEs in the API image and `github.com/jackc/pgx/v5` `CVE-2026-33816`; move the static Go runtime image to Alpine and bump the real pgx module requirement to the fixed version.
+  - The next image scan blocker is `next` `CVE-2025-29927`; bump the viewer Next.js packages within the existing 13.5 patch line to `13.5.11`.
 
 ## Assumptions
 - The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
@@ -45,6 +46,7 @@
 - Starting application services with `--no-deps` depends on the preceding explicit health/completion waits staying complete and ordered.
 - Moving the API runtime image from Debian to Alpine must preserve `curl` for the existing Compose healthcheck and the non-root runtime user.
 - Bumping pgx affects real Postgres builds because Docker drops the local stub replacement; local stubbed tests should remain unaffected.
+- Next.js patch updates must keep the viewer on the existing major/minor line and preserve lint/build behavior.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
