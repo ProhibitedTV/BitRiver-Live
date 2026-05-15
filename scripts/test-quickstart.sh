@@ -534,7 +534,7 @@ for service in "${DEPENDENCY_SERVICES_WITH_HEALTHCHECKS[@]}"; do
 done
 wait_for_completed "postgres-migrations"
 
-start_compose_services_without_deps "API service" "${APPLICATION_CORE_SERVICES[@]}"
+start_compose_services "API service" "${APPLICATION_CORE_SERVICES[@]}"
 
 echo "Waiting for API service to report healthy..."
 for service in "${APPLICATION_SERVICES_WITH_HEALTHCHECKS[@]}"; do

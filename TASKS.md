@@ -72,12 +72,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because no required Python interpreter is installed.
 - Task 6 diagnosis: PR #1234 CI run `25944748726` passed the image vulnerability scan but failed the Ubuntu gate during quickstart smoke after dependency services were healthy and application services began starting. The diagnostics show the app layer still not fully up, consistent with the API service hitting the same Linux bind-mount ownership class as the earlier transcoder smoke fix.
 - Task 6 follow-up diagnosis: CI run `25945047019` still failed in the same app-start window after shell lint and image scan passed; diagnostics showed `viewer` created immediately after the grouped application start, so the smoke should start the API first, wait for API health, then start viewer/proxy sidecars.
+- Task 6 second follow-up diagnosis: CI run `25945237008` still failed before the API container appeared in diagnostics, consistent with `--no-deps` short-circuiting API creation after explicit dependency waits; the API-only start should let Compose evaluate its already-healthy dependency graph, then sidecars can still start with `--no-deps`.
 - Task 6 complete: `scripts/test-quickstart.sh` now prepares `deploy/data` for the smoke, adds `bitriver-live` to the existing Linux-only host UID/GID override, and phases app startup as API-first then viewer/public sidecars. `deploy/docker-compose.yml` is unchanged.
 - Task 6 checks:
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && bash -n scripts/test-quickstart.sh'` - passed.
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `git diff --check` - passed with expected CRLF normalization warnings.
   - Follow-up after phasing app startup: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+  - Follow-up after switching the API-only start back to Compose dependency evaluation: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
 
 ## Scoped change: PR #1233 CI readiness
 
