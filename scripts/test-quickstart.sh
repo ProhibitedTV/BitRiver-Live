@@ -504,8 +504,11 @@ DEPENDENCY_SERVICES=(
   postgres-migrations
 )
 
-APPLICATION_SERVICES=(
+APPLICATION_CORE_SERVICES=(
   bitriver-live
+)
+
+APPLICATION_SIDECAR_SERVICES=(
   viewer
   transcoder-public
 )
@@ -531,12 +534,14 @@ for service in "${DEPENDENCY_SERVICES_WITH_HEALTHCHECKS[@]}"; do
 done
 wait_for_completed "postgres-migrations"
 
-start_compose_services_without_deps "application services" "${APPLICATION_SERVICES[@]}"
+start_compose_services_without_deps "API service" "${APPLICATION_CORE_SERVICES[@]}"
 
-echo "Waiting for application services to report healthy..."
+echo "Waiting for API service to report healthy..."
 for service in "${APPLICATION_SERVICES_WITH_HEALTHCHECKS[@]}"; do
   wait_for_health "$service"
 done
+
+start_compose_services_without_deps "viewer and public sidecars" "${APPLICATION_SIDECAR_SERVICES[@]}"
 
 API_PORT=${BITRIVER_LIVE_PORT:-8080}
 VIEWER_PATH=${NEXT_VIEWER_BASE_PATH:-/viewer}
