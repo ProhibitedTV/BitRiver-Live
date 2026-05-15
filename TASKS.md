@@ -31,6 +31,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Focused Jest, lint, build, targeted Playwright, and the repo viewer gate are run or blockers are recorded.
     - `TASKS.md` records command results and any residual warnings.
 
+- [x] Task 6 - Fix PR #1234 Ubuntu smoke follow-up
+  - Acceptance criteria:
+    - The quickstart smoke prepares the API data bind mount for Linux CI.
+    - The test-only Compose override lets `bitriver-live` write repo-backed smoke data without changing the deployment contract.
+    - Syntax/diff checks pass locally and a fresh CI run confirms the Ubuntu gate.
+
 ### Execution log (issue #1227 following sidebar focus)
 - Task 1 complete: confirmed PR #1233 merged and issue #1220 was already closed by GitHub, fast-forwarded local `main` to merge commit `7fa76a18`, selected open issue #1227, and created branch `codex/issue-1227-following-focus`.
 - Task 1 checks:
@@ -64,6 +70,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts tests/channel.spec.ts` - first run passed 10/11 and exposed a stale homepage selector; follow-up homepage-only run exposed stale subheader alignment; after aligning the spec to the current hero DOM and shell behavior, the combined run passed 13 tests.
   - `git diff --check` - passed with expected CRLF normalization warnings.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because no required Python interpreter is installed.
+- Task 6 diagnosis: PR #1234 CI run `25944748726` passed the image vulnerability scan but failed the Ubuntu gate during quickstart smoke after dependency services were healthy and application services began starting. The diagnostics show the app layer still not fully up, consistent with the API service hitting the same Linux bind-mount ownership class as the earlier transcoder smoke fix.
+- Task 6 complete: `scripts/test-quickstart.sh` now prepares `deploy/data` for the smoke and adds `bitriver-live` to the existing Linux-only host UID/GID override, keeping `deploy/docker-compose.yml` unchanged.
+- Task 6 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings.
 
 ## Scoped change: PR #1233 CI readiness
 

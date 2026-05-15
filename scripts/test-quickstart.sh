@@ -9,8 +9,10 @@ ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 COMPOSE_SMOKE_OVERRIDE=""
+BITRIVER_DATA_DIR="$REPO_ROOT/deploy/data"
 TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
 CREATED_ENV_FILE=false
+CREATED_BITRIVER_DATA_DIR=false
 CREATED_TRANSCODER_DATA_DIR=false
 PYTHON_RUNNER=()
 COMPOSE_RUNTIME_ARGS=("-f" "$COMPOSE_FILE")
@@ -31,6 +33,8 @@ if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
   host_gid="$(id -g)"
   cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML
 services:
+  bitriver-live:
+    user: "${host_uid}:${host_gid}"
   srs-config:
     user: "${host_uid}:${host_gid}"
   ome-config:
@@ -55,6 +59,10 @@ cleanup() {
 
   if [ "$CREATED_ENV_FILE" = true ]; then
     rm -f "$ENV_FILE"
+  fi
+
+  if [ "$CREATED_BITRIVER_DATA_DIR" = true ]; then
+    rmdir "$BITRIVER_DATA_DIR" 2>/dev/null || true
   fi
 
   if [ "$CREATED_TRANSCODER_DATA_DIR" = true ]; then
@@ -132,6 +140,11 @@ BITRIVER_TRANSCODER_TOKEN=local-dev-token
 BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
 fi
+
+if [ ! -d "$BITRIVER_DATA_DIR" ]; then
+  CREATED_BITRIVER_DATA_DIR=true
+fi
+mkdir -p "$BITRIVER_DATA_DIR"
 
 if [ ! -d "$TRANSCODER_DATA_DIR" ]; then
   CREATED_TRANSCODER_DATA_DIR=true

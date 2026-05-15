@@ -2,6 +2,7 @@
 - Address GitHub issue #1227 by making the following surface route-aware instead of globally persistent.
 - Keep following discovery available from home/browse/videos while removing persistent side chrome from channel watch and creator workflows.
 - Make the mobile following entry less dominant by showing it only on discovery surfaces; watch pages should prioritize video, chat, details, and creator actions.
+- Fix the PR #1234 Ubuntu smoke failure uncovered after push by extending the existing test-only Linux user override to the API service's repo-backed data mount.
 - Keep API contracts, auth behavior, and deployment configuration unchanged.
 - Add focused unit and Playwright coverage for route placement and guest/empty/populated following states.
 
@@ -16,6 +17,7 @@
 - Removing the sidebar from watch pages can break tests that assumed the mobile `Show following` button always exists.
 - Desktop CSS currently defines a two-column grid when the viewport is wide; no-sidebar routes need an explicit one-column override.
 - Playwright coverage depends on the standalone viewer fixtures exposing enough following API responses to distinguish guest, empty, and populated states.
+- The smoke-only API user override must not change `deploy/docker-compose.yml`; production still runs the API with the configured non-root runtime UID.
 
 ## Test plan
 - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx`
@@ -23,6 +25,7 @@
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts`
+- `bash -n scripts/test-quickstart.sh`
 - `./scripts/verify.sh --viewer`
 
 ## Scope (current change)
