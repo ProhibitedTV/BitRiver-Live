@@ -2,7 +2,7 @@
 - Address GitHub issue #1227 by making the following surface route-aware instead of globally persistent.
 - Keep following discovery available from home/browse/videos while removing persistent side chrome from channel watch and creator workflows.
 - Make the mobile following entry less dominant by showing it only on discovery surfaces; watch pages should prioritize video, chat, details, and creator actions.
-- Fix the PR #1234 Ubuntu smoke failure uncovered after push by preparing the API data mount, starting the API before viewer/proxy sidecars, and letting Compose evaluate the already-healthy API dependency graph during the API-only start.
+- Fix the PR #1234 Ubuntu smoke failure uncovered after push by preparing the API data mount, starting the API before viewer/proxy sidecars, letting Compose evaluate the already-healthy API dependency graph during the API-only start, and surfacing CI smoke failures through GitHub annotations when raw logs are unavailable.
 - Keep API contracts, auth behavior, and deployment configuration unchanged.
 - Add focused unit and Playwright coverage for route placement and guest/empty/populated following states.
 
@@ -19,6 +19,7 @@
 - Playwright coverage depends on the standalone viewer fixtures exposing enough following API responses to distinguish guest, empty, and populated states.
 - The smoke-only API user override and phased app startup must not change `deploy/docker-compose.yml`; production still runs the API with the configured non-root runtime UID and declared Compose dependency graph.
 - The API-first smoke start should rely on the existing Compose dependency graph only after explicit dependency health/completion waits, then start viewer/proxy sidecars without reprocessing dependencies.
+- CI-facing failure annotations should stay limited to smoke diagnostics and avoid changing local command behavior.
 
 ## Test plan
 - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx`
@@ -27,6 +28,7 @@
 - `npm.cmd --prefix web/viewer run build`
 - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts`
 - `bash -n scripts/test-quickstart.sh`
+- `go test ./scripts -count=1`
 - `./scripts/verify.sh --viewer`
 
 ## Scope (current change)

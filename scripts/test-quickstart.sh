@@ -350,6 +350,28 @@ dump_compose_diagnostics() {
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=60 bitriver-live viewer srs-controller transcoder postgres-migrations srs-config ome-config ome-health-token-check postgres redis >&2 || true
 }
 
+escape_github_annotation() {
+  local value="$1"
+
+  value="${value//'%'/'%25'}"
+  value="${value//$'\r'/'%0D'}"
+  value="${value//$'\n'/'%0A'}"
+  printf '%s' "$value"
+}
+
+emit_ci_error() {
+  local title="$1"
+  local message="$2"
+
+  if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    return 0
+  fi
+
+  printf '::error title=%s::%s\n' \
+    "$(escape_github_annotation "$title")" \
+    "$(escape_github_annotation "$message")" >&2
+}
+
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
@@ -360,25 +382,43 @@ WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
 start_compose_services() {
   local label="$1"
   shift
+  local compose_output
+  local compose_tail
 
   echo "Starting $label..."
-  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never "$@"; then
+  compose_output="$(mktemp)"
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never "$@" >"$compose_output" 2>&1; then
+    cat "$compose_output" >&2
+    compose_tail="$(tail -n 30 "$compose_output")"
+    rm -f "$compose_output"
+    emit_ci_error "docker compose $label failed" "$compose_tail"
     echo "error: docker compose $label failed to start" >&2
     dump_compose_diagnostics
     exit 1
   fi
+  cat "$compose_output"
+  rm -f "$compose_output"
 }
 
 start_compose_services_without_deps() {
   local label="$1"
   shift
+  local compose_output
+  local compose_tail
 
   echo "Starting $label..."
-  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never --no-deps "$@"; then
+  compose_output="$(mktemp)"
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never --no-deps "$@" >"$compose_output" 2>&1; then
+    cat "$compose_output" >&2
+    compose_tail="$(tail -n 30 "$compose_output")"
+    rm -f "$compose_output"
+    emit_ci_error "docker compose $label failed" "$compose_tail"
     echo "error: docker compose $label failed to start" >&2
     dump_compose_diagnostics
     exit 1
   fi
+  cat "$compose_output"
+  rm -f "$compose_output"
 }
 
 wait_for_health_check() {
@@ -421,6 +461,10 @@ wait_for_health() {
   poll_rc=$?
   if [ "$poll_rc" -eq 124 ]; then
     echo "error: timed out waiting for $service_name to become healthy (last status: $WAIT_FOR_HEALTH_LAST_STATUS)" >&2
+    emit_ci_error "service health timeout" "$service_name last status: $WAIT_FOR_HEALTH_LAST_STATUS"
+  else
+    echo "error: failed waiting for $service_name to become healthy (poll result: $poll_rc, last status: $WAIT_FOR_HEALTH_LAST_STATUS)" >&2
+    emit_ci_error "service health failure" "$service_name poll result: $poll_rc, last status: $WAIT_FOR_HEALTH_LAST_STATUS"
   fi
   exit 1
 }
@@ -465,6 +509,10 @@ wait_for_completed() {
   poll_rc=$?
   if [ "$poll_rc" -eq 124 ]; then
     echo "error: timed out waiting for $service_name to complete (last status: $WAIT_FOR_COMPLETED_LAST_STATUS)" >&2
+    emit_ci_error "service completion timeout" "$service_name last status: $WAIT_FOR_COMPLETED_LAST_STATUS"
+  else
+    echo "error: failed waiting for $service_name to complete (poll result: $poll_rc, last status: $WAIT_FOR_COMPLETED_LAST_STATUS)" >&2
+    emit_ci_error "service completion failure" "$service_name poll result: $poll_rc, last status: $WAIT_FOR_COMPLETED_LAST_STATUS"
   fi
   exit 1
 }
