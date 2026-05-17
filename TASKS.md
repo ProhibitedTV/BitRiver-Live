@@ -31,6 +31,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Focused tests, targeted Playwright, lint, build, diff check, repo viewer gate, and CI are run or host blockers are recorded.
     - Changes are committed, pushed, and opened as a draft PR.
 
+- [x] Task 6 - Stabilize blocking Viewer CI retry
+  - Acceptance criteria:
+    - Repeated PR CI failures are identified as unrelated to Browse source changes.
+    - Any fix stays test-only and avoids CI workflow or runtime behavior changes.
+    - The focused failing Playwright test passes locally before pushing the follow-up commit.
+
 ### Execution log (issue #1221 simplified Browse discovery)
 - Task 1 complete: after merging PR #1235, synced local `main` to `248fb1c7`, selected issue #1221 as the oldest open product ticket, created branch `codex/issue-1221-browse-discovery`, and audited the Browse page, directory URL-state helper, directory grid/search components, existing Browse unit tests, accessibility Playwright coverage, mobile layout coverage, and relevant CSS selectors before source edits.
 - Task 1 checks:
@@ -70,6 +76,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `npm.cmd --prefix web/viewer run build` - passed with existing Browserslist and Next.js client-render deopt warnings.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - first run timed out without captured output; rerun passed the repo viewer gate, including Go tests, contract checks, Docker Compose config validation, quickstart smoke, and viewer checks.
   - `gh --version` - passed; `gh auth status` reported an invalid local token, so PR creation should use the GitHub connector instead of the CLI fallback.
+- Task 6 complete: PR #1236 CI repeatedly passed Browse-specific coverage but failed Viewer CI integration on unrelated channel/theme tests. The first failed attempt timed out in `channel-chat-playback.spec.ts`; the focused local retry passed. Two subsequent Viewer CI attempts failed consistently in `channel.spec.ts` because the theme-toggle test derived expectations from `body[data-theme]` before Navbar hydration settled. The theme test now seeds a deterministic stored dark theme before page load and verifies dark-to-light-to-dark transitions directly.
+- Task 6 checks:
+  - GitHub connector: fetched failed Viewer CI logs for run `26002447250` and reran the failed job twice.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts -g "offers retry when playback API fails then recovers"` - passed 1 test.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts -g "theme toggle updates the rendered document"` - passed 1 test after stabilization.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts` - passed 8 tests with existing Next.js client-render deopt warnings and a non-fatal render-aborted webserver warning after tests completed.
 
 ## Scoped change: issue #1225 mobile viewer layout
 
