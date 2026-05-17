@@ -3,6 +3,7 @@
 - Keep the already-green Ubuntu test-all gate and image vulnerability scan untouched.
 - Fix the quickstart entrypoint sanity failures by restoring ShellCheck suppressions for indirectly invoked deploy-smoke callbacks and aligning the PowerShell quickstart wrapper with its static contract.
 - Fix viewer/Go CI setup failures where local composite actions are referenced before checkout on jobs that do not already fetch the repository.
+- Fix the now-unmasked Viewer CI integration failure by starting Playwright against the standalone Next.js server that matches `output: "standalone"` instead of `next start`.
 - Avoid deployment contract changes.
 
 ## Assumptions
@@ -10,16 +11,21 @@
 - The local composite actions in `.github/actions/` are valid; the failing jobs simply need checkout before using them.
 - `scripts/deploy-smoke.sh` callbacks are intentionally invoked indirectly through traps/polling helpers, so ShellCheck suppressions should stay narrow and local.
 - The PowerShell quickstart wrapper should keep delegating orchestration to the Go CLI while preserving helper names/static snippets that CI validates.
+- The broad Playwright failures are caused by the test server using `next start` with standalone output; matching the Docker/README standalone server path should restore client hydration for static/CSR viewer routes without changing runtime app behavior.
+- After switching the test server to standalone, the remaining Viewer CI failures are stale Playwright expectations for current creator/profile/directory copy plus upload mocks that compare Playwright's `request.method` function instead of calling `request.method()`.
 
 ## Risks
 - CI workflow edits can accidentally affect required-check behavior, so changes should be limited to repository checkout ordering before local actions.
 - Adding PowerShell helper compatibility should not reintroduce Docker orchestration into the wrapper's validate-only path.
 - ShellCheck suppressions should not hide broad script issues beyond the two callback functions reported by CI.
+- The standalone server requires `.next/static` and `public/` beside `.next/standalone/server.js`; the test helper must copy those assets without disturbing production Docker behavior.
+- Test refreshes should stay limited to current UI contracts and mocked API behavior; no runtime component behavior should change for this CI follow-up.
 
 ## Test plan
 - `bash -n scripts/deploy-smoke.sh scripts/quickstart.sh scripts/test-quickstart.sh`
 - PowerShell static snippet check mirroring `.github/workflows/ci.yml`
 - `go test ./scripts -count=1`
+- `npm.cmd --prefix web/viewer run test:playwright`
 - `git diff --check`
 - Recheck PR #1234 GitHub Actions after pushing.
 

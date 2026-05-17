@@ -61,6 +61,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Changes are committed/pushed to PR #1234.
     - A fresh PR #1234 CI run is checked.
 
+- [x] Task 11 - Fix Viewer CI standalone server startup
+  - Acceptance criteria:
+    - Playwright uses the standalone Next.js server required by `output: "standalone"`.
+    - Static and public assets are available beside `.next/standalone/server.js` for local/CI Playwright runs.
+    - Stale Playwright copy/control expectations are aligned with the current viewer UI.
+    - Upload API route mocks exercise GET/POST paths instead of falling through to the test fallback 404.
+    - The full Playwright suite passes locally before pushing.
+
 ### Execution log (issue #1227 following sidebar focus)
 - Task 1 complete: confirmed PR #1233 merged and issue #1220 was already closed by GitHub, fast-forwarded local `main` to merge commit `7fa76a18`, selected open issue #1227, and created branch `codex/issue-1227-following-focus`.
 - Task 1 checks:
@@ -133,6 +141,15 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Workflow literal check against `.github/workflows/ci.yml` and `.github/workflows/quickstart-smoke.yml` - passed.
   - `./scripts/check-ci-contract.sh` - passed.
   - `git diff --check` - passed with expected CRLF normalization warnings for touched workflow files.
+- Task 11 diagnosis: CI run `25995941280` turned all setup, Go, quickstart, image-scan, and shell checks green, then failed only in Viewer CI integration tests. Local `npm.cmd --prefix web/viewer run test:playwright` reproduced the failures and emitted Next.js' warning that `next start` does not work with `output: "standalone"`; the current `start:test` script still uses `next start`.
+- Task 11 follow-up diagnosis: starting Playwright through `.next/standalone/server.js` removes the Next.js standalone warning, and the remaining failures are stale assertions for current directory/profile/creator copy plus upload mocks that read `request.method` instead of calling `request.method()`, causing mocked upload requests to fall through to 404 responses.
+- Task 11 complete: `start:test` now prepares and runs the standalone Next.js server, copies required `.next/static` assets and optional `public/` assets beside `.next/standalone/server.js`, and the stale Playwright specs now match the current directory/profile/creator UI and upload API mocks.
+- Task 11 checks:
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts tests/profile.spec.ts tests/creator-dashboard.spec.ts tests/creator-live-setup.spec.ts tests/creator-schedule.spec.ts tests/creator-uploads.spec.ts` - first pass failed three stale assertions, then passed 9 tests after narrowing the directory search click, stream-key value assertion, and upload error locator.
+  - `npm.cmd --prefix web/viewer run test:playwright` - passed 28 tests with existing Next.js client-render deopt warnings and a non-fatal standalone server shutdown render-abort message.
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched Markdown/viewer files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - Go tests, architecture checks, contract invariants, and Docker Compose config validation passed; quickstart smoke stopped because Docker Desktop's Linux engine pipe was unavailable on this workstation.
 
 ## Scoped change: PR #1233 CI readiness
 

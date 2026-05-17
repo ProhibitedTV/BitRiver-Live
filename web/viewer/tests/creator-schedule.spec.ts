@@ -136,17 +136,16 @@ test.describe("creator schedule management", () => {
 
     await page.goto(`/creator/live/${channelId}`);
 
-    await expect(page.getByRole("heading", { level: 2, name: /go live with deep dive/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /go live from one simple setup screen/i })).toBeVisible();
     await expect(page.getByText(/sessions unavailable/i)).toBeVisible();
     await expect(page.getByText(/channel list offline/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /refresh details/i }).click();
+    await page.getByRole("button", { name: /refresh now/i }).click();
 
     await expect(page.getByText(/sessions unavailable/i)).toBeHidden();
     await expect(page.getByText(/channel list offline/i)).toBeHidden();
-    await expect(page.getByText(/idle/i)).toBeVisible();
-    await expect(page.getByText(/last transition unknown/i)).toBeVisible();
-    await expect(page.getByText(/session started/i)).toBeVisible();
+    await expect(page.getByTestId("test-stream-status-card").getByText("Waiting for stream", { exact: true })).toBeVisible();
+    await expect(page.getByText(/current session started/i)).toBeVisible();
 
     const titleInput = page.getByLabel("Stream title");
     await titleInput.fill("Scheduled Deep Dive");
@@ -158,9 +157,8 @@ test.describe("creator schedule management", () => {
     await expect.poll(() => lastPatch?.title).toBe("Scheduled Deep Dive");
 
     const streamKeySection = page.getByText("Stream key").locator("..");
-    await streamKeySection.getByRole("button", { name: "Show", exact: true }).click();
-    await expect(page.getByText(/sk_schedule_primary/)).toBeVisible();
-    await expect(page.getByText(/primary ingest/i)).toBeVisible();
-    await expect(page.getByText(/backup ingest/i)).toBeVisible();
+    await streamKeySection.getByRole("button", { name: "Reveal", exact: true }).click();
+    await expect(page.getByLabel("Stream key")).toHaveValue("sk_schedule_primary");
+    await expect(page.getByLabel("Preferred ingest URL")).toHaveValue("rtmp://ingest.example.com/live");
   });
 });

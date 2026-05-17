@@ -76,11 +76,11 @@ test.beforeEach(async ({ page }) => {
 test("directory page renders accessible markup and supports search", async ({ page }) => {
   await page.goto("/browse");
 
-  await expect(page.getByRole("heading", { level: 1, name: /find your next live channel/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /find the live room/i })).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" }).first()).toBeVisible();
 
   await page.getByLabel("Search channels").fill("retro");
-  await page.click("button:has-text('Search')");
+  await page.getByRole("main").getByRole("button", { name: "Search" }).click();
 
   await expect(page.getByRole("heading", { level: 3, name: "Retro Speedruns" }).first()).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" })).toHaveCount(0);

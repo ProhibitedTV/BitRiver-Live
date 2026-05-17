@@ -10,7 +10,7 @@
     "test": "jest --runInBand",
     "pretest:playwright": "next build",
     "test:playwright": "playwright test",
-    "start:test": "next start --hostname 127.0.0.1 --port 3000",
+    "start:test": "node test/prepare-standalone-server.mjs && node .next/standalone/server.js",
     "test:integration": "npm run lint && npm run test && npm run test:playwright"
   },
   "dependencies": {

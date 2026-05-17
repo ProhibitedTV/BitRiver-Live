@@ -60,7 +60,7 @@ test.describe("creator uploads", () => {
     let getCalls = 0;
 
     await page.route("**/api/uploads**", async (route) => {
-      const { method, url } = route.request();
+      const method = route.request().method();
 
       if (method === "GET") {
         getCalls += 1;
@@ -117,13 +117,10 @@ test.describe("creator uploads", () => {
     await initialUploadsRequest;
 
     await expect(page.getByRole("heading", { level: 2, name: /manage uploads for uploads dashboard/i })).toBeVisible();
-    const uploadActions = page.locator(".upload-actions");
-    const uploadError = uploadActions.locator(".error");
-    await expect(uploadError).toBeVisible();
-    await expect(uploadError).toContainText(/upload api unavailable/i);
+    await expect(page.getByText(/upload api unavailable/i)).toBeVisible();
 
     await page.getByRole("button", { name: /refresh/i }).click();
-    await expect(uploadError).toBeHidden();
+    await expect(page.getByText(/upload api unavailable/i)).toBeHidden();
     await expect(page.getByText(/no uploads yet/i)).toBeVisible();
 
     await page.getByLabel("Playback URL (optional)").fill("https://cdn.example.com/recap.m3u8");
@@ -142,7 +139,7 @@ test.describe("creator uploads", () => {
     await page.getByRole("button", { name: /register upload/i }).click();
 
     await expect.poll(() => uploadItems.length).toBe(1);
-    await expect(page.getByText(/processing · 18%/i)).toBeVisible();
+    await expect(page.getByText(/processing\.\.\. 18% complete/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /delete/i })).toBeVisible();
 
     await page.getByRole("button", { name: /^ready$/i }).click();
@@ -150,7 +147,7 @@ test.describe("creator uploads", () => {
 
     await page.getByRole("button", { name: /^all$/i }).click();
     await page.getByLabel(/search uploads/i).fill("recap");
-    await expect(page.getByText(/processing · 18%/i)).toBeVisible();
+    await expect(page.getByText(/processing\.\.\. 18% complete/i)).toBeVisible();
     await page.getByLabel(/search uploads/i).fill("does-not-exist");
     await expect(page.getByText(/no uploads match the selected filters/i)).toBeVisible();
   });
@@ -206,7 +203,7 @@ test.describe("creator uploads", () => {
       });
     });
 
-    await page.route(`**/api/uploads?channelId=${channelId}`, async (route) => {
+    await page.route("**/api/uploads**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
     });
 
