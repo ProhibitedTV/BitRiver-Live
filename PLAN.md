@@ -2,7 +2,7 @@
 - Address GitHub issue #1227 by making the following surface route-aware instead of globally persistent.
 - Keep following discovery available from home/browse/videos while removing persistent side chrome from channel watch and creator workflows.
 - Make the mobile following entry less dominant by showing it only on discovery surfaces; watch pages should prioritize video, chat, details, and creator actions.
-- Fix the PR #1234 Ubuntu smoke failure uncovered after push by preparing the API data mount, starting the API before viewer/proxy sidecars, letting Compose evaluate the already-healthy API dependency graph during the API-only start, and surfacing CI smoke failures through GitHub annotations when raw logs are unavailable.
+- Fix the PR #1234 Ubuntu smoke failure uncovered after push by preparing the API data mount, starting the API before viewer/proxy sidecars, letting Compose evaluate the already-healthy API dependency graph during the API-only start, surfacing CI smoke failures through GitHub annotations when raw logs are unavailable, and avoiding the generated smoke env's host-port collision on `8080`.
 - Keep API contracts, auth behavior, and deployment configuration unchanged.
 - Add focused unit and Playwright coverage for route placement and guest/empty/populated following states.
 
@@ -11,6 +11,7 @@
 - Discovery pages still benefit from a following rail because it can personalize browsing without competing with playback.
 - Channel watch and creator routes should not reserve desktop width or mobile vertical space for following.
 - The existing following data hook and state components are sufficient; the change should mostly reshape shell placement and tests.
+- The smoke-created `.env` can use a non-default host port because container-to-container API traffic and in-container health checks remain on port `8080`.
 
 ## Risks
 - `ViewerShell` is mounted around every viewer route, so route matching must avoid hiding following on discovery routes accidentally.
@@ -20,6 +21,7 @@
 - The smoke-only API user override and phased app startup must not change `deploy/docker-compose.yml`; production still runs the API with the configured non-root runtime UID and declared Compose dependency graph.
 - The API-first smoke start should rely on the existing Compose dependency graph only after explicit dependency health/completion waits, then start viewer/proxy sidecars without reprocessing dependencies.
 - CI-facing failure annotations should stay limited to smoke diagnostics and avoid changing local command behavior.
+- The high-port smoke default must stay limited to the generated test env; operators' real root `.env` and Compose default host port remain unchanged.
 
 ## Test plan
 - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx`

@@ -315,6 +315,41 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
+func TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	scriptPath := filepath.Join(repoRoot, "scripts", "test-quickstart.sh")
+	content, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read test-quickstart: %v", err)
+	}
+
+	script := string(content)
+	envSection := extractSection(script, `cat >"$ENV_FILE" <<'ENV'`, "\nENV\nfi")
+	if envSection == "" {
+		t.Fatalf("expected generated env heredoc in test-quickstart.sh")
+	}
+	if strings.Contains(envSection, "BITRIVER_LIVE_PORT=8080") {
+		t.Fatalf("generated smoke env should avoid publishing the API on common host port 8080")
+	}
+	if !strings.Contains(envSection, "BITRIVER_LIVE_PORT=18080") {
+		t.Fatalf("generated smoke env should publish the API on host port 18080")
+	}
+	if !strings.Contains(envSection, "BITRIVER_LIVE_ADDR=:8080") {
+		t.Fatalf("generated smoke env should keep the API listening on container port 8080")
+	}
+	if !strings.Contains(envSection, "NEXT_PUBLIC_VIEWER_URL=http://localhost:18080/viewer") {
+		t.Fatalf("generated smoke viewer URL should follow the smoke host API port")
+	}
+	if !strings.Contains(script, `grep_healthcheck "bitriver-live" "http://localhost:8080/healthz"`) {
+		t.Fatalf("compose healthcheck validation should continue to assert the in-container API port")
+	}
+}
+
 func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

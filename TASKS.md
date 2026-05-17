@@ -37,6 +37,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The test-only Compose override lets `bitriver-live` write repo-backed smoke data without changing the deployment contract.
     - Syntax/diff checks pass locally and a fresh CI run confirms the Ubuntu gate.
 
+- [x] Task 7 - Avoid CI host port collision in quickstart smoke
+  - Acceptance criteria:
+    - The latest PR #1234 failure annotation is recorded with its root cause.
+    - The generated smoke `.env` publishes the API/viewer on a less collision-prone host port while preserving container port `8080` and the real deployment contract.
+    - Regression, syntax, and script checks pass locally before pushing a follow-up.
+
 ### Execution log (issue #1227 following sidebar focus)
 - Task 1 complete: confirmed PR #1233 merged and issue #1220 was already closed by GitHub, fast-forwarded local `main` to merge commit `7fa76a18`, selected open issue #1227, and created branch `codex/issue-1227-following-focus`.
 - Task 1 checks:
@@ -82,6 +88,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Follow-up after phasing app startup: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
   - Follow-up after switching the API-only start back to Compose dependency evaluation: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
   - Follow-up after adding CI smoke annotations: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+- Task 7 diagnosis: CI run `25945739050` still failed in `Ubuntu test-all gate`; the new GitHub annotation shows the API service start reached Docker networking and then failed with `Bind for 0.0.0.0:8080 failed: port is already allocated`. This is isolated to the smoke-created temporary `.env`, not the real deployment contract.
+- Task 7 complete: the smoke-created temporary `.env` now publishes the API and viewer through host port `18080` while keeping `BITRIVER_LIVE_ADDR=:8080` and the in-container healthcheck contract on `localhost:8080`.
+- Task 7 checks:
+  - `bash -n scripts/test-quickstart.sh` - passed.
+  - `go test ./scripts -run TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort -count=1` - passed.
+  - `go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
 
 ## Scoped change: PR #1233 CI readiness
 
