@@ -55,7 +55,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Existing Ubuntu verify and quickstart smoke behavior stays unchanged.
     - Workflow edits remain limited to setup ordering.
 
-- [-] Task 10 - Validate and push the CI follow-up
+- [x] Task 10 - Validate and push the CI follow-up
   - Acceptance criteria:
     - Focused syntax, PowerShell static, Go script tests, and diff checks pass locally or blockers are recorded.
     - Changes are committed/pushed to PR #1234.
@@ -141,6 +141,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Workflow literal check against `.github/workflows/ci.yml` and `.github/workflows/quickstart-smoke.yml` - passed.
   - `./scripts/check-ci-contract.sh` - passed.
   - `git diff --check` - passed with expected CRLF normalization warnings for touched workflow files.
+  - Commit `a261ccf8` was pushed to PR #1234. CI run `25996593839` passed the Ubuntu test-all gate, image vulnerability scan, shell lint, quickstart entrypoint sanity across Windows/Ubuntu/macOS, Windows/macOS Go tests, and Viewer CI including integration tests.
 - Task 11 diagnosis: CI run `25995941280` turned all setup, Go, quickstart, image-scan, and shell checks green, then failed only in Viewer CI integration tests. Local `npm.cmd --prefix web/viewer run test:playwright` reproduced the failures and emitted Next.js' warning that `next start` does not work with `output: "standalone"`; the current `start:test` script still uses `next start`.
 - Task 11 follow-up diagnosis: starting Playwright through `.next/standalone/server.js` removes the Next.js standalone warning, and the remaining failures are stale assertions for current directory/profile/creator copy plus upload mocks that read `request.method` instead of calling `request.method()`, causing mocked upload requests to fall through to 404 responses.
 - Task 11 complete: `start:test` now prepares and runs the standalone Next.js server, copies required `.next/static` assets and optional `public/` assets beside `.next/standalone/server.js`, and the stale Playwright specs now match the current directory/profile/creator UI and upload API mocks.
