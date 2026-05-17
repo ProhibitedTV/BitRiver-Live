@@ -1,4 +1,31 @@
 ## Scope (current change)
+- Address GitHub issue #1221 by simplifying the standalone `/browse` discovery page so search, sort, filters, and channel cards appear faster on desktop and mobile.
+- Keep the change viewer-only and focused on `web/viewer/app/browse/page.tsx`, existing Browse/Directory tests, and narrow CSS additions only if needed.
+- Preserve URL state for search query (`q`) and topic/category (`topic`) through `useDirectorySearch`.
+- Remove or collapse duplicated explanatory layers, especially the stats header and featured shortlist that repeats the same channel set.
+- Keep empty/error states helpful but shorter.
+
+## Assumptions
+- The homepage already carries the richer discovery narrative; `/browse` should behave like a focused directory tool.
+- The current API can only derive category/tag chips from loaded directory data, so "stable" chip behavior means preserving the active URL topic even when a search result set does not include that topic.
+- `DirectoryGrid` already emphasizes status, viewer/follower counts, category, creator name, and card actions, so this pass should not rewrite card internals unless tests show a scanning regression.
+- Existing `browsePage.test.tsx`, `accessibility.spec.ts`, and `mobile-layout.spec.ts` are the right coverage anchors for Browse behavior.
+
+## Risks
+- Removing featured shortlist markup will break tests that currently assert highlight links; tests should move to the new primary grid behavior.
+- Tightening copy and moving results up can accidentally hide reset/category state if status text becomes too terse.
+- Search/category URL updates rely on router push/replace semantics in `useDirectorySearch`; tests need to cover both query and topic paths.
+- CSS for Browse shares generic `.surface`, `.section-heading`, `.chip`, and `.search-bar` rules with other pages, so style edits must be class-scoped.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx directoryPage.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts tests/mobile-layout.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `git diff --check`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Address GitHub issue #1225 by hardening the viewer's small-screen layout across discovery, watch, chat, following, auth, and creator live setup surfaces.
 - Keep the change viewer-only: global viewer CSS and Playwright coverage, with source component changes only if CSS cannot make existing markup safe.
 - Target the acceptance widths called out by the issue: 320, 360, 390, 430, tablet, and desktop.
