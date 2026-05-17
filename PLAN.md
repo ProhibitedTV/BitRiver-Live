@@ -1,4 +1,32 @@
 ## Scope (current change)
+- Address GitHub issue #1225 by hardening the viewer's small-screen layout across discovery, watch, chat, following, auth, and creator live setup surfaces.
+- Keep the change viewer-only: global viewer CSS and Playwright coverage, with source component changes only if CSS cannot make existing markup safe.
+- Target the acceptance widths called out by the issue: 320, 360, 390, 430, tablet, and desktop.
+- Prevent document-level horizontal scrolling, make action rows thumb-friendly on narrow screens, and make long titles, tags, URLs, stream keys, tabs, and chat text wrap or truncate safely.
+- Avoid deployment contract, API contract, auth behavior, and CI/workflow changes.
+
+## Assumptions
+- The next issue after merged PR #1234 is the oldest remaining open product ticket, issue #1225.
+- Most breakage is caused by accumulated CSS overrides, minimum widths, wide action rows, and long tokens rather than missing data or API behavior.
+- The existing route-aware following change from issue #1227 is the baseline: following chrome exists on discovery routes and is absent on watch/creator routes.
+- Playwright browser coverage is the right regression guard because the issue is layout-specific and depends on real viewport widths.
+- Visual before/after proof can be recorded as PR notes plus automated viewport checks instead of committing screenshot artifacts.
+
+## Risks
+- `globals.css` has several late override sections, so new mobile rules must be placed after the effective rules or they can silently lose to older declarations.
+- Reducing mobile chrome can accidentally hide important navigation, search, account, chat, or creator actions if rules are too broad.
+- Full Playwright validation may expose existing flaky viewer tests from `main`; fixes should stay limited to mobile layout coverage unless a blocker prevents the viewer gate from running.
+- Long read-only inputs and chips can overflow even when their parent grid is responsive, so both containers and text nodes need `min-width: 0` and wrapping/truncation safeguards.
+- Touching shared button/action-row CSS can affect desktop spacing, so narrow-width overrides should be explicit.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/mobile-layout.spec.ts tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `git diff --check`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Finish the remaining PR #1234 CI follow-up after the quickstart smoke port fix.
 - Keep the already-green Ubuntu test-all gate and image vulnerability scan untouched.
 - Fix the quickstart entrypoint sanity failures by restoring ShellCheck suppressions for indirectly invoked deploy-smoke callbacks and aligning the PowerShell quickstart wrapper with its static contract.
