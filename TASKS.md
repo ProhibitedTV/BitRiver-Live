@@ -127,6 +127,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 10 validation so far:
   - `go test ./scripts -count=1` with workspace-local `GOCACHE` - passed.
   - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
+  - Commit `4e6201d0` was pushed to PR #1234. CI run `25995760280` passed the Ubuntu test-all gate, shell lint, Go workflow consistency, image scan, and macOS/Ubuntu quickstart entrypoint jobs, but Windows quickstart entrypoint static validation failed because the workflow check used double-quoted PowerShell snippets and expanded `$goCacheRoot` to empty.
+  - Fixed the duplicated static checks to use single-quoted PowerShell snippets for variable-containing literals.
+  - Exact PowerShell static check against `scripts/quickstart.ps1` - passed.
+  - Workflow literal check against `.github/workflows/ci.yml` and `.github/workflows/quickstart-smoke.yml` - passed.
+  - `./scripts/check-ci-contract.sh` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched workflow files.
 
 ## Scoped change: PR #1233 CI readiness
 

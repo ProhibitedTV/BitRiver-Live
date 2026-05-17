@@ -234,10 +234,10 @@ jobs:
             '$goPath = (Get-Command go -ErrorAction Stop).Source',
             'Start-Process -FilePath $goPath',
             'bitriver-live-go-build-cache',
-            "SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')",
-            "if ($ValidateOnly)",
-            "Invoke-Cli -CliArgs @('quickstart', '--help') -AllowHelpExitCode",
-            "@('quickstart') + $QuickstartArgs"
+            'SetEnvironmentVariable(''GOCACHE'', $goCacheRoot, ''Process'')',
+            'if ($ValidateOnly)',
+            'Invoke-Cli -CliArgs @(''quickstart'', ''--help'') -AllowHelpExitCode',
+            '@(''quickstart'') + $QuickstartArgs'
           )
 
           foreach ($snippet in $requiredSnippets) {
