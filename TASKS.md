@@ -1,3 +1,76 @@
+## Scoped change: issue #1225 mobile viewer layout
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the mobile layout plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1225 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies the affected viewer pages, global CSS override zones, and existing mobile/Playwright coverage.
+
+- [x] Task 2 - Add mobile viewport regression coverage
+  - Acceptance criteria:
+    - Playwright covers 320/360/390/430 width checks for discovery, browse, channel watch, chat, following drawer, auth overlay, and creator live setup.
+    - Tests assert the document does not horizontally overflow and that primary controls remain reachable.
+    - Coverage uses mocked APIs and existing test patterns without backend or deployment changes.
+
+- [x] Task 3 - Fix shared mobile chrome and following layout
+  - Acceptance criteria:
+    - Navbar, drawer, search, account/site menus, and following mobile bar/drawer fit at 320px without page overflow.
+    - Discovery routes keep following available; watch/creator routes stay video/workflow-first.
+    - Auth dialogs and menu surfaces fit within the viewport with usable controls.
+
+- [x] Task 4 - Fix browse, watch/chat, and creator live narrow layouts
+  - Acceptance criteria:
+    - Browse headers, filters, chips, featured cards, and directory cards wrap safely at small widths.
+    - Channel watch, chat, tabs, offline actions, and owner tools remain usable with stacked thumb-friendly controls.
+    - Creator live setup safely handles long ingest URLs, stream keys, OBS copy blocks, schedule fields, viewer links, and action rows.
+
+- [x] Task 5 - Run validation and record results
+  - Acceptance criteria:
+    - Focused Playwright, lint, build, diff check, and the repo viewer gate are run or precise host blockers are recorded.
+    - `TASKS.md` records command results and any residual warnings or visual notes.
+
+### Execution log (issue #1225 mobile viewer layout)
+- Task 1 complete: fast-forwarded `main` after PR #1234 was merged, created branch `codex/issue-1225-mobile-viewer-layout`, fetched issue #1225, confirmed nested viewer instructions point back to the root `AGENTS.md`, and audited the named viewer pages/components/CSS/test coverage before edits.
+- Task 1 checks:
+  - GitHub connector: fetched issue #1225.
+  - `git status --short --branch`
+  - `git checkout main`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1225-mobile-viewer-layout`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content SPEC.md`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/ChatPanel.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+  - `Get-Content web/viewer/components/SearchBar.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `Get-Content 'web/viewer/app/channels/[id]/page.tsx'`
+  - `Get-Content 'web/viewer/app/creator/live/[channelId]/page.tsx'`
+  - `rg -n "viewer-shell|viewer-sidebar|following-sidebar|navbar|search-bar|channel-page|chat-panel|workspace|creator-live|directory|chip" web/viewer/styles/globals.css`
+  - `Get-Content web/viewer/tests/navbar-mobile.spec.ts`
+  - `Get-Content web/viewer/tests/homepage-layout.spec.ts`
+  - `Get-Content web/viewer/tests/channel.spec.ts`
+  - `Get-Content web/viewer/tests/creator-live-setup.spec.ts`
+- Task 2 complete: added `web/viewer/tests/mobile-layout.spec.ts` with 320/360/390/430 viewport coverage for browse/following/auth, browse filters/cards, channel watch/chat/tabs, and creator live setup long-copy controls.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/mobile-layout.spec.ts` - failed after adding the regression spec, as expected before layout fixes; browse and creator mobile coverage passed, while channel watch exposed 71px of horizontal overflow at 320px. The first discovery/auth iteration was adjusted from `/` to `/browse` to avoid server-rendered home data fetch timeouts unrelated to the mobile layout assertion.
+- Task 3 complete: added late-effective mobile CSS safeguards for shared navbar/drawer/auth/following surfaces, stacked narrow action clusters, and constrained menu/dialog actions at 430px and below.
+- Task 4 complete: added narrow layout hardening for channel hero actions, chat message grids, watch tabs/nav, workspace cards/forms, directory cards, chips, pills, and long read-only creator values. Channel watch no longer overflows at 320px.
+- Task 3/4 checks:
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/mobile-layout.spec.ts` - passed 4 tests after the CSS fixes. Next.js emitted existing client-render deopt warnings and Browserslist staleness notice.
+- Task 5 complete: ran the focused mobile/browser validation, lint, build, diff hygiene, and the repo viewer gate. Visual notes for the PR: 320/360/390/430 checks now cover browse/following/auth, browse filters/cards, channel watch/chat/tabs, and creator live setup with long copy; the original 320px channel overflow is gone.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/mobile-layout.spec.ts tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts` - passed 18 tests. Next.js emitted existing client-render deopt warnings and a non-fatal standalone server render-abort message after tests completed.
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Next.js client-render deopt warnings.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - Go tests, architecture checks, contract invariants, Docker Compose config validation, and viewer-independent checks passed; quickstart smoke stopped because Docker Desktop's Linux engine pipe was unavailable (`dockerDesktopLinuxEngine` not found).
+  - `Start-Service -Name com.docker.service` - failed because this shell cannot open/start the Docker Desktop service, so the quickstart smoke remains a local host blocker.
+
 ## Scoped change: issue #1227 following sidebar focus
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
