@@ -1,4 +1,70 @@
 ## Scope (current change)
+- Finish the remaining PR #1234 CI follow-up after the quickstart smoke port fix.
+- Keep the already-green Ubuntu test-all gate and image vulnerability scan untouched.
+- Fix the quickstart entrypoint sanity failures by restoring ShellCheck suppressions for indirectly invoked deploy-smoke callbacks and aligning the PowerShell quickstart wrapper with its static contract.
+- Fix viewer/Go CI setup failures where local composite actions are referenced before checkout on jobs that do not already fetch the repository.
+- Fix the now-unmasked Viewer CI integration failure by starting Playwright against the standalone Next.js server that matches `output: "standalone"` instead of `next start`.
+- Avoid deployment contract changes.
+
+## Assumptions
+- The latest CI run `25980878280` is the source of truth for this pass.
+- The local composite actions in `.github/actions/` are valid; the failing jobs simply need checkout before using them.
+- `scripts/deploy-smoke.sh` callbacks are intentionally invoked indirectly through traps/polling helpers, so ShellCheck suppressions should stay narrow and local.
+- The PowerShell quickstart wrapper should keep delegating orchestration to the Go CLI while preserving helper names/static snippets that CI validates.
+- The broad Playwright failures are caused by the test server using `next start` with standalone output; matching the Docker/README standalone server path should restore client hydration for static/CSR viewer routes without changing runtime app behavior.
+- After switching the test server to standalone, the remaining Viewer CI failures are stale Playwright expectations for current creator/profile/directory copy plus upload mocks that compare Playwright's `request.method` function instead of calling `request.method()`.
+
+## Risks
+- CI workflow edits can accidentally affect required-check behavior, so changes should be limited to repository checkout ordering before local actions.
+- Adding PowerShell helper compatibility should not reintroduce Docker orchestration into the wrapper's validate-only path.
+- ShellCheck suppressions should not hide broad script issues beyond the two callback functions reported by CI.
+- The standalone server requires `.next/static` and `public/` beside `.next/standalone/server.js`; the test helper must copy those assets without disturbing production Docker behavior.
+- Test refreshes should stay limited to current UI contracts and mocked API behavior; no runtime component behavior should change for this CI follow-up.
+
+## Test plan
+- `bash -n scripts/deploy-smoke.sh scripts/quickstart.sh scripts/test-quickstart.sh`
+- PowerShell static snippet check mirroring `.github/workflows/ci.yml`
+- `go test ./scripts -count=1`
+- `npm.cmd --prefix web/viewer run test:playwright`
+- `git diff --check`
+- Recheck PR #1234 GitHub Actions after pushing.
+
+## Scope (current change)
+- Address GitHub issue #1227 by making the following surface route-aware instead of globally persistent.
+- Keep following discovery available from home/browse/videos while removing persistent side chrome from channel watch and creator workflows.
+- Make the mobile following entry less dominant by showing it only on discovery surfaces; watch pages should prioritize video, chat, details, and creator actions.
+- Fix the PR #1234 Ubuntu smoke failure uncovered after push by preparing the API data mount, starting the API before viewer/proxy sidecars, letting Compose evaluate the already-healthy API dependency graph during the API-only start, surfacing CI smoke failures through GitHub annotations when raw logs are unavailable, and avoiding the generated smoke env's host-port collision on `8080`.
+- Keep API contracts, auth behavior, and deployment configuration unchanged.
+- Add focused unit and Playwright coverage for route placement and guest/empty/populated following states.
+
+## Assumptions
+- The navbar's primary `Following` route remains the durable entry point when the shell does not render a sidebar.
+- Discovery pages still benefit from a following rail because it can personalize browsing without competing with playback.
+- Channel watch and creator routes should not reserve desktop width or mobile vertical space for following.
+- The existing following data hook and state components are sufficient; the change should mostly reshape shell placement and tests.
+- The smoke-created `.env` can use a non-default host port because container-to-container API traffic and in-container health checks remain on port `8080`.
+
+## Risks
+- `ViewerShell` is mounted around every viewer route, so route matching must avoid hiding following on discovery routes accidentally.
+- Removing the sidebar from watch pages can break tests that assumed the mobile `Show following` button always exists.
+- Desktop CSS currently defines a two-column grid when the viewport is wide; no-sidebar routes need an explicit one-column override.
+- Playwright coverage depends on the standalone viewer fixtures exposing enough following API responses to distinguish guest, empty, and populated states.
+- The smoke-only API user override and phased app startup must not change `deploy/docker-compose.yml`; production still runs the API with the configured non-root runtime UID and declared Compose dependency graph.
+- The API-first smoke start should rely on the existing Compose dependency graph only after explicit dependency health/completion waits, then start viewer/proxy sidecars without reprocessing dependencies.
+- CI-facing failure annotations should stay limited to smoke diagnostics and avoid changing local command behavior.
+- The high-port smoke default must stay limited to the generated test env; operators' real root `.env` and Compose default host port remain unchanged.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts`
+- `bash -n scripts/test-quickstart.sh`
+- `go test ./scripts -count=1`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Get PR #1233 ready for merge by fixing the current failing CI checks without widening the chat-control feature scope.
 - Address the Ubuntu test-all gate failures reproduced locally and in Actions logs:
   - `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with an output path even though that helper now delegates to the default generated OME path.

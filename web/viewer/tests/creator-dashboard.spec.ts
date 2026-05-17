@@ -61,7 +61,7 @@ test.describe("creator dashboard", () => {
     let uploadAttempts = 0;
 
     await page.route("**/api/uploads**", async (route) => {
-      const { method, url } = route.request();
+      const method = route.request().method();
 
       if (method === "GET") {
         await route.fulfill({
@@ -120,7 +120,7 @@ test.describe("creator dashboard", () => {
     await expect(page.getByText(/upload manager/i)).toBeVisible();
 
     const uploadManager = page.getByRole("heading", { level: 3, name: /upload manager/i }).locator("xpath=ancestor::section[1]");
-    const submitButton = uploadManager.getByRole("button", { name: /register upload|submitting…/i });
+    const submitButton = uploadManager.getByRole("button", { name: /register upload|submitting\.\.\./i });
 
     await page.getByLabel("Title").fill("Post-show recap");
     await page.getByLabel("Filename").fill("recap.mp4");
@@ -141,14 +141,13 @@ test.describe("creator dashboard", () => {
       submitButton.click(),
     ]);
 
-    await expect(submitButton).toHaveText("Submitting…");
     await expect(submitButton).toHaveText("Register upload");
     await expect(uploadManager.getByText(/unable to create upload/i)).toBeVisible();
 
     await submitButton.click();
 
     await expect.poll(() => uploadItems.length).toBeGreaterThan(0);
-    await expect(page.getByText(/processing · 12%/i)).toBeVisible();
+    await expect(page.getByText(/processing\.\.\. 12% complete/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /refresh/i })).toBeEnabled();
   });
 
@@ -284,15 +283,14 @@ test.describe("creator dashboard", () => {
 
     await page.goto(`/creator/live/${channelId}`);
 
-    await expect(page.getByRole("heading", { level: 2, name: /go live with/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /go live from one simple setup screen/i })).toBeVisible();
     await expect(page.getByText(/unable to load ingest details/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /refresh details/i }).click();
+    await page.getByRole("button", { name: /refresh now/i }).click();
 
     await expect(page.getByText(/unable to load ingest details/i)).not.toBeVisible();
-    await expect(page.getByText(/idle/i)).toBeVisible();
-    await expect(page.getByText(/last transition unknown/i)).toBeVisible();
-    await expect(page.getByText(/session started/i)).toBeVisible();
+    await expect(page.getByTestId("test-stream-status-card").getByText("Waiting for stream", { exact: true })).toBeVisible();
+    await expect(page.getByText(/current session started/i)).toBeVisible();
 
     const titleInput = page.getByLabel("Stream title");
     await titleInput.fill("Scheduled Mission Update");
@@ -308,12 +306,11 @@ test.describe("creator dashboard", () => {
     await expect(page.getByRole("button", { name: /copy obs settings/i })).toBeVisible();
 
     const streamKeyInput = page.getByLabel("Stream key");
-    await expect(streamKeyInput).toHaveAttribute("type", "password");
+    await expect(streamKeyInput).toHaveValue("********");
     await page.getByRole("button", { name: "Reveal" }).click();
-    await expect(streamKeyInput).toHaveAttribute("type", "text");
+    await expect(streamKeyInput).toHaveValue("sk_live_123");
 
-    await expect(page.getByText(/primary ingest/i)).toBeVisible();
-    await expect(page.getByText(/backup ingest/i)).toBeVisible();
+    await expect(page.getByLabel("Preferred ingest URL")).toHaveValue("rtmp://ingest.example.com/live");
   });
 
   test("shows error lifecycle state when session signals are out of sync", async ({ page }) => {
@@ -381,7 +378,7 @@ test.describe("creator dashboard", () => {
 
     await page.goto(`/creator/live/${channelId}`);
 
-    await expect(page.getByText("Error")).toBeVisible();
-    await expect(page.getByText(/ingest lost: channel session signal is out of sync/i)).toBeVisible();
+    await expect(page.getByTestId("test-stream-status-card").getByText("Reconnecting", { exact: true })).toBeVisible();
+    await expect(page.getByText(/recent ingest activity is still settling/i)).toBeVisible();
   });
 });

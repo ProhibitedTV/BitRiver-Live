@@ -4644,6 +4644,10 @@ button:focus-visible {
     padding-inline: var(--space-md);
   }
 
+  .viewer-shell--following-disabled {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .following-sidebar__footnote {
     display: none;
   }

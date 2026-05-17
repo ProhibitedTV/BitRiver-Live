@@ -9,8 +9,10 @@ ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 COMPOSE_SMOKE_OVERRIDE=""
+BITRIVER_DATA_DIR="$REPO_ROOT/deploy/data"
 TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
 CREATED_ENV_FILE=false
+CREATED_BITRIVER_DATA_DIR=false
 CREATED_TRANSCODER_DATA_DIR=false
 PYTHON_RUNNER=()
 COMPOSE_RUNTIME_ARGS=("-f" "$COMPOSE_FILE")
@@ -31,6 +33,8 @@ if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
   host_gid="$(id -g)"
   cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML
 services:
+  bitriver-live:
+    user: "${host_uid}:${host_gid}"
   srs-config:
     user: "${host_uid}:${host_gid}"
   ome-config:
@@ -55,6 +59,10 @@ cleanup() {
 
   if [ "$CREATED_ENV_FILE" = true ]; then
     rm -f "$ENV_FILE"
+  fi
+
+  if [ "$CREATED_BITRIVER_DATA_DIR" = true ]; then
+    rmdir "$BITRIVER_DATA_DIR" 2>/dev/null || true
   fi
 
   if [ "$CREATED_TRANSCODER_DATA_DIR" = true ]; then
@@ -85,7 +93,7 @@ BITRIVER_SRS_CONTROLLER_IMAGE_TAG=latest
 BITRIVER_TRANSCODER_IMAGE_TAG=latest
 BITRIVER_SRS_IMAGE_TAG=v5.0.185
 BITRIVER_OME_IMAGE_TAG=0.16.0
-BITRIVER_LIVE_PORT=8080
+BITRIVER_LIVE_PORT=18080
 BITRIVER_LIVE_STORAGE_DRIVER=postgres
 BITRIVER_LIVE_MODE=development
 BITRIVER_LIVE_ADDR=:8080
@@ -120,7 +128,7 @@ BITRIVER_SRS_CONTROLLER_PORT=1986
 SRS_CONTROLLER_UPSTREAM=http://srs:1985/api/
 NEXT_PUBLIC_API_BASE_URL=
 NEXT_VIEWER_BASE_PATH=/viewer
-NEXT_PUBLIC_VIEWER_URL=http://localhost:8080/viewer
+NEXT_PUBLIC_VIEWER_URL=http://localhost:18080/viewer
 BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com
 BITRIVER_LIVE_ADMIN_PASSWORD=local-dev-password
 BITRIVER_SRS_TOKEN=local-dev-token
@@ -132,6 +140,11 @@ BITRIVER_TRANSCODER_TOKEN=local-dev-token
 BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
 fi
+
+if [ ! -d "$BITRIVER_DATA_DIR" ]; then
+  CREATED_BITRIVER_DATA_DIR=true
+fi
+mkdir -p "$BITRIVER_DATA_DIR"
 
 if [ ! -d "$TRANSCODER_DATA_DIR" ]; then
   CREATED_TRANSCODER_DATA_DIR=true
@@ -337,6 +350,28 @@ dump_compose_diagnostics() {
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=60 bitriver-live viewer srs-controller transcoder postgres-migrations srs-config ome-config ome-health-token-check postgres redis >&2 || true
 }
 
+escape_github_annotation() {
+  local value="$1"
+
+  value="${value//'%'/'%25'}"
+  value="${value//$'\r'/'%0D'}"
+  value="${value//$'\n'/'%0A'}"
+  printf '%s' "$value"
+}
+
+emit_ci_error() {
+  local title="$1"
+  local message="$2"
+
+  if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    return 0
+  fi
+
+  printf '::error title=%s::%s\n' \
+    "$(escape_github_annotation "$title")" \
+    "$(escape_github_annotation "$message")" >&2
+}
+
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
@@ -347,25 +382,43 @@ WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
 start_compose_services() {
   local label="$1"
   shift
+  local compose_output
+  local compose_tail
 
   echo "Starting $label..."
-  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never "$@"; then
+  compose_output="$(mktemp)"
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never "$@" >"$compose_output" 2>&1; then
+    cat "$compose_output" >&2
+    compose_tail="$(tail -n 30 "$compose_output")"
+    rm -f "$compose_output"
+    emit_ci_error "docker compose $label failed" "$compose_tail"
     echo "error: docker compose $label failed to start" >&2
     dump_compose_diagnostics
     exit 1
   fi
+  cat "$compose_output"
+  rm -f "$compose_output"
 }
 
 start_compose_services_without_deps() {
   local label="$1"
   shift
+  local compose_output
+  local compose_tail
 
   echo "Starting $label..."
-  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never --no-deps "$@"; then
+  compose_output="$(mktemp)"
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never --no-deps "$@" >"$compose_output" 2>&1; then
+    cat "$compose_output" >&2
+    compose_tail="$(tail -n 30 "$compose_output")"
+    rm -f "$compose_output"
+    emit_ci_error "docker compose $label failed" "$compose_tail"
     echo "error: docker compose $label failed to start" >&2
     dump_compose_diagnostics
     exit 1
   fi
+  cat "$compose_output"
+  rm -f "$compose_output"
 }
 
 wait_for_health_check() {
@@ -408,6 +461,10 @@ wait_for_health() {
   poll_rc=$?
   if [ "$poll_rc" -eq 124 ]; then
     echo "error: timed out waiting for $service_name to become healthy (last status: $WAIT_FOR_HEALTH_LAST_STATUS)" >&2
+    emit_ci_error "service health timeout" "$service_name last status: $WAIT_FOR_HEALTH_LAST_STATUS"
+  else
+    echo "error: failed waiting for $service_name to become healthy (poll result: $poll_rc, last status: $WAIT_FOR_HEALTH_LAST_STATUS)" >&2
+    emit_ci_error "service health failure" "$service_name poll result: $poll_rc, last status: $WAIT_FOR_HEALTH_LAST_STATUS"
   fi
   exit 1
 }
@@ -452,6 +509,10 @@ wait_for_completed() {
   poll_rc=$?
   if [ "$poll_rc" -eq 124 ]; then
     echo "error: timed out waiting for $service_name to complete (last status: $WAIT_FOR_COMPLETED_LAST_STATUS)" >&2
+    emit_ci_error "service completion timeout" "$service_name last status: $WAIT_FOR_COMPLETED_LAST_STATUS"
+  else
+    echo "error: failed waiting for $service_name to complete (poll result: $poll_rc, last status: $WAIT_FOR_COMPLETED_LAST_STATUS)" >&2
+    emit_ci_error "service completion failure" "$service_name poll result: $poll_rc, last status: $WAIT_FOR_COMPLETED_LAST_STATUS"
   fi
   exit 1
 }
@@ -491,8 +552,11 @@ DEPENDENCY_SERVICES=(
   postgres-migrations
 )
 
-APPLICATION_SERVICES=(
+APPLICATION_CORE_SERVICES=(
   bitriver-live
+)
+
+APPLICATION_SIDECAR_SERVICES=(
   viewer
   transcoder-public
 )
@@ -518,12 +582,14 @@ for service in "${DEPENDENCY_SERVICES_WITH_HEALTHCHECKS[@]}"; do
 done
 wait_for_completed "postgres-migrations"
 
-start_compose_services_without_deps "application services" "${APPLICATION_SERVICES[@]}"
+start_compose_services "API service" "${APPLICATION_CORE_SERVICES[@]}"
 
-echo "Waiting for application services to report healthy..."
+echo "Waiting for API service to report healthy..."
 for service in "${APPLICATION_SERVICES_WITH_HEALTHCHECKS[@]}"; do
   wait_for_health "$service"
 done
+
+start_compose_services_without_deps "viewer and public sidecars" "${APPLICATION_SIDECAR_SERVICES[@]}"
 
 API_PORT=${BITRIVER_LIVE_PORT:-8080}
 VIEWER_PATH=${NEXT_VIEWER_BASE_PATH:-/viewer}

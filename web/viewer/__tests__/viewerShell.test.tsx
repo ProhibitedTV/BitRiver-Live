@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ViewerShell } from "../components/ViewerShell";
 
+const mockUsePathname = jest.fn(() => "/");
+
+jest.mock("next/navigation", () => ({
+  usePathname: () => mockUsePathname(),
+}));
+
 jest.mock("../components/FollowingSidebar", () => ({
   FollowingSidebar: () => (
     <div data-testid="following-sidebar">
@@ -11,6 +17,10 @@ jest.mock("../components/FollowingSidebar", () => ({
 }));
 
 describe("ViewerShell", () => {
+  beforeEach(() => {
+    mockUsePathname.mockReturnValue("/");
+  });
+
   it("does not render duplicate sidebar intro copy above the following rail", () => {
     render(
       <ViewerShell>
@@ -20,6 +30,24 @@ describe("ViewerShell", () => {
 
     expect(screen.queryByText(/keep an eye on the creators you already know/i)).not.toBeInTheDocument();
   });
+
+  it.each(["/channels/chan-42", "/creator/live/chan-42"])(
+    "keeps following side chrome off focused route %s",
+    (route) => {
+      mockUsePathname.mockReturnValue(route);
+
+      const { container } = render(
+        <ViewerShell>
+          <div>Focused page content</div>
+        </ViewerShell>
+      );
+
+      expect(screen.queryByRole("button", { name: /show following/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("following-sidebar")).not.toBeInTheDocument();
+      expect(container.firstElementChild).toHaveClass("viewer-shell--following-disabled");
+      expect(screen.getByText("Focused page content")).toBeInTheDocument();
+    }
+  );
 
   it("toggles the mobile following sidebar button state", () => {
     render(

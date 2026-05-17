@@ -46,7 +46,7 @@ test.describe("profile page", () => {
 
     await page.goto("/profile");
 
-    await expect(page.getByRole("heading", { level: 1, name: "Profile" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /shape how your identity appears/i })).toBeVisible();
     await expect(page.getByLabel("Avatar URL")).toHaveValue(profileResponse.avatarUrl);
     await expect(page.getByLabel("Banner URL")).toHaveValue(profileResponse.bannerUrl);
     await expect(page.getByLabel("Bio")).toHaveValue(profileResponse.bio);

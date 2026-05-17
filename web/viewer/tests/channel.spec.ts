@@ -271,6 +271,9 @@ test.describe("channel route", () => {
 
     await page.goto("/channels/chan-42");
 
+    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-disabled/);
+    await expect(page.getByRole("button", { name: "Show following" })).toHaveCount(0);
+
     const player = page.locator(".channel-player");
     const chat = page.locator("#channel-chat");
     await expect(player).toBeVisible();

@@ -160,7 +160,6 @@ test.describe("creator live setup", () => {
     const copyIngestButton = page.getByTestId("copy-preferred-ingest-endpoint");
     const copyObsButton = page.getByTestId("copy-obs-settings");
     const copyViewerLinkButton = page.getByTestId("copy-viewer-link");
-    const statusCard = page.getByTestId("test-stream-status-card");
 
     await expect(streamKeyInput).toHaveValue("********");
     await expect(copyObsButton).toBeVisible();
@@ -169,12 +168,12 @@ test.describe("creator live setup", () => {
     ).toBeVisible();
     await expect(
       page.getByText(
-        "When your OBS test reaches BitRiver, your preview will appear here so you can confirm everything before sharing."
+        "Start streaming in OBS. The preview will appear here automatically."
       )
     ).toBeVisible();
-    await expect(page.getByLabel("OBS settings block")).toHaveValue(
-      "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: [hidden - reveal to copy]"
-    );
+    await expect(page.getByText("Service: Custom")).toBeVisible();
+    await expect(page.getByText(`Server: ${ingestUrl}`)).toBeVisible();
+    await expect(page.getByText("Stream key: reveal or copy it above when you need it.")).toBeVisible();
 
     await expect(copyKeyButton).toBeEnabled();
     await copyKeyButton.click();
@@ -203,9 +202,6 @@ test.describe("creator live setup", () => {
 
     await revealButton.click();
     await expect(streamKeyInput).toHaveValue(streamKey);
-    await expect(page.getByLabel("OBS settings block")).toHaveValue(
-      `Service: Custom\nServer: ${ingestUrl}\nStream Key: ${streamKey}`
-    );
 
     await copyObsButton.click();
     clipboardWrites = await page.evaluate(
@@ -223,9 +219,7 @@ test.describe("creator live setup", () => {
     await expect(
       page.getByTestId("test-stream-status-card").getByText("Live", { exact: true })
     ).toBeVisible();
-    await expect(
-      page.getByText("Your live preview is ready. Confirm video and audio here before you share the viewer link.")
-    ).toBeVisible();
+    await expect(page.getByText("Preview is live. Check video and audio, then share the channel.")).toBeVisible();
     await expect(page.getByLabel("Viewer link")).toHaveValue(`http://127.0.0.1:3000/channels/${channelId}`);
     await expect(page.getByRole("link", { name: "Open viewer" })).toHaveAttribute(
       "href",

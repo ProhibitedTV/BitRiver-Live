@@ -1,3 +1,157 @@
+## Scoped change: issue #1227 following sidebar focus
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the route-aware following plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1227 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies shell placement, following state components, CSS grid behavior, and existing unit/Playwright coverage.
+
+- [x] Task 2 - Make following placement route-aware
+  - Acceptance criteria:
+    - Discovery routes keep a desktop following sidebar and mobile following entry.
+    - Channel watch and creator routes render without following side chrome.
+    - Wide no-sidebar routes use a one-column content layout instead of the desktop shell grid.
+
+- [x] Task 3 - Keep following states useful but lightweight
+  - Acceptance criteria:
+    - Guest, empty, error, loading, and populated states continue to render through shared following components.
+    - Empty/unauthenticated following states do not add extra watch-page chrome.
+    - Existing sign-in and retry behavior remains intact.
+
+- [x] Task 4 - Update tests and browser coverage
+  - Acceptance criteria:
+    - Unit tests cover sidebar visibility by route and focus management when the drawer is available.
+    - Following state tests still cover guest, empty, error, and populated states.
+    - Playwright covers desktop discovery rail alignment and mobile watch pages without the following drawer entry.
+
+- [x] Task 5 - Run validation and record results
+  - Acceptance criteria:
+    - Focused Jest, lint, build, targeted Playwright, and the repo viewer gate are run or blockers are recorded.
+    - `TASKS.md` records command results and any residual warnings.
+
+- [x] Task 6 - Fix PR #1234 Ubuntu smoke follow-up
+  - Acceptance criteria:
+    - The quickstart smoke prepares the API data bind mount for Linux CI.
+    - The test-only Compose override lets `bitriver-live` write repo-backed smoke data without changing the deployment contract.
+    - Syntax/diff checks pass locally and a fresh CI run confirms the Ubuntu gate.
+
+- [x] Task 7 - Avoid CI host port collision in quickstart smoke
+  - Acceptance criteria:
+    - The latest PR #1234 failure annotation is recorded with its root cause.
+    - The generated smoke `.env` publishes the API/viewer on a less collision-prone host port while preserving container port `8080` and the real deployment contract.
+    - Regression, syntax, and script checks pass locally before pushing a follow-up.
+
+- [x] Task 8 - Fix remaining quickstart entrypoint sanity failures
+  - Acceptance criteria:
+    - ShellCheck no longer reports the indirectly invoked `deploy-smoke.sh` callbacks.
+    - `scripts/quickstart.ps1` keeps the static quickstart contract expected by CI without taking over Docker orchestration from the Go CLI.
+    - Syntax/static/script tests pass locally.
+
+- [x] Task 9 - Fix local composite-action checkout ordering
+  - Acceptance criteria:
+    - CI jobs that use `.github/actions/setup-go` or `.github/actions/setup-node-viewer` check out the repository first.
+    - Existing Ubuntu verify and quickstart smoke behavior stays unchanged.
+    - Workflow edits remain limited to setup ordering.
+
+- [x] Task 10 - Validate and push the CI follow-up
+  - Acceptance criteria:
+    - Focused syntax, PowerShell static, Go script tests, and diff checks pass locally or blockers are recorded.
+    - Changes are committed/pushed to PR #1234.
+    - A fresh PR #1234 CI run is checked.
+
+- [x] Task 11 - Fix Viewer CI standalone server startup
+  - Acceptance criteria:
+    - Playwright uses the standalone Next.js server required by `output: "standalone"`.
+    - Static and public assets are available beside `.next/standalone/server.js` for local/CI Playwright runs.
+    - Stale Playwright copy/control expectations are aligned with the current viewer UI.
+    - Upload API route mocks exercise GET/POST paths instead of falling through to the test fallback 404.
+    - The full Playwright suite passes locally before pushing.
+
+### Execution log (issue #1227 following sidebar focus)
+- Task 1 complete: confirmed PR #1233 merged and issue #1220 was already closed by GitHub, fast-forwarded local `main` to merge commit `7fa76a18`, selected open issue #1227, and created branch `codex/issue-1227-following-focus`.
+- Task 1 checks:
+  - `git status --short --branch`
+  - GitHub connector: fetched PR #1233 and issue #1220 state.
+  - GitHub connector: listed recent issues and fetched issues #1224, #1225, and #1227.
+  - `git fetch origin --prune`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1227-following-focus`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+  - `Get-Content web/viewer/components/following/useFollowingChannels.ts`
+  - `Get-Content web/viewer/__tests__/followingSidebar.test.tsx`
+  - `Get-Content web/viewer/__tests__/viewerShell.test.tsx`
+  - `rg -n "viewer-shell|viewer-sidebar|following-sidebar|following-state|following" web/viewer/styles/globals.css`
+- Task 2 complete: `ViewerShell` now enables the following sidebar/drawer only on discovery routes (`/`, `/browse`, and `/videos`) and applies a `viewer-shell--following-disabled` layout on watch/creator-style routes. The wide CSS grid now has a one-column override when the sidebar is disabled.
+- Task 3 complete: following state rendering still flows through the shared loading, guest, empty, error, and populated components; signed-out and empty states no longer add any following chrome to channel watch routes because the shell does not mount the drawer there.
+- Task 2/3 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx --silent` - passed, 3 suites and 12 tests.
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx --silent` - passed after adding creator-route coverage, 3 suites and 13 tests.
+- Task 4 checks so far:
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` - passed, 1 suite and 19 tests.
+- Task 4 complete: unit coverage now asserts the shell hides following side chrome on channel watch and creator workflow routes, the channel mobile browser spec asserts watch pages no longer expose `Show following`, and homepage browser coverage covers guest, empty, and populated following sidebar/drawer states.
+- Task 5 complete: focused unit, channel, lint, build, targeted Playwright, diff-check, and repo viewer gate were run. The repo viewer gate still stops on this host's missing Python prerequisite before viewer checks.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Browserslist and Next.js client-render deopt warnings.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/homepage-layout.spec.ts tests/channel.spec.ts` - first run passed 10/11 and exposed a stale homepage selector; follow-up homepage-only run exposed stale subheader alignment; after aligning the spec to the current hero DOM and shell behavior, the combined run passed 13 tests.
+  - `git diff --check` - passed with expected CRLF normalization warnings.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because no required Python interpreter is installed.
+- Task 6 diagnosis: PR #1234 CI run `25944748726` passed the image vulnerability scan but failed the Ubuntu gate during quickstart smoke after dependency services were healthy and application services began starting. The diagnostics show the app layer still not fully up, consistent with the API service hitting the same Linux bind-mount ownership class as the earlier transcoder smoke fix.
+- Task 6 follow-up diagnosis: CI run `25945047019` still failed in the same app-start window after shell lint and image scan passed; diagnostics showed `viewer` created immediately after the grouped application start, so the smoke should start the API first, wait for API health, then start viewer/proxy sidecars.
+- Task 6 second follow-up diagnosis: CI run `25945237008` still failed before the API container appeared in diagnostics, consistent with `--no-deps` short-circuiting API creation after explicit dependency waits; the API-only start should let Compose evaluate its already-healthy dependency graph, then sidecars can still start with `--no-deps`.
+- Task 6 third follow-up diagnosis: CI run `25945489025` still failed in the unified Ubuntu gate, while shell lint and the image scan passed. GitHub raw logs require an authenticated/admin token, so the smoke now emits GitHub annotations for Compose-start, health-wait, and completion-wait failures to expose the next exact failure through the public check-run annotations API.
+- Task 6 complete: `scripts/test-quickstart.sh` now prepares `deploy/data` for the smoke, adds `bitriver-live` to the existing Linux-only host UID/GID override, and phases app startup as API-first then viewer/public sidecars. `deploy/docker-compose.yml` is unchanged.
+- Task 6 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings.
+  - Follow-up after phasing app startup: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+  - Follow-up after switching the API-only start back to Compose dependency evaluation: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+  - Follow-up after adding CI smoke annotations: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+- Task 7 diagnosis: CI run `25945739050` still failed in `Ubuntu test-all gate`; the new GitHub annotation shows the API service start reached Docker networking and then failed with `Bind for 0.0.0.0:8080 failed: port is already allocated`. This is isolated to the smoke-created temporary `.env`, not the real deployment contract.
+- Task 7 complete: the smoke-created temporary `.env` now publishes the API and viewer through host port `18080` while keeping `BITRIVER_LIVE_ADDR=:8080` and the in-container healthcheck contract on `localhost:8080`.
+- Task 7 checks:
+  - `bash -n scripts/test-quickstart.sh` - passed.
+  - `go test ./scripts -run TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort -count=1` - passed.
+  - `go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
+- Task 8 diagnosis: CI run `25980878280` confirmed the prior Ubuntu test-all gate and image vulnerability scan are green. Remaining failures are `Quickstart entrypoint sanity` ShellCheck notes for `scripts/deploy-smoke.sh` callback functions, Windows static validation expecting `Ensure-DockerDesktopRunning`, and local composite setup actions being referenced before checkout in viewer/Go follow-up jobs.
+- Task 8 complete: `scripts/deploy-smoke.sh` now suppresses the current ShellCheck callback note (`SC2329`) only on the trap/polling callback functions, and the duplicated quickstart PowerShell static checks now validate the current wrapper contract instead of stale direct Docker-helper snippets.
+- Task 8 checks:
+  - `bash -n scripts/deploy-smoke.sh scripts/quickstart.sh scripts/test-quickstart.sh` - passed.
+  - PowerShell static snippet check against `scripts/quickstart.ps1` - passed.
+  - PowerShell static snippet check against `.github/workflows/ci.yml` and `.github/workflows/quickstart-smoke.yml` - passed after fixing the local check's escaped literals.
+- Task 9 complete: every workflow job that calls `.github/actions/setup-go` or `.github/actions/setup-node-viewer` now checks out the repository first so the local composite action metadata exists before Actions resolves it. Existing composite action setup behavior remains unchanged.
+- Task 9 checks:
+  - `rg -n -B 3 "uses: \./\.github/actions/setup-(go|node-viewer)" .github\workflows` - confirmed each local action call is preceded by `actions/checkout`.
+  - `./scripts/check-ci-contract.sh` - passed.
+  - `./scripts/check-go-workflow-config.sh` - passed.
+- Task 10 validation so far:
+  - `go test ./scripts -count=1` with workspace-local `GOCACHE` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
+  - Commit `4e6201d0` was pushed to PR #1234. CI run `25995760280` passed the Ubuntu test-all gate, shell lint, Go workflow consistency, image scan, and macOS/Ubuntu quickstart entrypoint jobs, but Windows quickstart entrypoint static validation failed because the workflow check used double-quoted PowerShell snippets and expanded `$goCacheRoot` to empty.
+  - Fixed the duplicated static checks to use single-quoted PowerShell snippets for variable-containing literals.
+  - Exact PowerShell static check against `scripts/quickstart.ps1` - passed.
+  - Workflow literal check against `.github/workflows/ci.yml` and `.github/workflows/quickstart-smoke.yml` - passed.
+  - `./scripts/check-ci-contract.sh` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched workflow files.
+  - Commit `a261ccf8` was pushed to PR #1234. CI run `25996593839` passed the Ubuntu test-all gate, image vulnerability scan, shell lint, quickstart entrypoint sanity across Windows/Ubuntu/macOS, Windows/macOS Go tests, and Viewer CI including integration tests.
+- Task 11 diagnosis: CI run `25995941280` turned all setup, Go, quickstart, image-scan, and shell checks green, then failed only in Viewer CI integration tests. Local `npm.cmd --prefix web/viewer run test:playwright` reproduced the failures and emitted Next.js' warning that `next start` does not work with `output: "standalone"`; the current `start:test` script still uses `next start`.
+- Task 11 follow-up diagnosis: starting Playwright through `.next/standalone/server.js` removes the Next.js standalone warning, and the remaining failures are stale assertions for current directory/profile/creator copy plus upload mocks that read `request.method` instead of calling `request.method()`, causing mocked upload requests to fall through to 404 responses.
+- Task 11 complete: `start:test` now prepares and runs the standalone Next.js server, copies required `.next/static` assets and optional `public/` assets beside `.next/standalone/server.js`, and the stale Playwright specs now match the current directory/profile/creator UI and upload API mocks.
+- Task 11 checks:
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts tests/profile.spec.ts tests/creator-dashboard.spec.ts tests/creator-live-setup.spec.ts tests/creator-schedule.spec.ts tests/creator-uploads.spec.ts` - first pass failed three stale assertions, then passed 9 tests after narrowing the directory search click, stream-key value assertion, and upload error locator.
+  - `npm.cmd --prefix web/viewer run test:playwright` - passed 28 tests with existing Next.js client-render deopt warnings and a non-fatal standalone server shutdown render-abort message.
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched Markdown/viewer files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - Go tests, architecture checks, contract invariants, and Docker Compose config validation passed; quickstart smoke stopped because Docker Desktop's Linux engine pipe was unavailable on this workstation.
+
 ## Scoped change: PR #1233 CI readiness
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
