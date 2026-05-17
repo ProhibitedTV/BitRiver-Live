@@ -43,6 +43,24 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The generated smoke `.env` publishes the API/viewer on a less collision-prone host port while preserving container port `8080` and the real deployment contract.
     - Regression, syntax, and script checks pass locally before pushing a follow-up.
 
+- [x] Task 8 - Fix remaining quickstart entrypoint sanity failures
+  - Acceptance criteria:
+    - ShellCheck no longer reports the indirectly invoked `deploy-smoke.sh` callbacks.
+    - `scripts/quickstart.ps1` keeps the static quickstart contract expected by CI without taking over Docker orchestration from the Go CLI.
+    - Syntax/static/script tests pass locally.
+
+- [x] Task 9 - Fix local composite-action checkout ordering
+  - Acceptance criteria:
+    - CI jobs that use `.github/actions/setup-go` or `.github/actions/setup-node-viewer` check out the repository first.
+    - Existing Ubuntu verify and quickstart smoke behavior stays unchanged.
+    - Workflow edits remain limited to setup ordering.
+
+- [-] Task 10 - Validate and push the CI follow-up
+  - Acceptance criteria:
+    - Focused syntax, PowerShell static, Go script tests, and diff checks pass locally or blockers are recorded.
+    - Changes are committed/pushed to PR #1234.
+    - A fresh PR #1234 CI run is checked.
+
 ### Execution log (issue #1227 following sidebar focus)
 - Task 1 complete: confirmed PR #1233 merged and issue #1220 was already closed by GitHub, fast-forwarded local `main` to merge commit `7fa76a18`, selected open issue #1227, and created branch `codex/issue-1227-following-focus`.
 - Task 1 checks:
@@ -94,6 +112,20 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `bash -n scripts/test-quickstart.sh` - passed.
   - `go test ./scripts -run TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort -count=1` - passed.
   - `go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
+- Task 8 diagnosis: CI run `25980878280` confirmed the prior Ubuntu test-all gate and image vulnerability scan are green. Remaining failures are `Quickstart entrypoint sanity` ShellCheck notes for `scripts/deploy-smoke.sh` callback functions, Windows static validation expecting `Ensure-DockerDesktopRunning`, and local composite setup actions being referenced before checkout in viewer/Go follow-up jobs.
+- Task 8 complete: `scripts/deploy-smoke.sh` now suppresses the current ShellCheck callback note (`SC2329`) only on the trap/polling callback functions, and the duplicated quickstart PowerShell static checks now validate the current wrapper contract instead of stale direct Docker-helper snippets.
+- Task 8 checks:
+  - `bash -n scripts/deploy-smoke.sh scripts/quickstart.sh scripts/test-quickstart.sh` - passed.
+  - PowerShell static snippet check against `scripts/quickstart.ps1` - passed.
+  - PowerShell static snippet check against `.github/workflows/ci.yml` and `.github/workflows/quickstart-smoke.yml` - passed after fixing the local check's escaped literals.
+- Task 9 complete: every workflow job that calls `.github/actions/setup-go` or `.github/actions/setup-node-viewer` now checks out the repository first so the local composite action metadata exists before Actions resolves it. Existing composite action setup behavior remains unchanged.
+- Task 9 checks:
+  - `rg -n -B 3 "uses: \./\.github/actions/setup-(go|node-viewer)" .github\workflows` - confirmed each local action call is preceded by `actions/checkout`.
+  - `./scripts/check-ci-contract.sh` - passed.
+  - `./scripts/check-go-workflow-config.sh` - passed.
+- Task 10 validation so far:
+  - `go test ./scripts -count=1` with workspace-local `GOCACHE` - passed.
   - `git diff --check` - passed with expected CRLF normalization warnings for touched files.
 
 ## Scoped change: PR #1233 CI readiness

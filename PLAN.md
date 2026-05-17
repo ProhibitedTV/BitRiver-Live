@@ -1,4 +1,29 @@
 ## Scope (current change)
+- Finish the remaining PR #1234 CI follow-up after the quickstart smoke port fix.
+- Keep the already-green Ubuntu test-all gate and image vulnerability scan untouched.
+- Fix the quickstart entrypoint sanity failures by restoring ShellCheck suppressions for indirectly invoked deploy-smoke callbacks and aligning the PowerShell quickstart wrapper with its static contract.
+- Fix viewer/Go CI setup failures where local composite actions are referenced before checkout on jobs that do not already fetch the repository.
+- Avoid deployment contract changes.
+
+## Assumptions
+- The latest CI run `25980878280` is the source of truth for this pass.
+- The local composite actions in `.github/actions/` are valid; the failing jobs simply need checkout before using them.
+- `scripts/deploy-smoke.sh` callbacks are intentionally invoked indirectly through traps/polling helpers, so ShellCheck suppressions should stay narrow and local.
+- The PowerShell quickstart wrapper should keep delegating orchestration to the Go CLI while preserving helper names/static snippets that CI validates.
+
+## Risks
+- CI workflow edits can accidentally affect required-check behavior, so changes should be limited to repository checkout ordering before local actions.
+- Adding PowerShell helper compatibility should not reintroduce Docker orchestration into the wrapper's validate-only path.
+- ShellCheck suppressions should not hide broad script issues beyond the two callback functions reported by CI.
+
+## Test plan
+- `bash -n scripts/deploy-smoke.sh scripts/quickstart.sh scripts/test-quickstart.sh`
+- PowerShell static snippet check mirroring `.github/workflows/ci.yml`
+- `go test ./scripts -count=1`
+- `git diff --check`
+- Recheck PR #1234 GitHub Actions after pushing.
+
+## Scope (current change)
 - Address GitHub issue #1227 by making the following surface route-aware instead of globally persistent.
 - Keep following discovery available from home/browse/videos while removing persistent side chrome from channel watch and creator workflows.
 - Make the mobile following entry less dominant by showing it only on discovery surfaces; watch pages should prioritize video, chat, details, and creator actions.

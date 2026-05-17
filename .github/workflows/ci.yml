@@ -168,6 +168,9 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
 
@@ -227,12 +230,14 @@ jobs:
           $scriptText = Get-Content -Path scripts/quickstart.ps1 -Raw
           $requiredSnippets = @(
             'Ensure-Go',
-            'Ensure-DockerDesktopRunning',
             'Invoke-Cli',
-            "Join-Path $CodeRoot 'deploy/docker-compose.yml'",
-            "quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile",
+            '$goPath = (Get-Command go -ErrorAction Stop).Source',
+            'Start-Process -FilePath $goPath',
+            'bitriver-live-go-build-cache',
+            "SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')",
             "if ($ValidateOnly)",
-            "Invoke-Cli -CliArgs @('quickstart', '--help')"
+            "Invoke-Cli -CliArgs @('quickstart', '--help') -AllowHelpExitCode",
+            "@('quickstart') + $QuickstartArgs"
           )
 
           foreach ($snippet in $requiredSnippets) {
@@ -252,6 +257,9 @@ jobs:
       run:
         working-directory: web/viewer
     steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - name: Set up viewer Node toolchain
         uses: ./.github/actions/setup-node-viewer
 

@@ -31,13 +31,13 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-180}"
 WAIT_INTERVAL="${WAIT_INTERVAL:-3}"
 READY_URL=""
 
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 cleanup() {
   docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 wait_for_readyz() {
   if curl -fsS "$READY_URL" >/dev/null; then
     return 0
