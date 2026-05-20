@@ -25,7 +25,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `docs/cleanup-plan.md` task 3 is marked complete after targeted tests pass.
     - Notes mention the deterministic process launcher and preserved runtime behavior.
 
-- [-] Task 5 - Validate and publish
+- [x] Task 5 - Validate and publish
   - Acceptance criteria:
     - Targeted transcoder tests, full transcoder tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
     - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
@@ -57,3 +57,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed with line-ending warnings only.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification; viewer checks were skipped because no viewer files changed.
+- Task 5 complete: committed and pushed the branch, opened draft PR #1249, and confirmed GitHub CI passed on the PR head before merge.
+- Task 5 publishing:
+  - `git add PLAN.md TASKS.md cmd/transcoder/main_test.go docs/cleanup-plan.md`
+  - `git commit -m "transcoder: stabilize test fixtures"`
+  - `git push -u origin codex/issue-1242-transcoder-test-stability`
+  - GitHub connector: opened draft PR #1249.
+  - GitHub connector: CI completed successfully for the PR head.
