@@ -59,3 +59,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed with line-ending warnings only.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification; viewer checks were skipped because no viewer files changed.
+  - `git add PLAN.md TASKS.md docs/cleanup-plan.md internal/storage/postgres_legal.go`
+  - `git commit -m "storage: use timeout helpers for legal postgres"`
+  - `git push -u origin codex/issue-1245-legal-postgres-timeouts`
+  - GitHub connector: opened draft PR #1252.
