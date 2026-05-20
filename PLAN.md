@@ -1,4 +1,31 @@
 ## Scope (current change)
+- Address GitHub issue #1222 by making the Following side chrome state-aware and discovery-focused.
+- Keep watch/creator routes focused on stream, chat, and owner workflows with no following drawer/sidebar.
+- On discovery routes, keep the persistent desktop sidebar and mobile drawer only when a signed-in viewer actually has followed channels.
+- Let guests and empty-following users use the normal `Following` nav/page path instead of reserving full sidebar or drawer space.
+- Keep the change viewer-only: `ViewerShell`, following state/sidebar helpers, CSS only if needed, and focused unit/Playwright tests.
+
+## Assumptions
+- The dedicated `/following` page remains the right full-state surface for guest, empty, error, and followed-channel experiences.
+- Persistent side chrome is useful only after the viewer has a followed-channel list; otherwise it competes with discovery content.
+- The existing route gating for watch/creator pages is the correct direction and should be preserved.
+- Following refreshes should not collapse the sidebar/drawer or shift layout once populated data is already visible.
+
+## Risks
+- Moving following state into `ViewerShell` can duplicate fetches unless the sidebar is made presentational when data is already loaded.
+- Hiding guest/empty side chrome will break tests that currently expect `Show following` on every discovery route.
+- If the refresh hook sets `loading` during background refreshes, populated following chrome may disappear every 30 seconds.
+- Desktop grid classes currently depend on `viewer-shell--following-disabled`; route-eligible but unpopulated following states must use the disabled layout.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/homepage-layout.spec.ts tests/navbar-mobile.spec.ts tests/mobile-layout.spec.ts tests/channel.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `git diff --check`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Address GitHub issue #1221 by simplifying the standalone `/browse` discovery page so search, sort, filters, and channel cards appear faster on desktop and mobile.
 - Keep the change viewer-only and focused on `web/viewer/app/browse/page.tsx`, existing Browse/Directory tests, and narrow CSS additions only if needed.
 - Preserve URL state for search query (`q`) and topic/category (`topic`) through `useDirectorySearch`.

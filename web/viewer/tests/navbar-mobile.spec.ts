@@ -1,4 +1,46 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const followedChannel = {
+  channel: {
+    id: "nav-followed",
+    ownerId: "owner-nav-followed",
+    title: "Navigation Followed Channel",
+    category: "Music",
+    tags: [],
+    liveState: "Live",
+    createdAt: new Date("2026-01-01T00:00:00Z").toISOString(),
+    updatedAt: new Date("2026-01-01T00:00:00Z").toISOString(),
+  },
+  owner: { id: "owner-nav-followed", displayName: "Nav Creator" },
+  profile: {},
+  live: true,
+  followerCount: 12,
+};
+
+async function mockPopulatedFollowing(page: Page) {
+  await page.route("**/api/viewer/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: {
+          id: "viewer-1",
+          displayName: "Viewer",
+          email: "viewer@example.com",
+          roles: ["member"],
+        },
+      }),
+    });
+  });
+
+  await page.route("**/api/directory/following", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ channels: [followedChannel], generatedAt: new Date("2026-01-01T00:00:00Z").toISOString() }),
+    });
+  });
+}
 
 test.describe("navbar mobile layout", () => {
   test("collapses into a toggle on small viewports", async ({ page }) => {
@@ -27,6 +69,7 @@ test.describe("navbar mobile layout", () => {
   });
 
   test("keeps sidebar focus managed and supports escape/backdrop close on mobile", async ({ page }) => {
+    await mockPopulatedFollowing(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/");
 

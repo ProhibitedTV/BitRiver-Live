@@ -2,13 +2,16 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { FollowingSidebar } from "./FollowingSidebar";
+import { FollowingSidebarContent } from "./FollowingSidebar";
+import { useFollowingChannels } from "./following/useFollowingChannels";
+import { useAuth } from "../hooks/useAuth";
 
 interface ViewerShellProps {
   children: ReactNode;
 }
 
 const DESKTOP_SIDEBAR_QUERY = "(min-width: 1024px)";
+const FOLLOWING_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSABLE_SELECTORS =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -26,14 +29,21 @@ function shouldShowFollowingSurface(pathname: string | null): boolean {
 
 export function ViewerShell({ children }: ViewerShellProps) {
   const pathname = usePathname();
+  const followingSurfaceEnabled = shouldShowFollowingSurface(pathname);
+  const { user, loading: authLoading } = useAuth();
+  const { channels: followingChannels, status: followingStatus, reload: reloadFollowing } = useFollowingChannels({
+    isAuthenticated: followingSurfaceEnabled && Boolean(user),
+    authLoading,
+    refreshIntervalMs: followingSurfaceEnabled ? FOLLOWING_REFRESH_INTERVAL_MS : undefined,
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebar, setDesktopSidebar] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const followingSurfaceEnabled = shouldShowFollowingSurface(pathname);
-  const persistentSidebar = desktopSidebar && followingSurfaceEnabled;
-  const drawerAvailable = !desktopSidebar && followingSurfaceEnabled;
+  const followingChromeVisible = followingSurfaceEnabled && followingStatus === "ready" && followingChannels.length > 0;
+  const persistentSidebar = desktopSidebar && followingChromeVisible;
+  const drawerAvailable = !desktopSidebar && followingChromeVisible;
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -71,10 +81,10 @@ export function ViewerShell({ children }: ViewerShellProps) {
   }, []);
 
   useEffect(() => {
-    if (!followingSurfaceEnabled && sidebarOpen) {
+    if (!followingChromeVisible && sidebarOpen) {
       setSidebarOpen(false);
     }
-  }, [followingSurfaceEnabled, sidebarOpen]);
+  }, [followingChromeVisible, sidebarOpen]);
 
   useEffect(() => {
     if (!modalSidebarOpen) {
@@ -174,10 +184,10 @@ export function ViewerShell({ children }: ViewerShellProps) {
   return (
     <div
       className={`viewer-shell${modalSidebarOpen ? " viewer-shell--sidebar-open" : ""}${desktopSidebar ? " viewer-shell--desktop" : ""}${
-        followingSurfaceEnabled ? " viewer-shell--following-enabled" : " viewer-shell--following-disabled"
+        followingChromeVisible ? " viewer-shell--following-enabled" : " viewer-shell--following-disabled"
       }${persistentSidebar ? " viewer-shell--following-persistent" : ""}`}
     >
-      {followingSurfaceEnabled && (
+      {followingChromeVisible && (
         <aside
           id="viewer-sidebar"
           className="viewer-sidebar"
@@ -202,7 +212,13 @@ export function ViewerShell({ children }: ViewerShellProps) {
           <p className="viewer-sidebar__intro muted">
             Keep your regular creators one click away while you explore live rooms, replays, and new communities.
           </p>
-          <FollowingSidebar />
+          <FollowingSidebarContent
+            channels={followingChannels}
+            status={followingStatus}
+            onRetry={() => {
+              void reloadFollowing();
+            }}
+          />
         </aside>
       )}
 

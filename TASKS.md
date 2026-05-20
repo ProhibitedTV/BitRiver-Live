@@ -1,3 +1,78 @@
+## Scoped change: issue #1222 following focus
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the Following focus plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1222 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies current shell routing, following state/loading behavior, CSS layout hooks, and unit/Playwright coverage.
+
+- [x] Task 2 - Make Following chrome state-aware
+  - Acceptance criteria:
+    - Guest and empty-following states do not reserve persistent desktop sidebar or mobile drawer space.
+    - Signed-in viewers with followed channels still get a desktop sidebar and mobile drawer on discovery routes.
+    - Watch/creator routes continue to render without following side chrome.
+    - Background refreshes do not hide populated following chrome or cause layout shifts.
+
+- [x] Task 3 - Keep Following state presentation clear
+  - Acceptance criteria:
+    - `/following` remains the full destination for guest, empty, error, and populated states.
+    - Sidebar markup can reuse loaded shell data without duplicate following fetches.
+    - Copy and controls make guest, empty, and populated roles understandable without dominating discovery layouts.
+
+- [x] Task 4 - Update Following regression coverage
+  - Acceptance criteria:
+    - Unit tests cover shell behavior for guest, empty, populated, and focused routes.
+    - Playwright coverage includes guest, empty, and populated following states across desktop/mobile.
+    - Existing mobile and channel focus coverage is updated for the new state-aware chrome.
+
+- [x] Task 5 - Run validation and publish
+  - Acceptance criteria:
+    - Focused tests, targeted Playwright, lint, build, diff check, repo viewer gate, and CI are run or host blockers are recorded.
+    - Changes are committed, pushed, and opened as a draft PR.
+
+### Execution log (issue #1222 following focus)
+- Task 1 complete: after merging PR #1236, synced local `main` to `b3c094e8`, selected issue #1222 as the oldest open product ticket, created branch `codex/issue-1222-following-focus`, and audited the viewer shell, following sidebar/state/list hooks, following page/rail, existing unit tests, homepage/mobile/navbar/channel Playwright coverage, and relevant global CSS hooks before source edits.
+- Task 1 checks:
+  - GitHub connector: marked PR #1236 ready, squash-merged it, and searched open issues sorted by creation date.
+  - `git checkout main`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1222-following-focus`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+  - `Get-Content web/viewer/components/following/useFollowingChannels.ts`
+  - `Get-Content web/viewer/components/following/FollowingList.tsx`
+  - `Get-Content web/viewer/components/FollowingRail.tsx`
+  - `Get-Content web/viewer/app/following/page.tsx`
+  - `Get-Content web/viewer/__tests__/viewerShell.test.tsx`
+  - `Get-Content web/viewer/__tests__/followingSidebar.test.tsx`
+  - `Get-Content web/viewer/__tests__/followingStatePresentation.test.tsx`
+  - `Get-Content web/viewer/tests/homepage-layout.spec.ts`
+  - `Get-Content web/viewer/tests/navbar-mobile.spec.ts`
+  - `Get-Content web/viewer/tests/mobile-layout.spec.ts`
+  - `rg -n "Following|following|viewer-shell|Show following|Hide following|Following sidebar|Your network|Live network" web/viewer/__tests__ web/viewer/tests web/viewer/components web/viewer/styles/globals.css`
+- Task 2 complete: `ViewerShell` now loads following state on discovery routes, renders persistent/sidebar chrome only for signed-in viewers with followed channels, keeps focused routes disabled, passes loaded data into the sidebar, and `useFollowingChannels` keeps populated state visible during background refreshes.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx --silent` - failed because the existing unit test now needs to mock auth/following shell state instead of rendering `ViewerShell` without an auth provider; coverage updates are Task 4.
+- Task 3 complete: the dedicated `/following` state surfaces are unchanged, the sidebar now has a presentational `FollowingSidebarContent` path for shell-loaded data, and existing sidebar/page/rail presentation tests still cover guest, empty, error, and populated copy.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- followingSidebar.test.tsx followingStatePresentation.test.tsx --silent` - passed 2 suites and 7 tests.
+- Task 4 complete: updated shell unit coverage for guest, empty, populated, and focused routes; updated Playwright coverage so guest/empty following does not reserve chrome while populated desktop/mobile following remains available.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingSidebar.test.tsx followingStatePresentation.test.tsx --silent` - passed 3 suites and 15 tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/homepage-layout.spec.ts tests/navbar-mobile.spec.ts tests/mobile-layout.spec.ts tests/channel.spec.ts` - first run stopped at a TypeScript prop mismatch after splitting `FollowingSidebarContent`; rerun passed 19 tests with existing Browserslist, client-render deopt, and non-fatal render-aborted warnings.
+- Task 5 complete: ran focused viewer validation, diff hygiene, and the full repo viewer gate before publishing.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Next.js client-render deopt warnings.
+  - `git diff --check` - passed with expected CRLF warnings.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed full repo viewer gate, including Go tests, import/architecture checks, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks. Existing React `act(...)`, Browserslist, and Next.js warnings were observed without failing the gate.
+
 ## Scoped change: issue #1221 simplified Browse discovery
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

@@ -91,7 +91,10 @@ export function useFollowingChannels({
       return;
     }
 
-    updateStatusIfChanged("loading");
+    const hasExistingChannels = channelsRef.current.length > 0;
+    if (!hasExistingChannels) {
+      updateStatusIfChanged("loading");
+    }
     updateErrorIfChanged(undefined);
 
     try {
@@ -106,6 +109,11 @@ export function useFollowingChannels({
       updateStatusIfChanged(response.channels.length === 0 ? "empty" : "ready");
     } catch (err) {
       if (!mountedRef.current) {
+        return;
+      }
+      if (channelsRef.current.length > 0) {
+        updateErrorIfChanged(err instanceof Error ? err.message : "Unable to load followed channels");
+        updateStatusIfChanged("ready");
         return;
       }
       if (!channelsSemanticallyEqual([])) {

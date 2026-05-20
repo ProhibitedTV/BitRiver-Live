@@ -13,17 +13,17 @@ import {
 import { useFollowingChannels } from "./following/useFollowingChannels";
 import { useAuth } from "../hooks/useAuth";
 import type { DirectoryChannel } from "../lib/viewer-api";
+import type { FollowingStatus } from "./following/FollowingState";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
-export function FollowingSidebar() {
-  const { user, loading: authLoading } = useAuth();
-  const { channels, status, reload, error } = useFollowingChannels({
-    isAuthenticated: Boolean(user),
-    authLoading,
-    refreshIntervalMs: REFRESH_INTERVAL_MS,
-  });
+interface FollowingSidebarContentProps {
+  channels: DirectoryChannel[];
+  status: FollowingStatus;
+  onRetry?: () => void;
+}
 
+export function FollowingSidebarContent({ channels, status, onRetry }: FollowingSidebarContentProps) {
   const summary = (() => {
     if (status === "ready") {
       return channels.length > 0 ? FOLLOWING_COPY.summaryFollowed(channels.length) : FOLLOWING_COPY.empty;
@@ -76,9 +76,7 @@ export function FollowingSidebar() {
       ) : status === "error" ? (
         <FollowingErrorBlock
           className="following-sidebar__state following-sidebar__state--error"
-          onRetry={() => {
-            void reload();
-          }}
+          onRetry={onRetry}
         />
       ) : status === "empty" ? (
         <FollowingEmptyPrompt className="following-sidebar__state following-sidebar__state--empty" />
@@ -104,5 +102,24 @@ export function FollowingSidebar() {
         />
       )}
     </div>
+  );
+}
+
+export function FollowingSidebar() {
+  const { user, loading: authLoading } = useAuth();
+  const { channels, status, reload } = useFollowingChannels({
+    isAuthenticated: Boolean(user),
+    authLoading,
+    refreshIntervalMs: REFRESH_INTERVAL_MS,
+  });
+
+  return (
+    <FollowingSidebarContent
+      channels={channels}
+      status={status}
+      onRetry={() => {
+        void reload();
+      }}
+    />
   );
 }
