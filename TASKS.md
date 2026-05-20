@@ -19,7 +19,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `docs/cleanup-plan.md` task 4 is marked complete after targeted auth/server tests pass.
     - Notes mention that auth session timing tests already used deterministic clocks and server cleanup now does too.
 
-- [-] Task 4 - Validate and publish
+- [x] Task 4 - Validate and publish
   - Acceptance criteria:
     - Targeted auth/server tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
     - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
@@ -50,3 +50,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed with line-ending warnings only.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification; viewer checks were skipped because no viewer files changed.
+- Task 4 complete: committed and pushed the branch, opened draft PR #1250, and confirmed GitHub CI passed on the PR head before merge.
+- Task 4 publishing:
+  - `git add PLAN.md TASKS.md docs/cleanup-plan.md internal/server/ratelimit.go internal/server/server_test.go`
+  - `git commit -m "server: stabilize rate limiter cleanup test"`
+  - `git push -u origin codex/issue-1243-auth-server-time-tests`
+  - GitHub connector: opened draft PR #1250.
+  - GitHub connector: CI completed successfully for the PR head.
