@@ -226,7 +226,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe("mobile viewer layout", () => {
-  test("keeps discovery chrome, following drawer, and auth overlay inside small viewports", async ({ page }) => {
+  test("keeps guest discovery chrome and auth overlay inside small viewports", async ({ page }) => {
     await mockViewerApis(page, { signedIn: false });
 
     for (const width of MOBILE_WIDTHS) {
@@ -235,18 +235,29 @@ test.describe("mobile viewer layout", () => {
 
       await expect(page.getByRole("button", { name: "Open navigation menu" })).toBeVisible();
       await expectNoHorizontalOverflow(page);
-
-      const followingToggle = page.getByRole("button", { name: "Show following" });
-      await followingToggle.click();
-      await expect(page.getByRole("button", { name: "Close following sidebar" })).toBeVisible();
-      await expectNoHorizontalOverflow(page);
-      await page.keyboard.press("Escape");
+      await expect(page.getByRole("button", { name: "Show following" })).toHaveCount(0);
 
       await page.getByRole("button", { name: "Open navigation menu" }).click();
       await page.locator("#viewer-nav-menu").getByRole("button", { name: "Create account" }).click();
       await expect(page.getByRole("dialog", { name: "Create your BitRiver account" })).toBeVisible();
       await expectNoHorizontalOverflow(page);
       await page.getByRole("button", { name: "Close", exact: true }).click();
+    }
+  });
+
+  test("keeps populated following drawer inside small viewports", async ({ page }) => {
+    await mockViewerApis(page);
+
+    for (const width of MOBILE_WIDTHS) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/browse");
+
+      const followingToggle = page.getByRole("button", { name: "Show following" });
+      await followingToggle.click();
+      await expect(page.getByRole("button", { name: "Close following sidebar" })).toBeVisible();
+      await expect(page.locator(".viewer-sidebar").getByRole("link", { name: /creator mobile-live/i })).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await page.keyboard.press("Escape");
     }
   });
 

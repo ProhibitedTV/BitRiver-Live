@@ -2,13 +2,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { ViewerShell } from "../components/ViewerShell";
 
 const mockUsePathname = jest.fn(() => "/");
+const mockUseAuth = jest.fn();
+const mockUseFollowingChannels = jest.fn();
 
 jest.mock("next/navigation", () => ({
   usePathname: () => mockUsePathname(),
 }));
 
 jest.mock("../components/FollowingSidebar", () => ({
-  FollowingSidebar: () => (
+  FollowingSidebarContent: () => (
     <div data-testid="following-sidebar">
       <button type="button">Sidebar action</button>
       <a href="/following">Following link</a>
@@ -16,9 +18,46 @@ jest.mock("../components/FollowingSidebar", () => ({
   )
 }));
 
+jest.mock("../hooks/useAuth", () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+jest.mock("../components/following/useFollowingChannels", () => ({
+  useFollowingChannels: () => mockUseFollowingChannels(),
+}));
+
+const followedChannel = {
+  channel: {
+    id: "channel-1",
+    ownerId: "owner-1",
+    title: "BitRiver Live",
+    category: "Gaming",
+    tags: [],
+    liveState: "Live",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  owner: {
+    id: "owner-1",
+    displayName: "Owner",
+  },
+  profile: {},
+  live: true,
+  followerCount: 42,
+};
+
 describe("ViewerShell", () => {
   beforeEach(() => {
     mockUsePathname.mockReturnValue("/");
+    mockUseAuth.mockReturnValue({
+      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: ["member"] },
+      loading: false,
+    });
+    mockUseFollowingChannels.mockReturnValue({
+      channels: [followedChannel],
+      status: "ready",
+      reload: jest.fn(),
+    });
   });
 
   it("does not render duplicate sidebar intro copy above the following rail", () => {
@@ -48,6 +87,33 @@ describe("ViewerShell", () => {
       expect(screen.getByText("Focused page content")).toBeInTheDocument();
     }
   );
+
+  it.each([
+    ["guest", { channels: [], status: "unauthenticated" }],
+    ["empty", { channels: [], status: "empty" }],
+  ])("keeps following side chrome out of discovery routes for %s state", (_label, followingState) => {
+    if (followingState.status === "unauthenticated") {
+      mockUseAuth.mockReturnValue({
+        user: undefined,
+        loading: false,
+      });
+    }
+    mockUseFollowingChannels.mockReturnValue({
+      ...followingState,
+      reload: jest.fn(),
+    });
+
+    const { container } = render(
+      <ViewerShell>
+        <div>Discovery page content</div>
+      </ViewerShell>
+    );
+
+    expect(screen.queryByRole("button", { name: /show following/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("following-sidebar")).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass("viewer-shell--following-disabled");
+    expect(screen.getByText("Discovery page content")).toBeInTheDocument();
+  });
 
   it("toggles the mobile following sidebar button state", () => {
     render(

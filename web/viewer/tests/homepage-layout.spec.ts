@@ -57,7 +57,7 @@ async function mockFollowing(page: Page, channels = [followedChannel]) {
 }
 
 test.describe("homepage desktop shell", () => {
-  test("keeps the following rail aligned with the featured stage", async ({ page }) => {
+  test("keeps guest following state out of the persistent discovery sidebar", async ({ page }) => {
     await mockViewerSession(page, false);
     await page.setViewportSize({ width: 1600, height: 1100 });
     await page.goto("/");
@@ -65,28 +65,12 @@ test.describe("homepage desktop shell", () => {
     const sidebar = page.locator(".viewer-sidebar");
     const hero = page.locator(".home-hero");
 
-    await expect(sidebar).toBeVisible();
     await expect(hero).toBeVisible();
+    await expect(sidebar).toHaveCount(0);
     await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--desktop/);
-    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-persistent/);
+    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-disabled/);
     await expect(page.getByText(/keep an eye on the creators you already know while you browse the rest of the platform/i)).toHaveCount(0);
-    await expect(page.getByText("Sign in to see channels you follow.")).toHaveCount(1);
-
-    const layout = await page.evaluate(() => {
-      const top = (selector: string) => {
-        const node = document.querySelector(selector);
-        return node ? Math.round(node.getBoundingClientRect().top) : null;
-      };
-
-      return {
-        sidebarTop: top(".viewer-sidebar"),
-        heroTop: top(".home-hero"),
-      };
-    });
-
-    expect(layout.sidebarTop).not.toBeNull();
-    expect(layout.heroTop).not.toBeNull();
-    expect(Math.abs((layout.sidebarTop ?? 0) - (layout.heroTop ?? 0))).toBeLessThanOrEqual(8);
+    await expect(page.getByText("Sign in to see channels you follow.")).toHaveCount(0);
   });
 
   test("renders followed channels in the desktop discovery sidebar", async ({ page }) => {
@@ -101,20 +85,31 @@ test.describe("homepage desktop shell", () => {
     await expect(page.getByText("1 followed")).toBeVisible();
   });
 
-  test("keeps empty following lightweight behind the mobile drawer", async ({ page }) => {
+  test("keeps empty following out of the mobile drawer chrome", async ({ page }) => {
     await mockViewerSession(page, true);
     await mockFollowing(page, []);
     await page.setViewportSize({ width: 390, height: 844 });
 
     await page.goto("/");
 
+    await expect(page.getByRole("button", { name: "Show following" })).toHaveCount(0);
+    await expect(page.locator(".viewer-shell")).not.toHaveClass(/viewer-shell--sidebar-open/);
+    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-disabled/);
+    await expect(page.getByText("You're not following any channels yet.")).toHaveCount(0);
+  });
+
+  test("keeps populated following available behind the mobile drawer", async ({ page }) => {
+    await mockViewerSession(page, true);
+    await mockFollowing(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.goto("/");
+
     const sidebarToggle = page.getByRole("button", { name: "Show following" });
     await expect(sidebarToggle).toBeVisible();
-    await expect(page.locator(".viewer-shell")).not.toHaveClass(/viewer-shell--sidebar-open/);
-
     await sidebarToggle.click();
 
     await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--sidebar-open/);
-    await expect(page.getByText("You're not following any channels yet.")).toBeVisible();
+    await expect(page.locator(".viewer-sidebar").getByRole("link", { name: /ari wave/i })).toBeVisible();
   });
 });
