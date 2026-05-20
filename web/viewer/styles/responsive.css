@@ -1,0 +1,197 @@
+/* Cross-feature small-screen overflow hardening. */
+
+.channel-page,
+.channel-page__grid,
+.channel-page__hero-grid,
+.channel-page__main,
+.channel-player,
+.channel-page__chat,
+.channel-page__chat-inner,
+.channel-hero,
+.channel-hero__identity,
+.channel-hero__status,
+.channel-hero__drawer,
+.channel-tabs,
+.channel-tabs__panel,
+.chat-panel,
+.chat-message__content,
+.workspace-shell,
+.workspace-card,
+.workspace-card__header,
+.creator-live__section,
+.creator-live__field-group,
+.state-panel,
+.directory-card,
+.search-bar,
+.chip-row {
+  min-width: 0;
+}
+
+.channel-hero__title h1,
+.channel-hero__title p,
+.channel-hero__status p,
+.channel-hero__drawer,
+.channel-schedule-card,
+.chat-message__author,
+.chat-message__bubble p,
+.chat-panel__empty,
+.chat-panel__signin-card,
+.state-panel,
+.workspace-card,
+.creator-live__signal-card,
+.directory-card,
+.directory-card__title,
+.directory-card__description,
+.pill,
+.tag,
+.meta-chip,
+.overlay__meta {
+  overflow-wrap: anywhere;
+}
+
+.input-stack,
+.input-stack input,
+.input-stack textarea,
+.input-stack select {
+  min-width: 0;
+}
+
+.input-stack select {
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .channel-hero__top,
+  .channel-hero__meta-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-md);
+  }
+
+  .channel-hero__actions,
+  .channel-page__actions,
+  .workspace-card__actions,
+  .workspace-hero__actions,
+  .browse-actions,
+  .chat-panel__toolbar,
+  .channel-hero__drawer-actions,
+  .video-card__actions,
+  .video-channel-card__actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .channel-hero__actions > *,
+  .channel-page__actions > *,
+  .workspace-card__actions > *,
+  .workspace-hero__actions > *,
+  .browse-actions > *,
+  .chat-panel__toolbar > *,
+  .channel-hero__drawer-actions > *,
+  .video-card__actions > *,
+  .video-channel-card__actions > * {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .channel-tabs__list,
+  .channel-watch-nav {
+    max-width: 100%;
+    scrollbar-width: thin;
+  }
+
+  .chat-panel__header,
+  .chat-message__meta {
+    align-items: flex-start;
+  }
+
+  .chat-panel__header {
+    flex-wrap: wrap;
+  }
+
+  .chat-panel__actions {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .workspace-page {
+    padding-inline: var(--space-sm);
+    gap: var(--space-xl);
+  }
+
+  .workspace-hero,
+  .workspace-card,
+  .channel-hero,
+  .channel-replay-card,
+  .channel-owner-card,
+  .chat-panel,
+  .surface {
+    border-radius: 0.9rem;
+  }
+
+  .workspace-hero,
+  .workspace-card,
+  .channel-hero,
+  .channel-tabs__panels,
+  .chat-panel,
+  .channel-replay-card,
+  .channel-owner-card {
+    padding: var(--space-md);
+  }
+
+  .channel-hero__drawer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .channel-tabs__trigger,
+  .channel-watch-nav a,
+  .channel-watch-nav button {
+    padding-inline: 0.8rem;
+  }
+
+  .chat-message {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-message__avatar {
+    display: none;
+  }
+
+  .chat-panel__signin-card .primary-button {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 430px) {
+  .page-header,
+  .browse-controls,
+  .home-section,
+  .home-discovery-stack,
+  .home-promo {
+    gap: var(--space-md);
+  }
+
+  .search-bar__actions,
+  .nav-drawer__cta,
+  .nav-drawer__account-actions,
+  .auth-overlay__actions,
+  .chat-panel__dialog-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .search-bar__actions > *,
+  .nav-drawer__cta > *,
+  .nav-drawer__account-actions > *,
+  .auth-overlay__actions > *,
+  .chat-panel__dialog-actions > * {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .auth-overlay__dialog,
+  .chat-panel__dialog {
+    width: 100%;
+  }
+}

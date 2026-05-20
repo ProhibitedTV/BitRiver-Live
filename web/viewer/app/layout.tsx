@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
 import "../styles/globals.css";
+import "../styles/navigation.css";
+import "../styles/viewer-shell.css";
+import "../styles/directory.css";
+import "../styles/channel-watch.css";
+import "../styles/chat.css";
+import "../styles/creator-studio.css";
+import "../styles/shared-polish.css";
+import "../styles/responsive.css";
 import "../styles/home.css";
 import { Providers } from "../components/Providers";
 import { Navbar } from "../components/Navbar";

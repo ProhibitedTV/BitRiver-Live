@@ -396,12 +396,14 @@ describe("Navbar", () => {
 
   test("defines a visible nav-search focus-within style contract for dark and light themes", () => {
     const globalsCssPath = resolve(__dirname, "../styles/globals.css");
+    const navigationCssPath = resolve(__dirname, "../styles/navigation.css");
     const globalsCss = readFileSync(globalsCssPath, "utf8");
+    const navigationCss = readFileSync(navigationCssPath, "utf8");
 
     expect(globalsCss).toContain("--navbar-search-focus-ring");
     expect(globalsCss).toContain("--navbar-search-focus-border");
-    expect(globalsCss).toContain(".nav-search:focus-within");
-    expect(globalsCss).toContain("box-shadow: var(--navbar-search-shadow), 0 0 0 3px var(--navbar-search-focus-ring);");
+    expect(navigationCss).toContain(".nav-search:focus-within");
+    expect(navigationCss).toContain("box-shadow: var(--navbar-search-shadow), 0 0 0 3px var(--navbar-search-focus-ring);");
   });
 
   test("loads the stored theme preference on initial render", () => {
