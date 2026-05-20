@@ -116,7 +116,10 @@ test.describe("creator uploads", () => {
     await page.goto(`/creator/uploads/${channelId}`);
     await initialUploadsRequest;
 
-    await expect(page.getByRole("heading", { level: 2, name: /manage uploads for uploads dashboard/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /uploads dashboard studio/i })).toBeVisible();
+    const studioNav = page.getByRole("navigation", { name: /uploads dashboard channel tools/i });
+    await expect(studioNav.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", `/channels/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Go live" })).toHaveAttribute("href", `/creator/live/${channelId}`);
     await expect(page.getByText(/upload api unavailable/i)).toBeVisible();
 
     await page.getByRole("button", { name: /refresh/i }).click();
@@ -220,7 +223,7 @@ test.describe("creator uploads", () => {
     await page.goto(redirectTarget);
 
     await expect(page).toHaveURL(`/creator/uploads/${channelId}?tab=ready`);
-    await expect(page.getByRole("heading", { level: 2, name: /manage uploads for uploads dashboard/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /uploads dashboard studio/i })).toBeVisible();
   });
 
 });

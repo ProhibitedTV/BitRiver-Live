@@ -142,6 +142,12 @@ describe("CreatorLivePage", () => {
       expect(fetchChannelSessionsMock).toHaveBeenCalled();
     });
 
+    expect(screen.getByRole("heading", { level: 2, name: "Main Channel studio" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", "/channels/chan-1");
+    expect(screen.getByRole("link", { name: "Go live" })).toHaveAttribute("href", "/creator/live/chan-1");
+    expect(screen.getByRole("link", { name: "Uploads" })).toHaveAttribute("href", "/creator/uploads/chan-1");
+    expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/creator/live/chan-1#channel-schedule");
+    expect(screen.getByRole("link", { name: "Share link" })).toHaveAttribute("href", "/creator/live/chan-1#channel-share");
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
       "1) Channel",
       "2) Stream settings",

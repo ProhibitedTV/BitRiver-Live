@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test.describe("creator dashboard", () => {
-  test("registers uploads through the creator dashboard", async ({ page }) => {
+test.describe("creator channel workspace", () => {
+  test("registers uploads through the channel workspace", async ({ page }) => {
     const channelId = "chan-creator";
 
     await page.route("**/api/viewer/me", async (route) => {
@@ -116,7 +116,11 @@ test.describe("creator dashboard", () => {
 
     await page.goto(`/creator/uploads/${channelId}`);
 
-    await expect(page.getByRole("heading", { level: 2, name: /manage uploads/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /creator control centre studio/i })).toBeVisible();
+    const studioNav = page.getByRole("navigation", { name: /creator control centre channel tools/i });
+    await expect(studioNav.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", `/channels/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Go live" })).toHaveAttribute("href", `/creator/live/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Uploads" })).toHaveAttribute("href", `/creator/uploads/${channelId}`);
     await expect(page.getByText(/upload manager/i)).toBeVisible();
 
     const uploadManager = page.getByRole("heading", { level: 3, name: /upload manager/i }).locator("xpath=ancestor::section[1]");
@@ -283,7 +287,12 @@ test.describe("creator dashboard", () => {
 
     await page.goto(`/creator/live/${channelId}`);
 
-    await expect(page.getByRole("heading", { level: 2, name: /go live from one simple setup screen/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /mission briefing studio/i })).toBeVisible();
+    const studioNav = page.getByRole("navigation", { name: /mission briefing channel tools/i });
+    await expect(studioNav.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", `/channels/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Uploads" })).toHaveAttribute("href", `/creator/uploads/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", `/creator/live/${channelId}#channel-schedule`);
+    await expect(studioNav.getByRole("link", { name: "Share link" })).toHaveAttribute("href", `/creator/live/${channelId}#channel-share`);
     await expect(page.getByText(/unable to load ingest details/i)).toBeVisible();
 
     await page.getByRole("button", { name: /refresh now/i }).click();

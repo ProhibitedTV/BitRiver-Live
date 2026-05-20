@@ -1,3 +1,86 @@
+## Scoped change: issue #1223 channel-centered creator experience
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the channel experience plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1223 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies current public channel owner controls, creator layout/page chrome, shared creator channel context, CSS hooks, and unit/Playwright coverage.
+
+- [x] Task 2 - Add shared channel studio navigation
+  - Acceptance criteria:
+    - A reusable component exposes public preview, go-live setup, uploads, schedule, and share-link entry points for a channel.
+    - Creator live/upload routes and the public owner panel use the same primitive.
+    - Links preserve existing route compatibility and avoid changing API/auth contracts.
+
+- [x] Task 3 - Collapse duplicated creator dashboard chrome
+  - Acceptance criteria:
+    - `CreatorLayout` no longer renders broad hero/summary chrome above every subroute.
+    - Creator live and uploads pages no longer add separate hero/summary sections for the same channel.
+    - The retained creator routes feel like compact channel tools rather than a separate dashboard shell.
+
+- [x] Task 4 - Keep public channel viewer flow clean
+  - Acceptance criteria:
+    - Guests and signed-in non-owners do not see owner tooling.
+    - Channel owners get compact management actions from the public channel page.
+    - Watch/chat/details order remains focused for viewer flows.
+
+- [x] Task 5 - Update regression coverage
+  - Acceptance criteria:
+    - Unit tests cover owner versus viewer channel actions and retained creator workflow affordances.
+    - Playwright covers guest viewer, signed-in viewer, and channel owner flows across public and creator routes.
+    - Tests are updated away from removed dashboard hero/summary copy.
+
+- [x] Task 6 - Run validation and publish
+  - Acceptance criteria:
+    - Focused tests, targeted Playwright, lint, build, diff check, repo viewer gate, and CI are run or host blockers are recorded.
+    - Changes are committed, pushed, and opened as a draft PR.
+
+### Execution log (issue #1223 channel-centered creator experience)
+- Task 1 complete: after merging PR #1237, synced local `main` to `46c3751f`, selected issue #1223 as the oldest open product ticket, created branch `codex/issue-1223-channel-experience`, and audited public channel owner controls, creator layout, live/uploads pages and layouts, creator channel context, creator/index/getting-started pages, relevant CSS, unit tests, and Playwright creator/channel coverage before source edits.
+- Task 1 checks:
+  - GitHub connector: confirmed PR #1237 CI success, marked it ready, squash-merged it, and searched open issues sorted by creation date.
+  - `git checkout main`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1223-channel-experience`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content -LiteralPath 'web/viewer/app/channels/[id]/page.tsx'`
+  - `Get-Content web/viewer/app/creator/layout.tsx`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/page.tsx'`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/uploads/[channelId]/page.tsx'`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/layout.tsx'`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/uploads/[channelId]/layout.tsx'`
+  - `Get-Content web/viewer/components/ChannelHero.tsx`
+  - `Get-Content web/viewer/hooks/useCreatorChannel.tsx`
+  - `Get-Content web/viewer/app/creator/page.tsx`
+  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
+  - `Get-Content web/viewer/__tests__/channelPage.test.tsx`
+  - `Get-Content web/viewer/__tests__/creatorLivePage.test.tsx`
+  - `Get-Content web/viewer/__tests__/creatorPage.test.tsx`
+  - `Get-Content web/viewer/tests/channel.spec.ts`
+  - `Get-Content web/viewer/tests/creator-dashboard.spec.ts`
+  - `Get-Content web/viewer/tests/creator-live-setup.spec.ts`
+  - `Get-Content web/viewer/tests/creator-uploads.spec.ts`
+  - `rg -n "CreatorChannelProvider|workspace-hero|creator-layout|channel-owner|creator/live|creator/uploads|Open creator dashboard|Creator studio" web/viewer/app web/viewer/components web/viewer/__tests__ web/viewer/tests`
+  - `rg -n "creator-layout|workspace-hero|workspace-shell|channel-owner-card|creator-live" web/viewer/styles/globals.css`
+- Task 2 complete: added `ChannelStudioNav` as the shared channel tool primitive for public preview, go-live setup, uploads, schedule, and share-link entry points; public owner tools and retained creator routes now render through that same component.
+- Task 3 complete: collapsed the global creator layout from a broad hero/summary shell into a compact workspace bar, removed route-level live/uploads hero duplication, and kept existing live/upload route URLs intact.
+- Task 4 complete: restricted public channel management tools to the actual channel owner and left guest/non-owner watch, chat, details, follow, subscription, tip, and VOD flows unchanged.
+- Task 5 in progress: updated unit and Playwright assertions away from the removed dashboard copy and toward guest/viewer/owner channel-centered flows.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorLivePage.test.tsx creatorPage.test.tsx --silent` - passed 3 suites and 24 tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/creator-dashboard.spec.ts tests/creator-live-setup.spec.ts tests/creator-uploads.spec.ts tests/creator-schedule.spec.ts` - passed 16 tests with existing Browserslist, client-render deopt, and non-fatal render-aborted warnings.
+- Task 6 complete: ran lint, production build, diff hygiene, and the full repo viewer gate before publishing.
+- Task 6 checks:
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Browserslist and Next.js client-render deopt warnings.
+  - `git diff --check` - passed with expected CRLF warnings.
+  - After adding unique heading ids to the shared studio nav, reran `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorLivePage.test.tsx creatorPage.test.tsx --silent`, `npm.cmd --prefix web/viewer run lint`, and `git diff --check` - all passed.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - reran after the final tweak and passed full repo viewer gate, including Go tests, import/architecture checks, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks. Existing React `act(...)`, Browserslist, Next.js deopt, and non-fatal render-aborted warnings were observed without failing the gate.
+
 ## Scoped change: issue #1222 following focus
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

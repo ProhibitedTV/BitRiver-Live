@@ -1,4 +1,31 @@
 ## Scope (current change)
+- Address GitHub issue #1223 by making creator tools feel attached to the public channel instead of a separate dashboard product.
+- Keep the route structure compatible (`/channels/[id]`, `/creator/live/[channelId]`, `/creator/uploads/[channelId]`) while reducing the visible split between watch and management.
+- Replace duplicated creator layout/page hero and summary chrome with compact channel-studio navigation that links public preview, go-live setup, uploads, schedule, and sharing.
+- Add an owner-only channel panel on the public watch page that uses the same studio primitive without dominating non-owner viewer layout.
+- Keep the change viewer-only: creator layout/pages, channel owner panel, shared viewer components, focused CSS, and unit/Playwright coverage.
+
+## Assumptions
+- Compatibility routes should remain because existing nav, auth redirects, and tests rely on `/creator/live/:id` and `/creator/uploads/:id`.
+- Public channel playback remains the primary viewer surface; owner tools should appear after watch/details content as a compact management panel.
+- Schedule and share workflows already live inside the live setup page, so anchors into that flow are enough for this pass.
+- A shared presentational primitive is the safest first step before deeper data refactors from issue #1224.
+
+## Risks
+- Removing creator layout/page hero chrome will break tests that currently assert "Creator studio", "Go live from one simple setup screen", or uploads hero headings.
+- Shared studio links must not introduce owner-only controls for guests or signed-in non-owner viewers.
+- Creator live setup still fetches managed-channel details separately from playback; this pass should not widen data fetching or auth behavior.
+- CSS for `.workspace-hero`, `.workspace-shell`, and `.summary-card` is broad, so new styling should use channel-studio-specific classes.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorLivePage.test.tsx creatorPage.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/creator-dashboard.spec.ts tests/creator-live-setup.spec.ts tests/creator-uploads.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `git diff --check`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Address GitHub issue #1222 by making the Following side chrome state-aware and discovery-focused.
 - Keep watch/creator routes focused on stream, chat, and owner workflows with no following drawer/sidebar.
 - On discovery routes, keep the persistent desktop sidebar and mobile drawer only when a signed-in viewer actually has followed channels.
