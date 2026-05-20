@@ -232,6 +232,74 @@ func TestUploadMediaURLBuildsExpectedSourceURL(t *testing.T) {
 	})
 }
 
+func TestApplyUploadMultipartField(t *testing.T) {
+	req := createUploadRequest{SizeBytes: 10}
+	metadata := map[string]string{}
+
+	req, metadata = applyUploadMultipartField(req, metadata, "channelId", " chan-1 ")
+	req, metadata = applyUploadMultipartField(req, metadata, "title", " Clip title ")
+	req, metadata = applyUploadMultipartField(req, metadata, "filename", " clip.mp4 ")
+	req, metadata = applyUploadMultipartField(req, metadata, "playbackUrl", " https://vod.example.com/clip.m3u8 ")
+	req, metadata = applyUploadMultipartField(req, metadata, "sizeBytes", "42")
+	req, metadata = applyUploadMultipartField(req, metadata, "metadata[ source ]", " upload ")
+	req, metadata = applyUploadMultipartField(req, metadata, "metadata[blank]", " ")
+	req, metadata = applyUploadMultipartField(req, metadata, "metadata[ ]", "ignored")
+
+	if req.ChannelID != "chan-1" {
+		t.Fatalf("channelId = %q, want %q", req.ChannelID, "chan-1")
+	}
+	if req.Title != "Clip title" {
+		t.Fatalf("title = %q, want %q", req.Title, "Clip title")
+	}
+	if req.Filename != "clip.mp4" {
+		t.Fatalf("filename = %q, want %q", req.Filename, "clip.mp4")
+	}
+	if req.PlaybackURL != "https://vod.example.com/clip.m3u8" {
+		t.Fatalf("playbackUrl = %q", req.PlaybackURL)
+	}
+	if req.SizeBytes != 42 {
+		t.Fatalf("sizeBytes = %d, want %d", req.SizeBytes, 42)
+	}
+	if got := metadata["source"]; got != "upload" {
+		t.Fatalf("metadata source = %q, want %q", got, "upload")
+	}
+	if _, ok := metadata["blank"]; ok {
+		t.Fatal("blank metadata value should be ignored")
+	}
+	if _, ok := metadata[""]; ok {
+		t.Fatal("blank metadata key should be ignored")
+	}
+
+	req, _ = applyUploadMultipartField(req, metadata, "sizeBytes", "not-a-number")
+	if req.SizeBytes != 42 {
+		t.Fatalf("invalid size should preserve existing value, got %d", req.SizeBytes)
+	}
+}
+
+func TestApplyUploadMediaDefaults(t *testing.T) {
+	media := &uploadedMedia{originalName: "community-recap.mp4", size: 128}
+
+	got := applyUploadMediaDefaults(createUploadRequest{}, media)
+	if got.Filename != "community-recap.mp4" {
+		t.Fatalf("filename = %q, want %q", got.Filename, "community-recap.mp4")
+	}
+	if got.Title != "community-recap" {
+		t.Fatalf("title = %q, want %q", got.Title, "community-recap")
+	}
+	if got.SizeBytes != 128 {
+		t.Fatalf("sizeBytes = %d, want %d", got.SizeBytes, 128)
+	}
+
+	existing := createUploadRequest{Title: "Provided title", Filename: "provided.mov", SizeBytes: 12}
+	got = applyUploadMediaDefaults(existing, media)
+	if got.Title != "Provided title" || got.Filename != "provided.mov" {
+		t.Fatalf("explicit title/filename should be preserved, got title=%q filename=%q", got.Title, got.Filename)
+	}
+	if got.SizeBytes != 128 {
+		t.Fatalf("media size should override form size, got %d", got.SizeBytes)
+	}
+}
+
 func TestCreateUploadFromMultipartUnderLimitSuccess(t *testing.T) {
 	h, store := newTestHandler(t)
 	h.UploadMediaDir = t.TempDir()

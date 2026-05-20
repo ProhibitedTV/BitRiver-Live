@@ -158,8 +158,11 @@ Evidence collected on 2026-03-21:
     - Completed on 2026-05-20 by moving Postgres legal create/list/get/update/audit/history queries onto `withConn`, so they now share repository acquire timeout and connection-release behavior.
     - Focused trim/status and scan helpers reduce repeated normalization while keeping public legal APIs unchanged.
 
-- [ ] Task 7 — Extract pure upload helpers from backend/frontend upload flows
+- [x] Task 7 — Extract pure upload helpers from backend/frontend upload flows
   - Tracking issue: [#1246](https://github.com/ProhibitedTV/BitRiver-Live/issues/1246)
   - Acceptance criteria:
     - `internal/api/uploads_handlers.go` and `web/viewer/components/UploadManager.tsx` each shed at least one pure helper/state-mapping slice.
     - New focused tests lock in current upload behavior before broader refactors.
+  - Notes:
+    - Completed on 2026-05-20 by extracting backend multipart field/default mapping helpers and viewer upload metadata/payload builders.
+    - Focused Go and Jest tests now cover the extracted behavior while preserving current upload request semantics.

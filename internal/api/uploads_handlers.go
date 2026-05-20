@@ -85,6 +85,57 @@ type createUploadRequest struct {
 	Metadata    map[string]string `json:"metadata"`
 }
 
+func applyUploadMultipartField(req createUploadRequest, metadata map[string]string, name, rawValue string) (createUploadRequest, map[string]string) {
+	value := strings.TrimSpace(rawValue)
+	switch name {
+	case "channelId":
+		req.ChannelID = value
+	case "title":
+		req.Title = value
+	case "filename":
+		req.Filename = value
+	case "playbackUrl":
+		req.PlaybackURL = value
+	case "sizeBytes":
+		if value != "" {
+			if size, parseErr := strconv.ParseInt(value, 10, 64); parseErr == nil {
+				req.SizeBytes = size
+			}
+		}
+	default:
+		if strings.HasPrefix(name, "metadata[") && strings.HasSuffix(name, "]") {
+			key := strings.TrimSpace(name[len("metadata[") : len(name)-1])
+			if key != "" && value != "" {
+				if metadata == nil {
+					metadata = make(map[string]string)
+				}
+				metadata[key] = value
+			}
+		}
+	}
+	return req, metadata
+}
+
+func applyUploadMediaDefaults(req createUploadRequest, media *uploadedMedia) createUploadRequest {
+	if media == nil {
+		return req
+	}
+	if strings.TrimSpace(req.Filename) == "" {
+		req.Filename = media.originalName
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		name := media.originalName
+		if ext := filepath.Ext(name); ext != "" {
+			name = strings.TrimSuffix(name, ext)
+		}
+		req.Title = name
+	}
+	if media.size > 0 {
+		req.SizeBytes = media.size
+	}
+	return req
+}
+
 // newUploadResponse builds and returns upload response using the supplied dependencies.
 func newUploadResponse(upload domain.Upload) uploadResponse {
 	resp := uploadResponse{
@@ -318,49 +369,12 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 			WriteError(w, http.StatusBadRequest, fmt.Errorf("read form field: %w", readErr))
 			return
 		}
-		value := strings.TrimSpace(string(payload))
-		switch name {
-		case "channelId":
-			req.ChannelID = value
-		case "title":
-			req.Title = value
-		case "filename":
-			req.Filename = value
-		case "playbackUrl":
-			req.PlaybackURL = value
-		case "sizeBytes":
-			if value != "" {
-				if size, parseErr := strconv.ParseInt(value, 10, 64); parseErr == nil {
-					req.SizeBytes = size
-				}
-			}
-		default:
-			if strings.HasPrefix(name, "metadata[") && strings.HasSuffix(name, "]") {
-				key := strings.TrimSpace(name[len("metadata[") : len(name)-1])
-				if key != "" && value != "" {
-					metadata[key] = value
-				}
-			}
-		}
+		req, metadata = applyUploadMultipartField(req, metadata, name, string(payload))
 	}
 	if len(metadata) > 0 {
 		req.Metadata = metadata
 	}
-	if media != nil {
-		if strings.TrimSpace(req.Filename) == "" {
-			req.Filename = media.originalName
-		}
-		if strings.TrimSpace(req.Title) == "" {
-			name := media.originalName
-			if ext := filepath.Ext(name); ext != "" {
-				name = strings.TrimSuffix(name, ext)
-			}
-			req.Title = name
-		}
-		if media.size > 0 {
-			req.SizeBytes = media.size
-		}
-	}
+	req = applyUploadMediaDefaults(req, media)
 	upload, status, err := h.createUploadEntry(r, actor, req, media, strings.TrimSpace(r.Header.Get("Idempotency-Key")))
 	if err != nil {
 		WriteError(w, status, err)

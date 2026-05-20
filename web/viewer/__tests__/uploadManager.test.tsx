@@ -11,7 +11,7 @@ import {
   viewerUser,
 } from "../test/test-utils";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { UploadManager } from "../components/UploadManager";
+import { UploadManager, buildUploadMetadata, buildUploadPayload } from "../components/UploadManager";
 
 jest.mock("../hooks/useAuth");
 
@@ -22,6 +22,46 @@ const publishRecordingMock = viewerApiMocks.publishRecording;
 beforeEach(() => {
   jest.clearAllMocks();
   resetRouterMocks();
+});
+
+test("buildUploadMetadata trims keys and values while preserving blank values", () => {
+  expect(
+    buildUploadMetadata([
+      { id: "meta-1", key: " source ", value: " upload " },
+      { id: "meta-2", key: "blankValue", value: " " },
+      { id: "meta-3", key: " ", value: "ignored" },
+    ]),
+  ).toEqual({ source: "upload", blankValue: "" });
+});
+
+test("buildUploadPayload preserves upload form parsing behavior", () => {
+  expect(
+    buildUploadPayload(
+      "chan-1",
+      { title: "Recap", filename: "recap.mp4", playbackUrl: "https://vod.example.com/recap.m3u8", sizeBytes: "42" },
+      [{ id: "meta-1", key: "source", value: "upload" }],
+    ),
+  ).toEqual({
+    channelId: "chan-1",
+    title: "Recap",
+    filename: "recap.mp4",
+    playbackUrl: "https://vod.example.com/recap.m3u8",
+    sizeBytes: 42,
+    metadata: { source: "upload" },
+  });
+
+  expect(
+    buildUploadPayload("chan-1", { title: "", filename: "", playbackUrl: "", sizeBytes: "" }, [{ id: "meta-1", key: " ", value: "ignored" }]),
+  ).toEqual({
+    channelId: "chan-1",
+    title: "",
+    filename: "",
+    playbackUrl: "",
+    sizeBytes: 0,
+    metadata: undefined,
+  });
+
+  expect(buildUploadPayload("chan-1", { title: "", filename: "", playbackUrl: "", sizeBytes: "not-a-number" }, []).sizeBytes).toBeUndefined();
 });
 
 test("loads uploads when the viewer owns the channel", async () => {

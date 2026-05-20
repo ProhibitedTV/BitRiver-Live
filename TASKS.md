@@ -1,65 +1,62 @@
-## Scoped change: issue #1245 legal Postgres timeout helpers
+## Scoped change: issue #1246 upload helper extraction
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the legal Postgres helper plan
+- [x] Task 1 - Record the upload helper plan
   - Acceptance criteria:
-    - `PLAN.md` captures issue #1245 scope, assumptions, risks, and validation commands.
+    - `PLAN.md` captures issue #1246 scope, assumptions, risks, and validation commands.
     - `TASKS.md` lists ordered implementation and validation tasks before source edits continue.
-    - The read-only pass identifies direct `context.Background()` legal DB calls, existing `withConn`/`acquireContext` patterns, and cleanup-plan task 6.
+    - The read-only pass identifies backend multipart parsing/default logic, viewer payload/state mapping, existing upload tests, and cleanup-plan task 7.
 
-- [x] Task 2 - Route legal queries through repository timeout helpers
+- [x] Task 2 - Extract backend upload parsing helpers
   - Acceptance criteria:
-    - Postgres legal methods stop using bare `context.Background()` for repository DB operations.
-    - Read/list/update/audit/history paths use `withConn` or `acquireContext` consistently with surrounding storage code.
-    - Nil/unavailable repository behavior remains consistent with existing Postgres methods.
+    - `internal/api/uploads_handlers.go` sheds at least one pure parsing/state-mapping helper.
+    - Multipart field parsing and file-derived defaults preserve current trimming, metadata, title, filename, and size behavior.
+    - Focused Go tests cover the extracted helper behavior.
 
-- [x] Task 3 - Extract focused legal normalization helpers
+- [x] Task 3 - Extract viewer upload payload helpers
   - Acceptance criteria:
-    - Repeated trim/status normalization in `postgres_legal.go` is reduced where it clarifies behavior.
-    - Existing stored values, status casing, and not-found handling remain unchanged.
+    - `web/viewer/components/UploadManager.tsx` sheds at least one pure payload/state-mapping helper.
+    - Metadata and size parsing keep the same `undefined` and trimming behavior.
+    - Focused Jest tests cover the extracted helper behavior.
 
 - [x] Task 4 - Update cleanup tracking
   - Acceptance criteria:
-    - `docs/cleanup-plan.md` task 6 is marked complete after targeted storage validation passes.
-    - Notes mention repository timeout helper usage for Postgres legal flows.
+    - `docs/cleanup-plan.md` task 7 is marked complete after targeted API/viewer tests pass.
+    - Notes mention backend and frontend helper extraction.
 
 - [ ] Task 5 - Validate and publish
   - Acceptance criteria:
-    - Storage tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
+    - Targeted API/viewer tests, full Go tests, diff hygiene, and the viewer-inclusive repo verification gate pass or blockers are recorded.
     - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
 
-### Execution log (issue #1245 legal Postgres timeout helpers)
-- Task 1 complete: after merging PR #1251 and syncing `main` to `f84717b`, selected issue #1245, created branch `codex/issue-1245-legal-postgres-timeouts`, fetched the issue, read nested storage agent notes, and audited `internal/storage/postgres_legal.go`, existing repository timeout helpers, legal storage behavior, and `docs/cleanup-plan.md` before source edits.
+### Execution log (issue #1246 upload helper extraction)
+- Task 1 complete: after merging PR #1252 and syncing `main` to `e457f91`, selected issue #1246, created branch `codex/issue-1246-extract-upload-helpers`, fetched the issue, read nested API/viewer agent notes, and audited `internal/api/uploads_handlers.go`, `web/viewer/components/UploadManager.tsx`, existing upload tests, viewer test config, and `docs/cleanup-plan.md` before source edits.
 - Task 1 checks:
-  - GitHub connector: fetched issue #1245.
+  - GitHub connector: fetched issue #1246.
   - `git checkout main`
   - `git pull --ff-only origin main`
-  - `git checkout -b codex/issue-1245-legal-postgres-timeouts`
-  - `rg --files -g AGENTS.md`
-  - `Get-Content internal/storage/AGENTS.md`
-  - `Get-Content internal/storage/postgres_legal.go`
-  - `Get-Content internal/storage/postgres_repository.go`
-  - `Get-Content internal/storage/legal.go`
-  - `rg -n "DMCACase|DataSubject|LegalState|legal" internal/storage -g "*_test.go"`
-  - `rg -n "context\\.Background\\(\\)|pool\\.(Query|Exec|QueryRow)|withConn\\(|acquireContext\\(" internal/storage --glob "postgres_*.go"`
-- Task 2 complete: Postgres legal list/get/update/create/audit/history methods now run database work through `withConn`, sharing the repository acquire timeout and connection lifecycle instead of using bare background contexts.
+  - `git checkout -b codex/issue-1246-extract-upload-helpers`
+  - `Get-Content internal/api/AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content internal/api/uploads_handlers.go`
+  - `Get-Content web/viewer/components/UploadManager.tsx`
+  - `rg -n "Upload|upload|UploadManager|createUpload|metadata|deriveTitle|formatFileSize" internal/api web/viewer -g "*_test.go" -g "*.test.ts" -g "*.test.tsx"`
+  - `Get-Content internal/api/uploads_handlers_test.go`
+  - `Get-Content web/viewer/__tests__/uploadManager.test.tsx`
+- Task 2 complete: extracted backend multipart field parsing and file-derived default mapping into focused helpers, then switched `createUploadFromMultipart` to use them.
 - Task 2 checks:
-  - `gofmt -w internal/storage/postgres_legal.go`
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -count=1 -timeout=120s` - passed.
-  - `rg -n "context\\.Background\\(\\)|r\\.pool\\.(Query|Exec|QueryRow)" internal/storage/postgres_legal.go` - passed; no matches.
-- Task 3 complete: added focused legal trim/status and scan helpers, then reused them across DMCA and data-subject paths while preserving existing status casing and not-found behavior.
+  - `gofmt -w internal/api/uploads_handlers.go internal/api/uploads_handlers_test.go`
+  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/api -count=1 -timeout=120s` - passed.
+- Task 3 complete: extracted viewer metadata and upload-payload construction helpers from the React submit callback, then added focused Jest coverage for trim, blank metadata value, empty metadata, and size parsing behavior.
 - Task 3 checks:
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -count=1 -timeout=120s` - passed.
-- Task 4 complete: marked `docs/cleanup-plan.md` task 6 complete with notes for Postgres legal `withConn` usage and focused normalization helpers.
+  - `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx` - passed.
+- Task 4 complete: marked `docs/cleanup-plan.md` task 7 complete with notes for backend multipart helpers and viewer payload builders.
 - Task 4 checks:
-  - `rg -n "Task 6|withConn|context\\.Background\\(\\)|r\\.pool\\.(Query|Exec|QueryRow)|trimLegalText|normalizeLegalStatus" docs/cleanup-plan.md internal/storage/postgres_legal.go TASKS.md PLAN.md` - passed; source hits show helper usage and no bare background/direct pool calls in `postgres_legal.go`.
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -count=1 -timeout=120s` - passed.
+  - `rg -n "Task 7|applyUploadMultipartField|applyUploadMediaDefaults|buildUploadMetadata|buildUploadPayload" docs/cleanup-plan.md internal/api web/viewer TASKS.md PLAN.md` - passed.
+  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/api -count=1 -timeout=120s` - passed.
+  - `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx` - passed.
 - Task 5 validation progress:
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed with line-ending warnings only.
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification; viewer checks were skipped because no viewer files changed.
-  - `git add PLAN.md TASKS.md docs/cleanup-plan.md internal/storage/postgres_legal.go`
-  - `git commit -m "storage: use timeout helpers for legal postgres"`
-  - `git push -u origin codex/issue-1245-legal-postgres-timeouts`
-  - GitHub connector: opened draft PR #1252.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed full repo verification with viewer lint/test included.
