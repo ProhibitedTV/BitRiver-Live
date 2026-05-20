@@ -1538,6 +1538,22 @@ func TestRateLimitMiddlewareGlobalLimit(t *testing.T) {
 	}
 }
 
+type rateLimiterTestClock struct {
+	now time.Time
+}
+
+func newRateLimiterTestClock() *rateLimiterTestClock {
+	return &rateLimiterTestClock{now: time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)}
+}
+
+func (c *rateLimiterTestClock) Now() time.Time {
+	return c.now
+}
+
+func (c *rateLimiterTestClock) Advance(d time.Duration) {
+	c.now = c.now.Add(d)
+}
+
 func TestRateLimiterAllowLoginBehaviorUnchanged(t *testing.T) {
 	t.Parallel()
 
@@ -1572,10 +1588,12 @@ func TestRateLimiterAllowLoginBehaviorUnchanged(t *testing.T) {
 func TestRateLimiterCleanupStaleBucketsEventually(t *testing.T) {
 	t.Parallel()
 
+	clock := newRateLimiterTestClock()
 	rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 5, LoginWindow: 2 * time.Second})
 	if err != nil {
 		t.Fatalf("newRateLimiter error: %v", err)
 	}
+	rl.now = clock.Now
 
 	if _, _, err := rl.AllowLogin(context.Background(), "active"); err != nil {
 		t.Fatalf("seed AllowLogin error: %v", err)
@@ -1584,7 +1602,7 @@ func TestRateLimiterCleanupStaleBucketsEventually(t *testing.T) {
 	rl.loginMu.Lock()
 	rl.loginBuckets["stale"] = &ipLimiter{
 		bucket:   newTokenBucket(1, rl.loginLimit),
-		lastSeen: time.Now().Add(-5 * time.Second),
+		lastSeen: clock.Now().Add(-5 * time.Second),
 	}
 	rl.loginMu.Unlock()
 
@@ -1598,7 +1616,7 @@ func TestRateLimiterCleanupStaleBucketsEventually(t *testing.T) {
 		t.Fatal("expected stale bucket to remain before cleanup interval elapses")
 	}
 
-	time.Sleep(1100 * time.Millisecond)
+	clock.Advance(time.Second)
 
 	if _, _, err := rl.AllowLogin(context.Background(), "active"); err != nil {
 		t.Fatalf("third AllowLogin error: %v", err)
