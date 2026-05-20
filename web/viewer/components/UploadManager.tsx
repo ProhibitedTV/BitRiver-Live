@@ -12,20 +12,22 @@ import { EmptyState } from "./ui/EmptyState";
 import { InlineAlert } from "./ui/InlineAlert";
 
 type UploadManagerProps = { channelId: string; ownerId: string };
-type MetadataEntry = { id: string; key: string; value: string };
+export type MetadataEntry = { id: string; key: string; value: string };
+export type UploadFormValues = { title: string; filename: string; playbackUrl: string; sizeBytes: string };
 type UploadPhase = "selecting" | "uploading" | "processing" | "ready" | "failed";
 type UploadListFilter = "all" | "active" | "ready" | "failed";
 type UploadProgressState = { percent: number; loadedBytes: number; totalBytes: number };
 type UploadStatusPresentation = { label: string; summary: string; tone: "neutral" | "info" | "success" | "danger" };
+export type UploadPayload = {
+  channelId: string;
+  title: string;
+  filename: string;
+  playbackUrl: string;
+  sizeBytes: number | undefined;
+  metadata: Record<string, string> | undefined;
+};
 type PendingUploadSnapshot = {
-  payload: {
-    channelId: string;
-    title: string;
-    filename: string;
-    playbackUrl: string;
-    sizeBytes: number | undefined;
-    metadata: Record<string, string> | undefined;
-  };
+  payload: UploadPayload;
   file: File | null;
 };
 
@@ -41,7 +43,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const [error, setError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
-  const [formValues, setFormValues] = useState({ title: "", filename: "", playbackUrl: "", sizeBytes: "" });
+  const [formValues, setFormValues] = useState<UploadFormValues>({ title: "", filename: "", playbackUrl: "", sizeBytes: "" });
   const [metadataEntries, setMetadataEntries] = useState<MetadataEntry[]>([{ id: "meta-0", key: "source", value: "upload" }]);
   const metadataIdRef = useRef(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -218,25 +220,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const submitUpload = useCallback(
     async (snapshot?: PendingUploadSnapshot) => {
       if (!canManage) return;
-      const metadata = snapshot
-        ? snapshot.payload.metadata
-        : metadataEntries.reduce<Record<string, string>>((acc, entry) => {
-            const key = entry.key.trim();
-            if (!key) return acc;
-            acc[key] = entry.value.trim();
-            return acc;
-          }, {});
-      const parsedSize = snapshot ? snapshot.payload.sizeBytes : Number.parseInt(formValues.sizeBytes || "0", 10);
-      const payload = snapshot
-        ? snapshot.payload
-        : {
-            channelId,
-            title: formValues.title,
-            filename: formValues.filename,
-            playbackUrl: formValues.playbackUrl,
-            sizeBytes: Number.isNaN(parsedSize) ? undefined : parsedSize,
-            metadata: metadata && Object.keys(metadata).length > 0 ? metadata : undefined,
-          };
+      const payload = snapshot ? snapshot.payload : buildUploadPayload(channelId, formValues, metadataEntries);
       const file = snapshot ? snapshot.file : selectedFile;
       if (!file && !payload.playbackUrl) {
         setFormError("Select a media file or provide a playback URL");
@@ -570,6 +554,28 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
       </CardBody>
     </Card>
   );
+}
+
+export function buildUploadMetadata(metadataEntries: MetadataEntry[]): Record<string, string> | undefined {
+  const metadata = metadataEntries.reduce<Record<string, string>>((acc, entry) => {
+    const key = entry.key.trim();
+    if (!key) return acc;
+    acc[key] = entry.value.trim();
+    return acc;
+  }, {});
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+export function buildUploadPayload(channelId: string, formValues: UploadFormValues, metadataEntries: MetadataEntry[]): UploadPayload {
+  const parsedSize = Number.parseInt(formValues.sizeBytes || "0", 10);
+  return {
+    channelId,
+    title: formValues.title,
+    filename: formValues.filename,
+    playbackUrl: formValues.playbackUrl,
+    sizeBytes: Number.isNaN(parsedSize) ? undefined : parsedSize,
+    metadata: buildUploadMetadata(metadataEntries),
+  };
 }
 
 function normalizeUploadStatus(status: string) {

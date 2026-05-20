@@ -1,22 +1,23 @@
 ## Scope (current change)
-- Address GitHub issue #1245 by routing Postgres-backed legal repository methods through the repository acquire/timeout helpers.
-- Keep legal repository public APIs and observable behavior unchanged.
-- Extract small normalization helpers only where they reduce repeated trim/status handling without widening the change.
-- Update cleanup tracking after targeted storage validation passes.
+- Address GitHub issue #1246 by extracting small pure upload helpers from the backend upload handler and viewer upload manager.
+- Keep upload request/response behavior, visible UI text, and upload state transitions unchanged.
+- Add focused helper tests near existing upload coverage so the refactor is locked before broader cleanup.
+- Update cleanup tracking after targeted API and viewer tests pass.
 
 ## Assumptions
-- Repository methods remain non-contextual today, so `withConn` and `acquireContext` are the available cancellation/timeout boundary.
-- Best-effort legal state-history inserts should remain best-effort unless the existing method already treats history persistence as part of the main operation.
-- `Get*` methods should continue returning `(zero, false)` on query/acquire failures because the public contract does not expose an error.
-- There are no focused storage legal tests today, so package-level storage tests plus static scans are the main validation path.
+- The backend multipart upload flow should keep accepting the same fields, metadata naming, size parsing behavior, and file-derived defaults.
+- The viewer upload manager should keep building the same payloads from form values and metadata rows.
+- Helper exports from `UploadManager.tsx` are acceptable for focused unit tests if they remain small and UI-independent.
+- This change should not alter deployment contract files or upload storage behavior.
 
 ## Risks
-- Moving multiple statements onto one acquired connection can change pool pressure slightly, especially around best-effort history inserts.
-- Adding helper wrappers around bool-returning getters must not accidentally convert infrastructure errors into user-visible errors.
-- Legal status and ID normalization should remain byte-for-byte equivalent where possible to avoid changing stored values.
+- Moving multipart field/default logic can subtly change trimming, ignored malformed sizes, or metadata filtering.
+- Viewer payload helper extraction can change `undefined` versus empty-object metadata semantics, which API callers may observe.
+- Touching viewer code means both focused Jest coverage and the normal repo verification gate should run.
 
 ## Test plan
-- `go test ./internal/storage -count=1 -timeout=120s`
+- `go test ./internal/api -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx`
 - `go test ./... -count=1 -timeout=120s`
 - `git diff --check`
-- `./scripts/verify.sh`
+- `./scripts/verify.sh --viewer`
