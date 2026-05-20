@@ -131,11 +131,14 @@ Evidence collected on 2026-03-21:
     - Completed on 2026-05-20 by using a Windows `ffmpeg.exe` stub path where extension resolution matters and by replacing sleep-driven health exits with test-controlled process completion.
     - `TestUploadPublishesHTTPPlayback` now completes the stubbed upload transcode deterministically while still generating HLS fixtures through the shared FFmpeg argument parser.
 
-- [ ] Task 4 — Replace sleep-driven auth/server timing tests with deterministic clock control
+- [x] Task 4 — Replace sleep-driven auth/server timing tests with deterministic clock control
   - Tracking issue: [#1243](https://github.com/ProhibitedTV/BitRiver-Live/issues/1243)
   - Acceptance criteria:
     - `internal/auth/session_test.go` and the stale-bucket rate-limiter test no longer use wall-clock sleeps.
     - Runtime behavior remains unchanged.
+  - Notes:
+    - Completed on 2026-05-20 after verifying the auth session timing tests already use a deterministic test clock.
+    - The in-memory rate limiter now has a private clock hook for deterministic tests while defaulting to wall-clock time in runtime code.
 
 - [ ] Task 5 — Make ingest/Postgres helpers cancellation-aware and reduce duplicated timeout plumbing
   - Tracking issue: [#1244](https://github.com/ProhibitedTV/BitRiver-Live/issues/1244)

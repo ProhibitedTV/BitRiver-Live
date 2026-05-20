@@ -34,6 +34,7 @@ type rateLimiter struct {
 	loginMu          sync.Mutex
 	loginBuckets     map[string]*ipLimiter
 	store            tokenStore
+	now              func() time.Time
 }
 
 type ipLimiter struct {
@@ -55,6 +56,7 @@ func newRateLimiter(cfg RateLimitConfig) (*rateLimiter, error) {
 		loginLimit:   cfg.LoginLimit,
 		loginWindow:  cfg.LoginWindow,
 		loginBuckets: make(map[string]*ipLimiter),
+		now:          time.Now,
 	}
 	if cfg.GlobalRPS > 0 {
 		burst := cfg.GlobalBurst
@@ -113,7 +115,7 @@ func (r *rateLimiter) AllowLogin(ctx context.Context, key string) (bool, time.Du
 		key = "unknown"
 	}
 	r.loginMu.Lock()
-	now := time.Now()
+	now := r.currentTime()
 	bucket, exists := r.loginBuckets[key]
 	if !exists {
 		rate := float64(r.loginLimit) / r.loginWindow.Seconds()
@@ -129,7 +131,7 @@ func (r *rateLimiter) AllowLogin(ctx context.Context, key string) (bool, time.Du
 		cleanupInterval = time.Second
 	}
 	if r.lastLoginCleanup.IsZero() || now.Sub(r.lastLoginCleanup) >= cleanupInterval {
-		r.cleanupLocked()
+		r.cleanupLocked(now)
 		r.lastLoginCleanup = now
 	}
 	r.loginMu.Unlock()
@@ -140,12 +142,19 @@ func (r *rateLimiter) AllowLogin(ctx context.Context, key string) (bool, time.Du
 	return false, time.Second, nil
 }
 
+func (r *rateLimiter) currentTime() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
+}
+
 // cleanupLocked removes stale in-memory login buckets.
-func (r *rateLimiter) cleanupLocked() {
+func (r *rateLimiter) cleanupLocked(now time.Time) {
 	if len(r.loginBuckets) == 0 {
 		return
 	}
-	cutoff := time.Now().Add(-2 * r.loginWindow)
+	cutoff := now.Add(-2 * r.loginWindow)
 	for key, bucket := range r.loginBuckets {
 		if bucket.lastSeen.Before(cutoff) {
 			delete(r.loginBuckets, key)
