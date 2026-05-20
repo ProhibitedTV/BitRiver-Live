@@ -122,11 +122,14 @@ Evidence collected on 2026-03-21:
   - Notes:
     - Verified on 2026-05-20 that `scripts/quickstart_test.go` already discovers `BITRIVER_TEST_BASH`, Git Bash install paths, and `exec.LookPath("bash")`, then skips with a precise reason only when no usable Bash is available.
 
-- [ ] Task 3 — Stabilize `cmd/transcoder` test fixtures and health recovery polling
+- [x] Task 3 — Stabilize `cmd/transcoder` test fixtures and health recovery polling
   - Tracking issue: [#1242](https://github.com/ProhibitedTV/BitRiver-Live/issues/1242)
   - Acceptance criteria:
     - The FFmpeg stub setup works cross-platform.
     - Health recovery tests stop depending on narrow wall-clock windows.
+  - Notes:
+    - Completed on 2026-05-20 by using a Windows `ffmpeg.exe` stub path where extension resolution matters and by replacing sleep-driven health exits with test-controlled process completion.
+    - `TestUploadPublishesHTTPPlayback` now completes the stubbed upload transcode deterministically while still generating HLS fixtures through the shared FFmpeg argument parser.
 
 - [ ] Task 4 — Replace sleep-driven auth/server timing tests with deterministic clock control
   - Tracking issue: [#1243](https://github.com/ProhibitedTV/BitRiver-Live/issues/1243)

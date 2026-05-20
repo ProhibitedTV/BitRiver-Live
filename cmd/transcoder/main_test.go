@@ -17,7 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,15 +29,14 @@ const testToken = "test-token"
 func useStubFFmpeg(t *testing.T) string {
 	t.Helper()
 	shimDir := t.TempDir()
-	shimName := "ffmpeg"
-	shimContents := "#!/usr/bin/env sh\nBITRIVER_FFMPEG_HELPER=1 exec \"$BITRIVER_FFMPEG_HELPER_EXE\" -test.run=TestFFmpegHelperProcess -- \"$@\"\n"
+	shimPath := filepath.Join(shimDir, "ffmpeg")
 	if runtime.GOOS == "windows" {
-		shimName = "ffmpeg.cmd"
-		shimContents = "@echo off\r\nset BITRIVER_FFMPEG_HELPER=1\r\n\"%BITRIVER_FFMPEG_HELPER_EXE%\" -test.run=TestFFmpegHelperProcess -- %*\r\n"
-	}
-	shimPath := filepath.Join(shimDir, shimName)
-	if err := os.WriteFile(shimPath, []byte(shimContents), 0o755); err != nil {
-		t.Fatalf("write ffmpeg shim: %v", err)
+		shimPath = writeWindowsFFmpegStub(t, shimDir)
+	} else {
+		shimContents := "#!/usr/bin/env sh\nBITRIVER_FFMPEG_HELPER=1 exec \"$BITRIVER_FFMPEG_HELPER_EXE\" -test.run=TestFFmpegHelperProcess -- \"$@\"\n"
+		if err := os.WriteFile(shimPath, []byte(shimContents), 0o755); err != nil {
+			t.Fatalf("write ffmpeg shim: %v", err)
+		}
 	}
 	t.Setenv("BITRIVER_FFMPEG_HELPER_EXE", os.Args[0])
 	pathList := []string{shimDir}
@@ -49,16 +48,18 @@ func useStubFFmpeg(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("ffmpeg stub not on PATH: %v", err)
 	}
-	resolvedInfo, err := os.Stat(resolved)
-	if err != nil {
-		t.Fatalf("stat resolved ffmpeg shim: %v", err)
-	}
-	shimInfo, err := os.Stat(shimPath)
-	if err != nil {
-		t.Fatalf("stat expected ffmpeg shim: %v", err)
-	}
-	if !os.SameFile(resolvedInfo, shimInfo) {
-		t.Fatalf("unexpected ffmpeg path: %s", resolved)
+	if !sameExecutablePath(resolved, shimPath) {
+		resolvedInfo, err := os.Stat(resolved)
+		if err != nil {
+			t.Fatalf("stat resolved ffmpeg shim: %v", err)
+		}
+		shimInfo, err := os.Stat(shimPath)
+		if err != nil {
+			t.Fatalf("stat expected ffmpeg shim: %v", err)
+		}
+		if !os.SameFile(resolvedInfo, shimInfo) {
+			t.Fatalf("unexpected ffmpeg path: %s", resolved)
+		}
 	}
 	return shimPath
 }
@@ -278,20 +279,11 @@ func runningProcessCount(s *server) int {
 	return len(s.processes)
 }
 
-func writeWindowsFFmpegStub(t *testing.T) string {
+func writeWindowsFFmpegStub(t *testing.T, stubDir string) string {
 	t.Helper()
-	stubDir, err := os.MkdirTemp("", "bitriver-ffmpeg-stub-*")
-	if err != nil {
+	if err := os.MkdirAll(stubDir, 0o755); err != nil {
 		t.Fatalf("create ffmpeg stub temp dir: %v", err)
 	}
-	t.Cleanup(func() {
-		for attempt := 0; attempt < 5; attempt++ {
-			if removeErr := os.RemoveAll(stubDir); removeErr == nil || errors.Is(removeErr, os.ErrNotExist) {
-				return
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
-	})
 	stubSourcePath := filepath.Join(stubDir, "main.go")
 	stubBinaryPath := filepath.Join(stubDir, "ffmpeg.exe")
 	shimSource := `package main
@@ -508,38 +500,88 @@ type healthResponse struct {
 	Running    int                       `json:"runningJobs"`
 }
 
-func startStubTranscoder(t *testing.T, tempDir string, exitErr *atomic.Pointer[error]) (*server, *httptest.Server) {
+type controlledTranscoderLauncher struct {
+	started    chan *controlledTranscoderProcess
+	beforeExit func(*transcodePlan) error
+}
+
+type controlledTranscoderProcess struct {
+	id         string
+	plan       *transcodePlan
+	done       chan struct{}
+	onExit     func(error)
+	beforeExit func(*transcodePlan) error
+	once       sync.Once
+}
+
+func newControlledTranscoderLauncher(beforeExit func(*transcodePlan) error) *controlledTranscoderLauncher {
+	return &controlledTranscoderLauncher{
+		started:    make(chan *controlledTranscoderProcess, 8),
+		beforeExit: beforeExit,
+	}
+}
+
+func (l *controlledTranscoderLauncher) install(srv *server) {
+	srv.launchProcess = func(id string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		proc := &controlledTranscoderProcess{
+			id:         id,
+			plan:       plan,
+			done:       make(chan struct{}),
+			onExit:     onExit,
+			beforeExit: l.beforeExit,
+		}
+		l.started <- proc
+		return &processState{cancel: proc.cancel, done: proc.done}, nil
+	}
+}
+
+func (l *controlledTranscoderLauncher) next(t *testing.T, reason string) *controlledTranscoderProcess {
+	t.Helper()
+	select {
+	case proc := <-l.started:
+		return proc
+	case <-time.After(5 * time.Second):
+		t.Fatalf("expected controlled transcoder process to start: %s", reason)
+		return nil
+	}
+}
+
+func (p *controlledTranscoderProcess) complete(t *testing.T, exitErr error) {
+	t.Helper()
+	var beforeExitErr error
+	p.once.Do(func() {
+		if exitErr == nil && p.beforeExit != nil {
+			beforeExitErr = p.beforeExit(p.plan)
+			exitErr = beforeExitErr
+		}
+		if p.onExit != nil {
+			p.onExit(exitErr)
+		}
+		close(p.done)
+	})
+	if beforeExitErr != nil {
+		t.Fatalf("complete controlled transcode %s: %v", p.id, beforeExitErr)
+	}
+}
+
+func (p *controlledTranscoderProcess) cancel() {
+	p.once.Do(func() {
+		close(p.done)
+	})
+}
+
+func startStubTranscoder(t *testing.T, tempDir string) (*server, *httptest.Server, *controlledTranscoderLauncher) {
 	t.Helper()
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-	srv.launchProcess = func(id string, plan *transcodePlan, onExit func(error)) (*processState, error) {
-		done := make(chan struct{})
-		var once atomic.Bool
-		cancel := func() {
-			if once.CompareAndSwap(false, true) {
-				close(done)
-			}
-		}
-		go func() {
-			time.Sleep(10 * time.Millisecond)
-			if onExit != nil {
-				e := exitErr.Load()
-				if e != nil {
-					onExit(*e)
-				} else {
-					onExit(nil)
-				}
-			}
-			cancel()
-		}()
-		return &processState{cancel: cancel, done: done}, nil
-	}
+	launcher := newControlledTranscoderLauncher(nil)
+	launcher.install(srv)
 	ts := httptest.NewServer(srv.routes())
 	t.Cleanup(ts.Close)
-	return srv, ts
+	return srv, ts, launcher
 }
 
 func TestAuthorizeValidToken(t *testing.T) {
@@ -890,7 +932,7 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping upload flow in short mode")
 	}
-	useStubFFmpeg(t)
+	t.Setenv("FFMPEG_STUB_DELAY", "0")
 
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "work")
@@ -908,6 +950,10 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
+	launcher := newControlledTranscoderLauncher(func(plan *transcodePlan) error {
+		return runFFmpegStub(plan.args)
+	})
+	launcher.install(srv)
 	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
 
@@ -969,9 +1015,11 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 		t.Fatalf("unexpected rendition manifest url: %s", responseRenditions[0].ManifestURL)
 	}
 
+	launcher.next(t, "upload publish job").complete(t, nil)
+
 	metadataPath := filepath.Join(workDir, "uploads", uploadResp.JobID, "metadata.json")
 	var persisted uploadJob
-	waitFor(t, 45*time.Second, "expected completed upload metadata", func() bool {
+	waitFor(t, 5*time.Second, "expected completed upload metadata", func() bool {
 		data, err := os.ReadFile(metadataPath)
 		if err != nil {
 			return false
@@ -986,7 +1034,7 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 		persisted = candidate
 		return true
 	})
-	waitFor(t, 30*time.Second, "expected upload process to stop", func() bool {
+	waitFor(t, 5*time.Second, "expected upload process to stop", func() bool {
 		srv.mu.RLock()
 		proc := srv.processes[uploadResp.JobID]
 		srv.mu.RUnlock()
@@ -1270,21 +1318,20 @@ func waitForStoppedJobMetadata(t *testing.T, path, reason string) job {
 
 func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
 	tempDir := t.TempDir()
-	var exitPtr atomic.Pointer[error]
 	initialErr := errors.New("ffmpeg crashed")
-	exitPtr.Store(&initialErr)
-	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+	srv, ts, launcher := startStubTranscoder(t, tempDir)
 	srv.publicBase = ""
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
+	launcher.next(t, "failed live health job").complete(t, initialErr)
 
 	waitFor(t, 2*time.Second, "expected degraded health status after ffmpeg failure", func() bool {
 		status, _ := fetchHealth(t, ts)
 		return status.Status == "degraded" && componentStatus(status, componentFFmpeg) == "error"
 	})
 
-	exitPtr.Store(nil)
 	submitJob(t, ts, "file:///tmp/input.mp4")
+	launcher.next(t, "recovered live health job").complete(t, nil)
 
 	waitFor(t, 2*time.Second, "expected healthy status after ffmpeg recovery", func() bool {
 		status, _ := fetchHealth(t, ts)
@@ -1297,8 +1344,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 		t.Skip("live publishing recovery health uses directory symlink mirrors")
 	}
 	tempDir := t.TempDir()
-	var exitPtr atomic.Pointer[error]
-	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+	srv, ts, launcher := startStubTranscoder(t, tempDir)
 
 	brokenRoot := filepath.Join(tempDir, "public-broken")
 	if err := os.WriteFile(brokenRoot, []byte(""), 0o644); err != nil {
@@ -1307,6 +1353,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 	srv.publicRoot = brokenRoot
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
+	launcher.next(t, "publish failure health job").complete(t, nil)
 
 	waitFor(t, 2*time.Second, "expected degraded health when publish root is broken", func() bool {
 		status, code := fetchHealth(t, ts)
@@ -1325,6 +1372,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 	srv.publicRoot = fixedRoot
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
+	launcher.next(t, "publish recovery health job").complete(t, nil)
 
 	waitFor(t, 2*time.Second, "expected healthy status after publish root repair", func() bool {
 		status, code := fetchHealth(t, ts)
@@ -1334,8 +1382,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 
 func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
 	tempDir := t.TempDir()
-	var exitPtr atomic.Pointer[error]
-	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+	srv, ts, launcher := startStubTranscoder(t, tempDir)
 
 	brokenRoot := filepath.Join(tempDir, "public-broken")
 	if err := os.WriteFile(brokenRoot, []byte(""), 0o644); err != nil {
@@ -1344,6 +1391,7 @@ func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
 	srv.publicRoot = brokenRoot
 
 	submitUpload(t, ts, "file:///tmp/input.mp4")
+	launcher.next(t, "upload publish failure health job").complete(t, nil)
 
 	waitFor(t, 2*time.Second, "expected degraded health when publish root is broken", func() bool {
 		status, code := fetchHealth(t, ts)
@@ -1362,6 +1410,7 @@ func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
 	srv.publicRoot = fixedRoot
 
 	submitUpload(t, ts, "file:///tmp/input.mp4")
+	launcher.next(t, "upload publish recovery health job").complete(t, nil)
 
 	waitFor(t, 2*time.Second, "expected healthy status after publish root repair", func() bool {
 		status, code := fetchHealth(t, ts)
