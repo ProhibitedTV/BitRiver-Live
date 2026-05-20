@@ -115,31 +115,37 @@ Evidence collected on 2026-03-21:
     - The full Go suite still fails in `cmd/transcoder` and `scripts`, which lines up with tasks 2 and 3 below.
 
 - [ ] Task 2 — Harden `scripts` quickstart tests against shell availability
+  - Tracking issue: [#1241](https://github.com/ProhibitedTV/BitRiver-Live/issues/1241)
   - Acceptance criteria:
     - `scripts/quickstart_test.go` no longer fails before exercising wrapper logic on Windows.
     - Any skip path is explicit and limited to genuinely unsupported hosts.
 
 - [ ] Task 3 — Stabilize `cmd/transcoder` test fixtures and health recovery polling
+  - Tracking issue: [#1242](https://github.com/ProhibitedTV/BitRiver-Live/issues/1242)
   - Acceptance criteria:
     - The FFmpeg stub setup works cross-platform.
     - Health recovery tests stop depending on narrow wall-clock windows.
 
 - [ ] Task 4 — Replace sleep-driven auth/server timing tests with deterministic clock control
+  - Tracking issue: [#1243](https://github.com/ProhibitedTV/BitRiver-Live/issues/1243)
   - Acceptance criteria:
     - `internal/auth/session_test.go` and the stale-bucket rate-limiter test no longer use wall-clock sleeps.
     - Runtime behavior remains unchanged.
 
 - [ ] Task 5 — Make ingest/Postgres helpers cancellation-aware and reduce duplicated timeout plumbing
+  - Tracking issue: [#1244](https://github.com/ProhibitedTV/BitRiver-Live/issues/1244)
   - Acceptance criteria:
     - `runIngestBootWithRetry` respects caller cancellation between attempts.
     - Shared timeout/context logic is reduced across Postgres-backed stores without changing public APIs.
 
 - [ ] Task 6 — Route Postgres legal flows through repository timeout helpers
+  - Tracking issue: [#1245](https://github.com/ProhibitedTV/BitRiver-Live/issues/1245)
   - Acceptance criteria:
     - Legal repository queries stop using bare `context.Background()` for DB operations.
     - Existing legal behavior stays unchanged under targeted storage tests.
 
 - [ ] Task 7 — Extract pure upload helpers from backend/frontend upload flows
+  - Tracking issue: [#1246](https://github.com/ProhibitedTV/BitRiver-Live/issues/1246)
   - Acceptance criteria:
     - `internal/api/uploads_handlers.go` and `web/viewer/components/UploadManager.tsx` each shed at least one pure helper/state-mapping slice.
     - New focused tests lock in current upload behavior before broader refactors.

@@ -44,6 +44,7 @@ Helpful references:
 - Quickstart: [`docs/quickstart.md`](docs/quickstart.md)
 - Architecture: [`docs/architecture.md`](docs/architecture.md)
 - Testing: [`docs/testing.md`](docs/testing.md)
+- Maintenance tracking: [`docs/maintenance.md`](docs/maintenance.md)
 - Deployment contract: [`docs/contract.md`](docs/contract.md)
 - Support expectations: [`SUPPORT.md`](SUPPORT.md)
 
@@ -54,7 +55,7 @@ Helpful references:
 - If you touch runtime code, keep handlers/services context-aware and preserve the existing dependency-injection boundaries.
 - Do not commit secrets, local `.env` files, generated temp files, or local release artifacts.
 
-For larger scoped work, maintainers use a lightweight `SPEC.md -> PLAN.md -> TASKS.md` flow to keep reasoning and execution visible. You do not need to use that for every typo fix, but it is encouraged for multi-file or higher-risk changes.
+For larger scoped work, maintainers use a lightweight `SPEC.md -> PLAN.md -> TASKS.md` flow to keep reasoning and execution visible. You do not need to use that for every typo fix, but it is encouraged for multi-file or higher-risk changes. See [`docs/maintenance.md`](docs/maintenance.md) for when to use root planning files versus GitHub issues.
 
 ## Validation
 
