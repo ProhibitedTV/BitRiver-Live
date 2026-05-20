@@ -927,3 +927,67 @@
   padding: 0.68rem 0.8rem;
   font-size: 0.93rem;
 }
+
+@media (max-width: 1280px) {
+  .navbar-inner {
+    padding-inline: var(--space-md);
+  }
+
+  .navbar-main {
+    grid-template-columns: auto minmax(0, 1fr) minmax(220px, 340px) auto;
+    gap: var(--space-sm);
+  }
+
+  .navbar-logo__meta,
+  .nav-utility-link {
+    display: none;
+  }
+}
+
+@media (max-width: 1080px) {
+  .navbar-main {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  .nav-tabs,
+  .navbar-context {
+    display: none;
+  }
+
+  .navbar-center {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .navbar-right {
+    gap: var(--space-xs);
+  }
+
+  .nav-cta,
+  .auth-buttons {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .navbar-inner {
+    padding-inline: 0.9rem;
+  }
+
+  .navbar-logo__text {
+    font-size: 0.95rem;
+  }
+
+  .nav-search {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nav-search__submit {
+    width: 100%;
+  }
+}

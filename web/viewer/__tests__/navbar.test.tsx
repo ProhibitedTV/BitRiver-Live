@@ -406,6 +406,18 @@ describe("Navbar", () => {
     expect(navigationCss).toContain("box-shadow: var(--navbar-search-shadow), 0 0 0 3px var(--navbar-search-focus-ring);");
   });
 
+  test("keeps the mobile nav toggle display rule after the final nav-toggle base rule", () => {
+    const navigationCssPath = resolve(__dirname, "../styles/navigation.css");
+    const navigationCss = readFileSync(navigationCssPath, "utf8");
+    const hiddenToggleRules = Array.from(navigationCss.matchAll(/\.nav-toggle\s*{\s*display:\s*none;/g));
+    const finalHiddenToggleRule = hiddenToggleRules[hiddenToggleRules.length - 1]?.index ?? -1;
+    const mobileToggleRule = navigationCss.lastIndexOf("@media (max-width: 1080px)");
+
+    expect(finalHiddenToggleRule).toBeGreaterThan(-1);
+    expect(mobileToggleRule).toBeGreaterThan(finalHiddenToggleRule);
+    expect(navigationCss.slice(mobileToggleRule)).toMatch(/\.nav-toggle\s*{\s*display:\s*inline-flex;/);
+  });
+
   test("loads the stored theme preference on initial render", () => {
     mockAnonymousUser();
     window.localStorage.setItem("viewer-theme", "light");

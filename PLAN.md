@@ -25,6 +25,10 @@
 - `git diff --check`
 - `./scripts/verify.sh --viewer`
 
+## CI remediation note
+- PR #1240 Viewer CI exposed a mobile navbar regression in the split stylesheet ordering: the late `.nav-toggle { display: none; }` navigation base rule can override the mobile media rule when the enabling rule lives in another feature stylesheet.
+- Keep navbar breakpoint rules inside `navigation.css` after the final navbar base declarations, and leave `viewer-shell.css` responsible only for viewer shell/sidebar breakpoints.
+
 ## Scope (current change)
 - Address GitHub issue #1224 by extracting shared channel management primitives from the creator live route and consolidating owner workflows around reusable viewer components.
 - Keep the existing compatibility routes (`/creator/live/[channelId]`, `/creator/uploads/[channelId]`) while making route pages thinner and less responsible for page-local UI implementations.

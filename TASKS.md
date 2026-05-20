@@ -32,6 +32,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Changes are committed, pushed, and opened as a draft PR.
     - PR summary lists split files, deleted stale selectors, and any intentional visual changes.
 
+- [x] Task 6 - Remediate CI mobile nav ordering regression
+  - Acceptance criteria:
+    - PR #1240 Viewer CI mobile navbar failure is recorded with the failing surfaces.
+    - Navbar breakpoint rules live in `navigation.css` after the final `.nav-toggle` base declaration.
+    - `viewer-shell.css` no longer owns navbar-specific responsive rules.
+    - Focused navbar/mobile Playwright coverage passes after the fix.
+
 ### Execution log (issue #1226 split viewer CSS)
 - Task 1 complete: after merging PR #1239 and syncing local `main` to `9e5a40c0`, selected issue #1226 as the next oldest open product ticket, created branch `codex/issue-1226-split-viewer-css`, and audited stylesheet size/imports, nested AGENTS scope, existing global style files, app root CSS imports, broad selector families, code/test class usage, and stale Browse/creator-live selectors before source edits.
 - Task 1 checks:
@@ -66,6 +73,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `git diff --check` - first run failed on an extra trailing blank line in rewritten CSS; rerun passed after normalizing CSS file endings and undoing the accidental no-op `home.css` normalization.
   - `npm.cmd --prefix web/viewer run build` - passed during Task 2 and again as the Playwright pretest build, with existing Browserslist and Next.js client-render deopt warnings.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed the full repo viewer gate, including Go tests, architecture/import checks, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks. Existing React `act(...)`, Browserslist, Next.js deopt, and non-fatal render-aborted warnings were observed without failing the gate.
+- Task 6 complete: PR #1240 Viewer CI run #449 failed the mobile navbar Playwright checks because the mobile toggle was absent/hidden at small viewport widths; moved navbar breakpoint rules back into `navigation.css` after the final `.nav-toggle { display: none; }` base rule, removed navbar-specific responsive selectors from `viewer-shell.css`, and added a CSS contract assertion for the ordering.
+- Task 6 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx --silent` - passed 1 suite and 29 tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/mobile-layout.spec.ts` - passed 7 tests with existing Browserslist and Next.js client-render deopt warnings.
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - passed with expected working-tree line-ending warnings.
+  - `go test ./cmd/transcoder -run TestHealthDegradedWhenUploadPublishFails -count=1 -timeout=120s` - passed on rerun after the first full gate saw this unrelated test return a transient 500.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - first rerun failed on the unrelated transcoder health test above; second rerun passed the full repo viewer gate, including Go tests, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks.
 
 ## Scoped change: issue #1224 shared channel management primitives
 
