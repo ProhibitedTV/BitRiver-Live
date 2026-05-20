@@ -20,7 +20,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Unsupported hosts skip with a precise reason.
     - Wrapper delegation and missing-source assertions remain covered.
 
-- [-] Task 4 - Validate and publish
+- [x] Task 4 - Validate and publish
   - Acceptance criteria:
     - Targeted scripts tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
     - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
@@ -41,9 +41,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `go test ./scripts -count=1 -timeout=120s` - first attempt did not run tests because the host default Go build cache failed to initialize.
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./scripts -count=1 -timeout=120s` - passed.
 - Task 3 complete: no harness code change was required because the current test helper already satisfies issue #1241 acceptance criteria; updated `docs/cleanup-plan.md` task 2 to complete with verification notes.
-- Task 4 in progress: ran targeted scripts tests, full Go tests, reran the unrelated transcoder timeout, and ran the full verification gate.
+- Task 4 complete: ran targeted scripts tests, full Go tests, reran the unrelated transcoder timeout, ran the full verification gate, opened draft PR #1248, and confirmed GitHub CI run #455 passed for the PR head.
 - Task 4 checks:
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./scripts -count=1 -timeout=120s` - passed.
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - failed in `cmd/transcoder` on `TestUploadPublishesHTTPPlayback` timing out while waiting for completed upload metadata; this is outside the scripts scope and aligns with tracking issue #1242.
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./cmd/transcoder -run TestUploadPublishesHTTPPlayback -count=1 -timeout=120s` - passed on rerun.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification, including Go tests, contract checks, Docker Compose config validation, quickstart smoke, and skipped viewer checks because no viewer files changed.
+  - GitHub CI run #455 for PR #1248 - passed; docs consistency, changed-file detection, and secret guard succeeded, while non-doc jobs were skipped by path filters.
