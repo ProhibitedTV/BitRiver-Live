@@ -153,6 +153,7 @@ test.describe("channel route", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
     await expect(page.getByText(/enjoy low-latency playback powered by the ingest pipeline/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Manage this channel" })).toHaveCount(0);
 
     await page.getByRole("button", { name: /follow - 10 supporters/i }).click();
     await expect(page.getByRole("button", { name: /following - 11 supporters/i })).toBeVisible();
@@ -220,6 +221,7 @@ test.describe("channel route", () => {
 
     await page.goto("/channels/chan-42");
 
+    await expect(page.getByRole("heading", { name: "Manage this channel" })).toHaveCount(0);
     await expect(page.getByText("Sign in to view and participate in chat.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign in to chat" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: /chat message/i })).toHaveCount(0);
@@ -233,6 +235,51 @@ test.describe("channel route", () => {
     await followButton.click();
     await expect(page).toHaveURL(/\/login\?redirect=%2Fchannels%2Fchan-42$/);
     await expect.poll(() => followAttempted).toBe(false);
+  });
+
+  test("gives channel owners compact studio actions from the public channel", async ({ page }) => {
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "owner-42",
+            displayName: "DJ Nova",
+            email: "nova@example.com",
+            roles: ["creator"],
+          },
+        }),
+      });
+    });
+
+    await page.route("**/api/channels/chan-42/playback", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(basePlayback) });
+    });
+
+    await page.route("**/api/channels/chan-42/vods", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
+    });
+
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
+    });
+
+    await page.goto("/channels/chan-42");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
+    await expect(page.getByText(/you manage this channel/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Manage this channel" })).toBeVisible();
+    const studioNav = page.getByRole("navigation", { name: /deep space beats channel tools/i });
+    await expect(studioNav.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", "/channels/chan-42");
+    await expect(studioNav.getByRole("link", { name: "Go live" })).toHaveAttribute("href", "/creator/live/chan-42");
+    await expect(studioNav.getByRole("link", { name: "Uploads" })).toHaveAttribute("href", "/creator/uploads/chan-42");
+    await expect(studioNav.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/creator/live/chan-42#channel-schedule");
+    await expect(studioNav.getByRole("link", { name: "Share link" })).toHaveAttribute("href", "/creator/live/chan-42#channel-share");
   });
 
   test("keeps mobile watch navigation focused on video, chat, and details", async ({ page }) => {

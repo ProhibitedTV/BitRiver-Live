@@ -145,6 +145,12 @@ test.describe("creator live setup", () => {
 
     await page.goto(`/creator/live/${channelId}`);
 
+    await expect(page.getByRole("heading", { level: 2, name: /creator live setup studio/i })).toBeVisible();
+    const studioNav = page.getByRole("navigation", { name: /creator live setup channel tools/i });
+    await expect(studioNav.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", `/channels/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Uploads" })).toHaveAttribute("href", `/creator/uploads/${channelId}`);
+    await expect(studioNav.getByRole("link", { name: "Share link" })).toHaveAttribute("href", `/creator/live/${channelId}#channel-share`);
+
     await expect(page.getByRole("heading", { level: 3, name: "1) Channel" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: "2) Stream settings" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: "3) Go live" })).toBeVisible();

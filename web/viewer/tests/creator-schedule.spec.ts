@@ -136,7 +136,9 @@ test.describe("creator schedule management", () => {
 
     await page.goto(`/creator/live/${channelId}`);
 
-    await expect(page.getByRole("heading", { level: 2, name: /go live from one simple setup screen/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /deep dive studio/i })).toBeVisible();
+    const studioNav = page.getByRole("navigation", { name: /deep dive channel tools/i });
+    await expect(studioNav.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", `/creator/live/${channelId}#channel-schedule`);
     await expect(page.getByText(/sessions unavailable/i)).toBeVisible();
     await expect(page.getByText(/channel list offline/i)).toBeVisible();
 

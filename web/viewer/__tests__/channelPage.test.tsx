@@ -521,7 +521,7 @@ describe("ChannelPage", () => {
     expect(screen.getByRole("heading", { name: "Friday Night Runs" })).toBeInTheDocument();
   });
 
-  test("directs channel creators to the dashboard", async () => {
+  test("surfaces compact owner tools from the public channel page", async () => {
     mockUseAuth.mockReturnValue(
       signedInAuthState(
         buildAuthUser({ id: "owner-42", displayName: "DJ Nova", email: "nova@example.com" })
@@ -532,9 +532,27 @@ describe("ChannelPage", () => {
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
 
-    const link = await screen.findByRole("link", { name: /open creator dashboard/i });
-    expect(link).toHaveAttribute("href", "/creator/uploads/chan-42");
-    expect(screen.getByText(/use your creator dashboard/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Manage this channel" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", "/channels/chan-42");
+    expect(screen.getByRole("link", { name: "Go live" })).toHaveAttribute("href", "/creator/live/chan-42");
+    expect(screen.getByRole("link", { name: "Uploads" })).toHaveAttribute("href", "/creator/uploads/chan-42");
+    expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/creator/live/chan-42#channel-schedule");
+    expect(screen.getByRole("link", { name: "Share link" })).toHaveAttribute("href", "/creator/live/chan-42#channel-share");
+  });
+
+  test("keeps owner tools hidden for creators who do not own the channel", async () => {
+    mockUseAuth.mockReturnValue(
+      signedInAuthState(
+        buildAuthUser({ id: "creator-99", displayName: "Other Creator", email: "other@example.com", roles: ["creator"] })
+      )
+    );
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+
+    expect(screen.queryByRole("heading", { name: "Manage this channel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Go live" })).not.toBeInTheDocument();
   });
 
   test("surfaces VOD loading errors", async () => {

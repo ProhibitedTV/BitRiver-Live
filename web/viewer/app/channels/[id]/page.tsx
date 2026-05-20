@@ -3,6 +3,7 @@
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChannelStudioNav } from "../../../components/ChannelStudioNav";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
@@ -334,6 +335,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         : hasScheduleEntries
           ? `${scheduleEntries[0].title} starts ${formatScheduleStart(scheduleEntries[0].startsAt)}.`
           : "There are no published replays or upcoming schedule entries yet. Browse other live channels or check again in a moment.";
+  const isChannelOwner = Boolean(data && user?.id === data.channel.ownerId);
 
   return (
     <div className="workspace-page workspace-page--narrow channel-page">
@@ -509,17 +511,17 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
               </div>
             </section>
 
-            {user?.id === data.channel.ownerId || user?.roles.includes("creator") ? (
-              <section className="channel-owner-card" aria-labelledby="channel-owner-tools-title">
-                <span className="page-eyebrow">Creator-only tools</span>
-                <h3 id="channel-owner-tools-title">Manage uploads</h3>
-                <p className="muted">Use your creator dashboard to register VODs and monitor processing once streams finish.</p>
-                <div className="channel-page__actions">
-                  <Link href={`/creator/uploads/${data.channel.id}`} className="secondary-button">
-                    Open creator dashboard
-                  </Link>
-                </div>
-              </section>
+            {isChannelOwner ? (
+              <ChannelStudioNav
+                channelId={data.channel.id}
+                channelTitle={data.channel.title}
+                liveState={data.channel.liveState}
+                activeTool="preview"
+                eyebrow="Creator-only tools"
+                heading="Manage this channel"
+                description="Tune the live setup, uploads, schedule, and share link from this same public channel context."
+                className="channel-owner-card"
+              />
             ) : null}
           </div>
         </div>

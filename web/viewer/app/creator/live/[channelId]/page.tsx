@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChannelStudioNav } from "../../../../components/ChannelStudioNav";
 import { Player } from "../../../../components/Player";
 import { Button, buttonClassName } from "../../../../components/ui/Button";
 import { Card, CardBody, CardHeader } from "../../../../components/ui/Card";
@@ -469,19 +469,14 @@ export default function CreatorLivePage() {
   }
 
   return (
-    <div className="workspace-shell">
-      <section className="workspace-hero">
-        <div className="workspace-hero__copy">
-          <span className="page-eyebrow">Go live</span>
-          <h2>Go live from one simple setup screen</h2>
-          <p className="muted creator-live__hero-note">Confirm the channel, copy the OBS settings, check the preview, and share the viewer link.</p>
-        </div>
-        <div className="workspace-hero__actions">
-          <a href={viewerPageHref} className={buttonClassName("secondary")} target="_blank" rel="noreferrer">
-            Open public channel
-          </a>
-        </div>
-      </section>
+    <div className="channel-studio-workspace">
+      <ChannelStudioNav
+        channelId={channelId}
+        channelTitle={currentChannelTitle || playback.channel.title}
+        liveState={playback.channel.liveState}
+        activeTool="live"
+        description="Confirm the channel, copy OBS settings, check the live preview, update schedule, and share the same public channel page viewers use."
+      />
 
       <Card className="workspace-card step-card" aria-labelledby="channel-section-heading">
         <CardHeader className="workspace-card__header">
@@ -533,7 +528,12 @@ export default function CreatorLivePage() {
             {titleSaved && !titleError ? <p className="success">Stream title updated.</p> : null}
           </form>
 
-          <form className="creator-live__section" aria-label="Update stream schedule" onSubmit={handleScheduleSubmit}>
+          <form
+            id="channel-schedule"
+            className="creator-live__section"
+            aria-label="Update stream schedule"
+            onSubmit={handleScheduleSubmit}
+          >
             <h4 className="creator-live__subheading">Upcoming stream</h4>
             <div className="creator-live__schedule-grid">
               <label className="input-stack" htmlFor="schedule-title-input">
@@ -755,7 +755,7 @@ export default function CreatorLivePage() {
         </CardBody>
       </Card>
 
-      <Card className="workspace-card step-card" aria-labelledby="share-heading">
+      <Card id="channel-share" className="workspace-card step-card" aria-labelledby="share-heading">
         <CardHeader className="workspace-card__header">
           <h3 id="share-heading">4) Share</h3>
           <p className="muted">When the preview looks right, copy the viewer link and open the same page your audience will use.</p>
