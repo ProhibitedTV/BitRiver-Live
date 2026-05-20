@@ -1,3 +1,88 @@
+## Scoped change: issue #1221 simplified Browse discovery
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the Browse simplification plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1221 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before Browse source edits begin.
+    - The read-only pass identifies current Browse page structure, URL-state helpers, CSS zones, and existing unit/Playwright coverage.
+
+- [x] Task 2 - Streamline the Browse page hierarchy
+  - Acceptance criteria:
+    - Search plus live/trending/new controls become the first compact action area.
+    - Above-fold stats and repeated featured shortlist are removed or collapsed.
+    - Results heading/count stays visible without long instructional copy.
+
+- [x] Task 3 - Keep filters stable and states short
+  - Acceptance criteria:
+    - Active URL topic remains visible and selected even when the loaded results do not include it.
+    - Reset clears query/topic/sort and keeps URL state correct.
+    - Empty and error states remain actionable with shorter copy.
+
+- [x] Task 4 - Update Browse regression coverage
+  - Acceptance criteria:
+    - Unit/Playwright tests cover search, topic URL contract, reset, empty state, and mobile Browse layout.
+    - Existing accessibility search coverage is updated to the streamlined Browse heading/copy.
+    - Mobile layout coverage still verifies no horizontal overflow.
+
+- [x] Task 5 - Run validation and publish
+  - Acceptance criteria:
+    - Focused tests, targeted Playwright, lint, build, diff check, repo viewer gate, and CI are run or host blockers are recorded.
+    - Changes are committed, pushed, and opened as a draft PR.
+
+- [x] Task 6 - Stabilize blocking Viewer CI retry
+  - Acceptance criteria:
+    - Repeated PR CI failures are identified as unrelated to Browse source changes.
+    - Any fix stays test-only and avoids CI workflow or runtime behavior changes.
+    - The focused failing Playwright test passes locally before pushing the follow-up commit.
+
+### Execution log (issue #1221 simplified Browse discovery)
+- Task 1 complete: after merging PR #1235, synced local `main` to `248fb1c7`, selected issue #1221 as the oldest open product ticket, created branch `codex/issue-1221-browse-discovery`, and audited the Browse page, directory URL-state helper, directory grid/search components, existing Browse unit tests, accessibility Playwright coverage, mobile layout coverage, and relevant CSS selectors before source edits.
+- Task 1 checks:
+  - GitHub connector: marked PR #1235 ready, squash-merged it, and fetched issue #1221.
+  - GitHub connector: searched open issues sorted by creation date.
+  - `git checkout main`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1221-browse-discovery`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+  - `Get-Content web/viewer/components/SearchBar.tsx`
+  - `Get-Content web/viewer/hooks/useDirectorySearch.ts`
+  - `Get-Content web/viewer/lib/directory-state.ts`
+  - `Get-Content web/viewer/__tests__/browsePage.test.tsx`
+  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
+  - `Get-Content web/viewer/tests/accessibility.spec.ts`
+  - `Get-Content web/viewer/tests/mobile-layout.spec.ts`
+  - `rg -n "browse|directory|SearchBar|topic|Reset directory|No channels match|Results for" web/viewer/tests web/viewer/__tests__`
+  - `rg -n "\\.browse-page|\\.browse-controls|\\.browse-toolbar|\\.browse-hero|\\.featured-card|\\.page-header|\\.stat-pill|\\.section-heading|\\.chip|\\.search-bar|\\.directory-card" web/viewer/styles/globals.css`
+- Task 2 complete: `/browse` now opens with a compact Browse header, search, sort tabs, reset, and filter chips before the results grid. The stats header and duplicated featured shortlist are removed, and results count/heading stay adjacent to the grid.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx --silent` - failed only on stale expectations for the removed `Topic: Music - 1 result` copy and featured-highlight link; remaining Browse unit tests passed.
+- Task 3 complete: Browse now caches discovered category/tag filters so chips remain visible across searches, preserves the active URL topic when it is absent from the current result set, and uses shorter reset/error/empty labels.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx --silent` - still failed only on the same stale featured/old summary assertion, confirming the filter stability change did not add new failures.
+- Task 4 complete: updated Browse unit coverage to assert the compact grid-first contract, stable filters after search, and reset behavior; updated browser coverage for the new Browse heading, topic URL contract, reset, empty state, and mobile Browse layout.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx directoryPage.test.tsx --silent` - passed 2 suites and 21 tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts tests/mobile-layout.spec.ts` - passed 6 tests with existing Next.js client-render deopt and Browserslist warnings.
+- Task 5 complete: final local validation passed for the viewer change set; GitHub CLI is installed but its local token is invalid, so publishing uses the GitHub connector after the branch push.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx --silent` - passed 1 suite and 8 tests after cleaning up the new search interaction test.
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - passed with expected CRLF conversion warnings for touched files.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Browserslist and Next.js client-render deopt warnings.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - first run timed out without captured output; rerun passed the repo viewer gate, including Go tests, contract checks, Docker Compose config validation, quickstart smoke, and viewer checks.
+  - `gh --version` - passed; `gh auth status` reported an invalid local token, so PR creation should use the GitHub connector instead of the CLI fallback.
+- Task 6 complete: PR #1236 CI repeatedly passed Browse-specific coverage but failed Viewer CI integration on unrelated channel/theme tests. The first failed attempt timed out in `channel-chat-playback.spec.ts`; the focused local retry passed. Two subsequent Viewer CI attempts failed consistently in `channel.spec.ts` because the theme-toggle test derived expectations from `body[data-theme]` before Navbar hydration settled. The theme test now seeds a deterministic stored dark theme before page load and verifies dark-to-light-to-dark transitions directly.
+- Task 6 checks:
+  - GitHub connector: fetched failed Viewer CI logs for run `26002447250` and reran the failed job twice.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts -g "offers retry when playback API fails then recovers"` - passed 1 test.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts -g "theme toggle updates the rendered document"` - passed 1 test after stabilization.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts` - passed 8 tests with existing Next.js client-render deopt warnings and a non-fatal render-aborted webserver warning after tests completed.
+
 ## Scoped change: issue #1225 mobile viewer layout
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

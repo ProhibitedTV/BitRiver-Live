@@ -4940,3 +4940,66 @@ button:focus-visible {
     width: 100%;
   }
 }
+
+/* Issue #1221: compact standalone Browse directory */
+
+.browse-page--compact {
+  gap: var(--space-lg);
+}
+
+.browse-page--compact .browse-controls {
+  padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+.browse-controls__header,
+.browse-results__header,
+.browse-toolbar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.browse-controls__header h1,
+.browse-results__header h2 {
+  margin: 0;
+}
+
+.browse-controls__count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-outline);
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.browse-page--compact .chip--tab {
+  min-width: auto;
+  align-items: center;
+  flex-direction: row;
+  padding-block: 0.7rem;
+}
+
+.browse-results {
+  gap: var(--space-md);
+}
+
+@media (max-width: 560px) {
+  .browse-controls__header,
+  .browse-results__header,
+  .browse-toolbar__row {
+    align-items: stretch;
+  }
+
+  .browse-controls__count,
+  .browse-toolbar__row > .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

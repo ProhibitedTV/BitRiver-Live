@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockRouter, resetRouterMocks, setMockPathname, viewerApiMocks } from "../test/test-utils";
 import BrowsePage from "../app/browse/page";
 import { directoryInputMatrix } from "../test/directory-input-matrix";
@@ -93,7 +93,7 @@ describe("BrowsePage", () => {
     expect(searchDirectoryMock).not.toHaveBeenCalled();
   });
 
-  it("hydrates topic drill-ins from the URL and keeps featured highlights actionable", async () => {
+  it("hydrates topic drill-ins from the URL and keeps the primary grid actionable", async () => {
     window.history.replaceState({}, "", "/browse?topic=Music");
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
 
@@ -101,11 +101,11 @@ describe("BrowsePage", () => {
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getAllByText("Topic: Music - 1 result").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /open deep space beats by dj nova/i })).toHaveAttribute(
-      "href",
-      "/channels/chan-1",
-    );
+    expect(screen.getAllByText("Music - 1 channel").length).toBeGreaterThan(0);
+    const heading = screen.getByRole("heading", { level: 3, name: "Deep Space Beats" });
+    const card = heading.closest("article");
+    expect(card).toBeTruthy();
+    expect(within(card!).getByRole("link", { name: "Open channel" })).toHaveAttribute("href", "/channels/chan-1");
   });
 
   it("pushes the selected topic into the browse URL when a filter chip is clicked", async () => {
@@ -119,5 +119,39 @@ describe("BrowsePage", () => {
 
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith("/browse?topic=Music"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true"));
+  });
+
+  it("keeps discovered filters visible after search narrows the result set", async () => {
+    const user = userEvent.setup();
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+    searchDirectoryMock.mockResolvedValueOnce(searchDirectoryResponse as any);
+
+    render(<BrowsePage />);
+
+    expect((await screen.findAllByText("Deep Space Beats")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Music" })).toBeVisible();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: /search channels/i }), { target: { value: "retro" } });
+    await user.click(screen.getByRole("button", { name: /search/i }));
+
+    await waitFor(() => expect(searchDirectoryMock).toHaveBeenCalledWith("retro"));
+    expect((await screen.findAllByText("Retro Speedruns")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Music" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Gaming" })).toBeVisible();
+  });
+
+  it("clears query, topic, and sort state from the compact reset control", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/browse?q=retro&topic=Gaming");
+    searchDirectoryMock.mockResolvedValueOnce(searchDirectoryResponse as any);
+
+    render(<BrowsePage />);
+
+    expect((await screen.findAllByText("Retro Speedruns")).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("tab", { name: "New" }));
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(mockRouter.replace).toHaveBeenCalledWith("/browse");
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Live" })).toHaveAttribute("aria-selected", "true"));
   });
 });

@@ -257,7 +257,7 @@ test.describe("mobile viewer layout", () => {
       await page.setViewportSize({ width, height: 844 });
       await page.goto("/browse");
 
-      await expect(page.getByRole("heading", { level: 1, name: /find the live room/i })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: /browse live channels/i })).toBeVisible();
       await expect(page.getByRole("button", { name: "Search" })).toBeVisible();
       await expect(page.getByRole("tab", { name: /trending/i })).toBeVisible();
       await expect(page.getByRole("heading", { level: 3, name: /a very long live channel/i }).first()).toBeVisible();

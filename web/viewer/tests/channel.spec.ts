@@ -447,6 +447,10 @@ test.describe("authentication controls", () => {
   });
 
   test("theme toggle updates the rendered document", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("viewer-theme", "dark");
+    });
+
     await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({ status: 401, body: "Unauthorized" });
     });
@@ -463,28 +467,19 @@ test.describe("authentication controls", () => {
 
     const siteMenu = page.getByRole("button", { name: "Open site menu" });
     const body = page.locator("body");
-    const initialTheme = await body.getAttribute("data-theme");
+    await expect(body).not.toHaveAttribute("data-theme", "light");
 
     await siteMenu.click();
-    let toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to (light|dark) theme/i });
+    let toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to light theme/i });
+    await expect(toggle).toBeVisible();
     await toggle.click();
-    if (initialTheme === "light") {
-      await expect(body).not.toHaveAttribute("data-theme", "light");
-      await siteMenu.click();
-      toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to light theme/i });
-      await expect(toggle).toBeVisible();
-    } else {
-      await expect(body).toHaveAttribute("data-theme", "light");
-      await siteMenu.click();
-      toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to dark theme/i });
-      await expect(toggle).toBeVisible();
-    }
+    await expect(body).toHaveAttribute("data-theme", "light");
+
+    await siteMenu.click();
+    toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to dark theme/i });
+    await expect(toggle).toBeVisible();
 
     await toggle.click();
-    if (initialTheme === "light") {
-      await expect(body).toHaveAttribute("data-theme", "light");
-    } else {
-      await expect(body).not.toHaveAttribute("data-theme", "light");
-    }
+    await expect(body).not.toHaveAttribute("data-theme", "light");
   });
 });

@@ -61,6 +61,11 @@ const searchResponse = {
   generatedAt: new Date("2023-10-21T12:30:00Z").toISOString()
 };
 
+const emptyResponse = {
+  channels: [],
+  generatedAt: new Date("2023-10-21T12:45:00Z").toISOString()
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/viewer/me", async (route) => {
     await route.fulfill({ status: 401, body: "Unauthorized" });
@@ -68,7 +73,9 @@ test.beforeEach(async ({ page }) => {
 
   await page.route("**/api/directory**", async (route) => {
     const url = new URL(route.request().url());
-    const body = url.searchParams.has("q") ? searchResponse : directoryResponse;
+    const query = url.searchParams.get("q");
+    const category = url.searchParams.get("category");
+    const body = query === "nothing" ? emptyResponse : query || category === "Gaming" ? searchResponse : directoryResponse;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
 });
@@ -76,7 +83,7 @@ test.beforeEach(async ({ page }) => {
 test("directory page renders accessible markup and supports search", async ({ page }) => {
   await page.goto("/browse");
 
-  await expect(page.getByRole("heading", { level: 1, name: /find the live room/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /browse live channels/i })).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" }).first()).toBeVisible();
 
   await page.getByLabel("Search channels").fill("retro");
@@ -90,4 +97,22 @@ test("directory page renders accessible markup and supports search", async ({ pa
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();
   expect(results.violations).toEqual([]);
+});
+
+test("directory page keeps topic URLs, reset, and empty states clear", async ({ page }) => {
+  await page.goto("/browse?topic=Gaming");
+
+  await expect(page.getByRole("heading", { level: 2, name: "Gaming channels" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Gaming" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/\/browse\?topic=Gaming$/);
+
+  await page.getByRole("button", { name: "Reset" }).click();
+  await expect(page).toHaveURL(/\/browse$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Live directory" })).toBeVisible();
+
+  await page.getByLabel("Search channels").fill("nothing");
+  await page.getByRole("main").getByRole("button", { name: "Search" }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "No channels match your filters" })).toBeVisible();
+  await expect(page.getByText("Clear the filters or try another search.")).toBeVisible();
 });
