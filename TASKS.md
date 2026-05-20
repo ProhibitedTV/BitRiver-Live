@@ -26,7 +26,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The guidance makes temporary planning files active-scope artifacts, not permanent historical logs.
     - The new or updated doc is discoverable from existing contributor docs.
 
-- [-] Task 5 - Validate and publish
+- [x] Task 5 - Validate and publish
   - Acceptance criteria:
     - Documentation/link checks and diff hygiene pass.
     - The repo validation gate is run or any host blocker is recorded.
@@ -56,9 +56,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 4 complete: added `docs/maintenance.md` to explain the planning-doc versus GitHub-issue lifecycle and linked it from `CONTRIBUTING.md`.
 - Task 4 checks:
   - `CONTRIBUTING.md` now lists `docs/maintenance.md` in helpful references and points larger scoped work guidance to it.
-- Task 5 in progress: ran documentation tracking checks, diff hygiene, and the full repo verification gate before staging.
+- Task 5 complete: ran documentation tracking checks, diff hygiene, full repo verification, opened draft PR #1247, and confirmed GitHub CI run #452 passed for the PR head.
 - Task 5 checks:
   - `rg -n "Task [2-7]|Tracking issue: \\[#124[1-6]\\]" docs/cleanup-plan.md` - passed.
   - `rg -n "PLAN\\.md|TASKS\\.md|cleanup-plan|GitHub issues|temporary planning|active-scope|docs/history" docs/maintenance.md CONTRIBUTING.md` - passed.
   - `git diff --check` - passed with expected working-tree line-ending warnings.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification, including Go tests, contract checks, Docker Compose config validation, quickstart smoke, and skipped viewer checks because no viewer files changed.
+  - GitHub CI run #452 for PR #1247 - passed; docs consistency, changed-file detection, and secret guard succeeded, while non-doc jobs were skipped by path filters.
