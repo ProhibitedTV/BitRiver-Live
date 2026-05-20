@@ -1,24 +1,20 @@
 ## Scope (current change)
-- Address GitHub issue #1229 by refreshing cleanup tracking and retiring stale `PLAN.md`/`TASKS.md` scratchpad history.
-- Convert the remaining unchecked `docs/cleanup-plan.md` tasks into explicit GitHub issue links, unless a task is intentionally deferred with a reason.
-- Archive completed historical planning logs under `docs/history/` so the repo root planning files show only the active scoped change.
-- Add concise maintenance guidance that explains when contributors should use planning docs versus GitHub issues.
+- Address GitHub issue #1241 by verifying and, if needed, hardening the quickstart wrapper tests against missing or unusable shell environments.
+- Keep the change limited to `scripts/quickstart_test.go`, cleanup tracking docs, and root planning files unless the read-only pass uncovers a real wrapper behavior gap.
+- Preserve wrapper behavior coverage for delegating to `go run ./cmd/bitriver quickstart` and for failing clearly when CLI sources are missing.
 
 ## Assumptions
-- The existing long `PLAN.md` and `TASKS.md` content is useful history, so archiving is safer than deletion.
-- `docs/cleanup-plan.md` remains useful as a summarized cleanup index once each open task links to durable issue tracking.
-- GitHub issues are the canonical place for follow-up cleanup work that is not actively being implemented in the current branch.
-- This change is documentation and process hygiene only; no runtime, deployment contract, or CI workflow behavior should change.
+- `scripts/quickstart_test.go` may already satisfy the issue because it now discovers `BITRIVER_TEST_BASH`, Git Bash install paths, and `exec.LookPath("bash")` before skipping with a precise reason.
+- The test should require a usable Bash only for the Unix shell wrapper behavior; no supported host should fail before the wrapper logic is exercised when Bash is available.
+- If targeted tests pass and the helper behavior is already present, the appropriate change is to update cleanup tracking rather than invent more test harness complexity.
 
 ## Risks
-- Moving large planning files can obscure recent context if the archive path is not obvious.
-- Creating duplicate GitHub issues would make cleanup tracking noisier, so issue search should precede new issue creation.
-- `PLAN.md`/`TASKS.md` still need to satisfy the agent workflow while no longer carrying merged historical logs.
-- Documentation should be explicit enough to prevent these root scratchpads from becoming a permanent changelog again.
+- Tightening shell discovery unnecessarily could make the tests depend on local Windows installation details again.
+- Marking the cleanup task complete without running targeted tests would hide a real host-specific regression.
+- The full repo gate is still useful because `scripts` changes sit near CI and quickstart validation paths.
 
 ## Test plan
-- GitHub connector issue search for existing cleanup-tracking issues before creating new ones.
-- `rg -n "Task [2-7].*github.com|tracking issue|deferred" docs/cleanup-plan.md`
-- `rg -n "PLAN.md|TASKS.md|cleanup-plan|GitHub issues|temporary planning" docs/maintenance.md CONTRIBUTING.md`
+- `go test ./scripts -count=1 -timeout=120s`
+- `go test ./... -count=1 -timeout=120s`
 - `git diff --check`
 - `./scripts/verify.sh`
