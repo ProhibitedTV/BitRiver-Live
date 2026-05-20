@@ -1,4 +1,33 @@
 ## Scope (current change)
+- Address GitHub issue #1224 by extracting shared channel management primitives from the creator live route and consolidating owner workflows around reusable viewer components.
+- Keep the existing compatibility routes (`/creator/live/[channelId]`, `/creator/uploads/[channelId]`) while making route pages thinner and less responsible for page-local UI implementations.
+- Preserve the compact channel-studio shell introduced by issue #1223 and avoid reintroducing broad hero or summary card blocks.
+- Cover core owner workflows as shared primitives: channel switcher/context, stream title editing, schedule editing, OBS/ingest settings, live preview state, upload entry, and share-link actions.
+- Keep the change viewer-only: shared viewer components, creator live route composition, public owner management entry points, focused styles if needed, and unit/Playwright coverage.
+
+## Assumptions
+- Issue #1223 already removed most visible duplicate hero/summary chrome, so this pass should focus on extracting remaining page-local management UI and helpers rather than redesigning the route structure again.
+- `CreatorLivePage` should keep ownership of auth, managed-channel lookup, mutations, and clipboard side effects for this pass; presentational primitives can receive typed props to avoid widening API behavior.
+- `ChannelStudioNav` remains the compact contextual shell used by both public owner mode and retained creator routes.
+- Upload functionality already lives behind `UploadManager`; the reusable primitive needed here is the shared channel-studio entry surface rather than moving upload internals.
+- Existing route-level tests are still useful for integration behavior, but new coverage should target extracted primitives directly.
+
+## Risks
+- Moving live setup markup out of `CreatorLivePage` can accidentally change labels, form control names, or `data-testid` hooks that current unit and Playwright tests rely on.
+- Clipboard and schedule/title form state are intertwined with async mutation messages; the extraction should keep handlers in the route until tests prove the contract is stable.
+- OBS settings include masked/revealed stream key behavior and preferred ingest endpoint selection; helper exports need focused tests to prevent subtle regressions.
+- Public owner mode must continue to show owner tooling only for the actual channel owner and must not leak stream-key or creator actions to guests/non-owners.
+- CSS selectors under `.creator-live__*` are shared by current route markup; component extraction should preserve class names unless tests/styles are updated together.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx channelManagementPrimitives.test.tsx channelPage.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-dashboard.spec.ts tests/creator-live-setup.spec.ts tests/creator-uploads.spec.ts tests/creator-schedule.spec.ts tests/channel.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `git diff --check`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Address GitHub issue #1223 by making creator tools feel attached to the public channel instead of a separate dashboard product.
 - Keep the route structure compatible (`/channels/[id]`, `/creator/live/[channelId]`, `/creator/uploads/[channelId]`) while reducing the visible split between watch and management.
 - Replace duplicated creator layout/page hero and summary chrome with compact channel-studio navigation that links public preview, go-live setup, uploads, schedule, and sharing.

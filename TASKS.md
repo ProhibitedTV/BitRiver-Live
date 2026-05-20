@@ -1,3 +1,87 @@
+## Scoped change: issue #1224 shared channel management primitives
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the management primitives plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1224 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies current creator live page-local management UI, shared channel studio navigation, public owner tooling, upload entry points, helper logic, CSS hooks, and unit/Playwright coverage.
+
+- [x] Task 2 - Extract shared channel management primitives
+  - Acceptance criteria:
+    - Shared components exist for channel identity/switching, stream title editing, schedule editing, OBS/ingest settings, live preview state, and share-link actions.
+    - Pure helper logic for ingest endpoints, timestamps, local datetime conversion, and OBS settings moves out of the route page with focused exports.
+    - Existing labels, test ids, accessibility names, and user-facing behavior are preserved unless tests are updated intentionally.
+
+- [x] Task 3 - Thin the creator live route around primitives
+  - Acceptance criteria:
+    - `CreatorLivePage` keeps route/auth/API orchestration while rendering shared primitives for owner workflows.
+    - No Go Live, schedule, OBS settings, stream key, preview, channel switching, or share-link behavior is lost.
+    - The route does not reintroduce broad hero or summary card blocks.
+
+- [x] Task 4 - Keep public owner and upload entry points aligned
+  - Acceptance criteria:
+    - Public channel owner mode and creator routes continue to use the compact shared studio navigation.
+    - Guests and non-owners do not see owner-only management controls.
+    - Upload manager entry points remain available from the shared channel management surface.
+
+- [x] Task 5 - Move regression coverage to shared primitives
+  - Acceptance criteria:
+    - Unit tests cover extracted helpers and primitive rendering/callback wiring directly.
+    - Existing route tests still cover integrated creator live and public owner flows.
+    - Playwright coverage still verifies dashboard, go-live setup, uploads, schedule, and channel owner flows.
+
+- [x] Task 6 - Run validation and publish
+  - Acceptance criteria:
+    - Focused tests, targeted Playwright, lint, build, diff check, repo viewer gate, and CI are run or host blockers are recorded.
+    - Changes are committed, pushed, and opened as a draft PR.
+    - PR summary calls out removed duplicated/page-local code for reviewer verification.
+
+### Execution log (issue #1224 shared channel management primitives)
+- Task 1 complete: after merging PR #1238 and syncing local `main` to `f3102d98`, selected issue #1224 as the next oldest open product ticket, created branch `codex/issue-1224-management-primitives`, and audited the creator live route, creator uploads route, public channel page, shared `ChannelStudioNav`, creator channel hook, viewer API types, current creator/channel tests, Playwright coverage, and relevant creator-live CSS before source edits.
+- Task 1 checks:
+  - GitHub connector: fetched issue #1224 and confirmed acceptance criteria.
+  - `git checkout -b codex/issue-1224-management-primitives`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/page.tsx'`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/uploads/[channelId]/page.tsx'`
+  - `Get-Content -LiteralPath 'web/viewer/app/channels/[id]/page.tsx'`
+  - `Get-Content web/viewer/components/ChannelStudioNav.tsx`
+  - `Get-Content web/viewer/hooks/useCreatorChannel.tsx`
+  - `Get-Content web/viewer/__tests__/creatorLivePage.test.tsx`
+  - `Get-Content web/viewer/__tests__/channelPage.test.tsx`
+  - `Get-Content web/viewer/tests/creator-dashboard.spec.ts`
+  - `Get-Content web/viewer/tests/creator-live-setup.spec.ts`
+  - `Get-Content web/viewer/tests/creator-uploads.spec.ts`
+  - `Get-Content web/viewer/lib/viewer-api-types.ts`
+  - `rg -n "creator-live__|ChannelStudioNav|ChannelStudio|Stream title|Update stream schedule|Preferred ingest URL|Copy OBS settings|Viewer link|UploadManager" web/viewer/app web/viewer/components web/viewer/__tests__ web/viewer/tests`
+  - `rg -n "creator-live|channel-studio|channel-owner" web/viewer/styles/globals.css`
+- Task 2 complete: extracted reusable channel management primitives into `web/viewer/components/channel/ChannelManagementPrimitives.tsx`, including channel identity/switching, stream title editing, schedule editing, OBS/ingest settings, live preview, share-link panels, and pure helpers for ingest selection, timestamps, local datetime conversion, and OBS settings blocks.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx --silent` - passed 1 suite and 1 test, covering the route through the extracted primitives.
+- Task 3 complete: `CreatorLivePage` now keeps route/auth/API state, mutation handlers, polling, and clipboard side effects while rendering `ChannelSetupCard`, `ObsSettingsPanel`, `LivePreviewPanel`, and `ShareLinkPanel`; the old route-local card markup, OBS/share/preview UI blocks, and helper definitions are removed.
+- Task 3 checks:
+  - `rg -n "Card|CardBody|CardHeader|InlineAlert|Player|buttonClassName|MASKED_STREAM_KEY|function formatTimestamp|function toDateTimeLocalValue|creator-live__schedule-grid" web/viewer/app/creator/live/[channelId]/page.tsx` - confirmed the route no longer owns the extracted UI/helper blocks.
+  - `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx --silent` - passed during Task 2 with the thinned route in place.
+- Task 4 complete: verified public owner mode, creator live, and creator uploads still share `ChannelStudioNav` entry points for preview, go-live setup, uploads, schedule, and share-link workflows; the existing upload manager remains mounted from the uploads compatibility route.
+- Task 4 checks:
+  - `rg -n 'ChannelStudioNav|UploadManager|activeTool="uploads"|activeTool="preview"|creator/uploads|creator/live' web/viewer/app web/viewer/components web/viewer/__tests__ web/viewer/tests` - confirmed shared owner/creator route entry points and existing upload manager placement.
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` - passed 1 suite and 20 tests, including owner-only channel studio links.
+- Task 5 complete: added `channelManagementPrimitives.test.tsx` to cover helper behavior and direct rendering/callback wiring for channel setup, stream title, schedule, OBS/ingest settings, live preview, and share-link primitives while retaining route-level creator/channel coverage.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx channelManagementPrimitives.test.tsx channelPage.test.tsx --silent` - first run failed because the new test clicked the schedule submit button instead of submitting the named form; rerun passed 3 suites and 27 tests after fixing the assertion.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-dashboard.spec.ts tests/creator-live-setup.spec.ts tests/creator-uploads.spec.ts tests/creator-schedule.spec.ts tests/channel.spec.ts` - passed 16 tests with existing Browserslist, Next.js client-render deopt, and non-fatal render-aborted warnings.
+- Task 6 complete: ran final focused/unit/browser validation, lint, production build, diff hygiene, and the full repo viewer gate before staging the PR-ready change set.
+- Task 6 checks:
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - passed with expected CRLF warnings.
+  - `npm.cmd --prefix web/viewer run build` - passed with existing Browserslist and Next.js client-render deopt warnings.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed the full repo viewer gate, including Go tests, architecture/import checks, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks. Existing React `act(...)`, Browserslist, Next.js deopt, and non-fatal render-aborted warnings were observed without failing the gate.
+  - `git diff --cached --check` - passed after staging with only the existing local git ignore permission warning.
+
 ## Scoped change: issue #1223 channel-centered creator experience
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
