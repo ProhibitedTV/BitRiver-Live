@@ -1,24 +1,22 @@
 ## Scope (current change)
-- Address GitHub issue #1244 by making ingest boot retries cancellation-aware and reducing duplicated Postgres timeout plumbing where package boundaries allow.
-- Keep public repository/store APIs unchanged.
-- Update call sites in in-memory and Postgres stream start paths to pass an explicit parent context to `runIngestBootWithRetry`.
-- Share auth Postgres operation/ping context helpers across session and MFA challenge stores.
+- Address GitHub issue #1245 by routing Postgres-backed legal repository methods through the repository acquire/timeout helpers.
+- Keep legal repository public APIs and observable behavior unchanged.
+- Extract small normalization helpers only where they reduce repeated trim/status handling without widening the change.
+- Update cleanup tracking after targeted storage validation passes.
 
 ## Assumptions
-- Repository methods remain non-contextual today, so production call sites should pass `context.Background()` while the helper itself becomes cancellable for current and future callers.
-- Retrying ingest boot should still stop immediately on terminal context errors from `BootStream`.
-- Auth Postgres session and MFA challenge stores can share package-private helpers without changing exported options or behavior.
-- Postgres legal flows are intentionally left to issue #1245.
+- Repository methods remain non-contextual today, so `withConn` and `acquireContext` are the available cancellation/timeout boundary.
+- Best-effort legal state-history inserts should remain best-effort unless the existing method already treats history persistence as part of the main operation.
+- `Get*` methods should continue returning `(zero, false)` on query/acquire failures because the public contract does not expose an error.
+- There are no focused storage legal tests today, so package-level storage tests plus static scans are the main validation path.
 
 ## Risks
-- Returning the parent cancellation error during retry delay could change error wrapping expectations if tests rely on the last transient ingest error.
-- Retrying with a child timeout must still preserve the existing per-attempt deadline behavior.
-- Over-eager Postgres cleanup could cross into storage legal work reserved for the next issue.
+- Moving multiple statements onto one acquired connection can change pool pressure slightly, especially around best-effort history inserts.
+- Adding helper wrappers around bool-returning getters must not accidentally convert infrastructure errors into user-visible errors.
+- Legal status and ID normalization should remain byte-for-byte equivalent where possible to avoid changing stored values.
 
 ## Test plan
-- `go test ./internal/storage -run "TestRunIngestBootWithRetry" -count=1 -timeout=120s`
 - `go test ./internal/storage -count=1 -timeout=120s`
-- `go test ./internal/auth ./internal/storage -count=1 -timeout=120s`
 - `go test ./... -count=1 -timeout=120s`
 - `git diff --check`
 - `./scripts/verify.sh`
