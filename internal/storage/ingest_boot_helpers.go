@@ -5,11 +5,13 @@ import (
 	"errors"
 	"time"
 
+	"bitriver-live/internal/ctxutil"
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 )
 
-func runIngestBootWithRetry(controller ingest.Controller, params ingest.BootParams, timeout time.Duration, attempts int, retryInterval time.Duration) (ingest.BootResult, error) {
+func runIngestBootWithRetry(parent context.Context, controller ingest.Controller, params ingest.BootParams, timeout time.Duration, attempts int, retryInterval time.Duration) (ingest.BootResult, error) {
+	parent = ctxutil.Normalize(parent)
 	resolvedAttempts := attempts
 	if resolvedAttempts <= 0 {
 		resolvedAttempts = 1
@@ -21,7 +23,10 @@ func runIngestBootWithRetry(controller ingest.Controller, params ingest.BootPara
 		bootErr error
 	)
 	for attempt := 0; attempt < resolvedAttempts; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), deadline)
+		if err := parent.Err(); err != nil {
+			return boot, err
+		}
+		ctx, cancel := context.WithTimeout(parent, deadline)
 		boot, bootErr = controller.BootStream(ctx, params)
 		cancel()
 		if bootErr == nil {
@@ -31,7 +36,13 @@ func runIngestBootWithRetry(controller ingest.Controller, params ingest.BootPara
 			break
 		}
 		if attempt < resolvedAttempts-1 && retryInterval > 0 {
-			time.Sleep(retryInterval)
+			timer := time.NewTimer(retryInterval)
+			select {
+			case <-parent.Done():
+				timer.Stop()
+				return boot, parent.Err()
+			case <-timer.C:
+			}
 		}
 	}
 

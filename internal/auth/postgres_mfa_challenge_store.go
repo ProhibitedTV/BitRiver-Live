@@ -75,19 +75,7 @@ func (s *PostgresMFAChallengeStore) Ping(ctx context.Context) error {
 	if s == nil || s.pool == nil {
 		return fmt.Errorf("postgres mfa challenge pool not configured")
 	}
-	ctx = normalizeContext(ctx)
-	if s.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.timeout)
-		defer cancel()
-	}
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	_, execErr := conn.Exec(ctx, "SELECT 1")
-	return execErr
+	return pingPostgresPool(ctx, s.pool, s.timeout)
 }
 
 // Save stores or updates the MFA challenge token.
@@ -99,7 +87,7 @@ func (s *PostgresMFAChallengeStore) Save(token, userID string, expiresAt time.Ti
 	if err != nil {
 		return err
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	_, err = s.pool.Exec(ctx, `
 INSERT INTO auth_mfa_challenges (hashed_token, user_id, expires_at)
@@ -118,7 +106,7 @@ func (s *PostgresMFAChallengeStore) Get(token string) (MFAChallengeRecord, bool,
 	if err != nil {
 		return MFAChallengeRecord{}, false, err
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	row := s.pool.QueryRow(ctx, `
 SELECT user_id, expires_at
@@ -145,7 +133,7 @@ func (s *PostgresMFAChallengeStore) Delete(token string) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	_, err = s.pool.Exec(ctx, `DELETE FROM auth_mfa_challenges WHERE hashed_token = $1`, hashedToken)
 	return err
@@ -156,15 +144,8 @@ func (s *PostgresMFAChallengeStore) PurgeExpired(now time.Time) error {
 	if s.pool == nil {
 		return fmt.Errorf("postgres mfa challenge pool not configured")
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	_, err := s.pool.Exec(ctx, `DELETE FROM auth_mfa_challenges WHERE expires_at <= $1`, now.UTC())
 	return err
-}
-
-func (s *PostgresMFAChallengeStore) operationContext() (context.Context, context.CancelFunc) {
-	if s.timeout > 0 {
-		return context.WithTimeout(context.Background(), s.timeout)
-	}
-	return context.Background(), func() {}
 }

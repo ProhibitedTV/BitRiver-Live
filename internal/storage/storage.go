@@ -1130,7 +1130,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (domain.Str
 	}
 
 	timeout := normalizeIngestTimeout(s.ingestTimeout)
-	boot, bootErr := runIngestBootWithRetry(controller, ingest.BootParams{
+	boot, bootErr := runIngestBootWithRetry(context.Background(), controller, ingest.BootParams{
 		ChannelID:  channelID,
 		SessionID:  sessionID,
 		StreamKey:  channel.StreamKey,
