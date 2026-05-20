@@ -149,11 +149,14 @@ Evidence collected on 2026-03-21:
     - Completed on 2026-05-20 by threading a parent context through ingest boot retries and replacing retry sleeps with a cancellable timer.
     - Auth Postgres session and MFA challenge stores now share package-private timeout/ping helpers.
 
-- [ ] Task 6 — Route Postgres legal flows through repository timeout helpers
+- [x] Task 6 — Route Postgres legal flows through repository timeout helpers
   - Tracking issue: [#1245](https://github.com/ProhibitedTV/BitRiver-Live/issues/1245)
   - Acceptance criteria:
     - Legal repository queries stop using bare `context.Background()` for DB operations.
     - Existing legal behavior stays unchanged under targeted storage tests.
+  - Notes:
+    - Completed on 2026-05-20 by moving Postgres legal create/list/get/update/audit/history queries onto `withConn`, so they now share repository acquire timeout and connection-release behavior.
+    - Focused trim/status and scan helpers reduce repeated normalization while keeping public legal APIs unchanged.
 
 - [ ] Task 7 — Extract pure upload helpers from backend/frontend upload flows
   - Tracking issue: [#1246](https://github.com/ProhibitedTV/BitRiver-Live/issues/1246)

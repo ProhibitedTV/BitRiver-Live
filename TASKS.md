@@ -1,71 +1,65 @@
-## Scoped change: issue #1244 ingest/Postgres cancellation helpers
+## Scoped change: issue #1245 legal Postgres timeout helpers
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the ingest/Postgres helper plan
+- [x] Task 1 - Record the legal Postgres helper plan
   - Acceptance criteria:
-    - `PLAN.md` captures issue #1244 scope, assumptions, risks, and validation commands.
+    - `PLAN.md` captures issue #1245 scope, assumptions, risks, and validation commands.
     - `TASKS.md` lists ordered implementation and validation tasks before source edits continue.
-    - The read-only pass identifies `runIngestBootWithRetry`, stream start call sites, auth Postgres helper duplication, and cleanup-plan task 5.
+    - The read-only pass identifies direct `context.Background()` legal DB calls, existing `withConn`/`acquireContext` patterns, and cleanup-plan task 6.
 
-- [x] Task 2 - Make ingest boot retries cancellation-aware
+- [x] Task 2 - Route legal queries through repository timeout helpers
   - Acceptance criteria:
-    - `runIngestBootWithRetry` accepts a parent context and stops before or between attempts when it is canceled.
-    - Retry waits use a cancellable timer/select path rather than `time.Sleep`.
-    - Existing terminal context-error and transient-retry behavior remains covered by tests.
+    - Postgres legal methods stop using bare `context.Background()` for repository DB operations.
+    - Read/list/update/audit/history paths use `withConn` or `acquireContext` consistently with surrounding storage code.
+    - Nil/unavailable repository behavior remains consistent with existing Postgres methods.
 
-- [x] Task 3 - Reduce auth Postgres timeout helper duplication
+- [x] Task 3 - Extract focused legal normalization helpers
   - Acceptance criteria:
-    - Session and MFA challenge Postgres stores share package-private operation/ping timeout helpers.
-    - Exported store constructors, options, and method signatures remain unchanged.
-    - Existing auth tests continue to pass.
+    - Repeated trim/status normalization in `postgres_legal.go` is reduced where it clarifies behavior.
+    - Existing stored values, status casing, and not-found handling remain unchanged.
 
 - [x] Task 4 - Update cleanup tracking
   - Acceptance criteria:
-    - `docs/cleanup-plan.md` task 5 is marked complete after targeted auth/storage tests pass.
-    - Notes mention cancellable ingest retries and shared auth Postgres timeout helpers.
+    - `docs/cleanup-plan.md` task 6 is marked complete after targeted storage validation passes.
+    - Notes mention repository timeout helper usage for Postgres legal flows.
 
-- [x] Task 5 - Validate and publish
+- [ ] Task 5 - Validate and publish
   - Acceptance criteria:
-    - Targeted storage/auth tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
+    - Storage tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
     - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
 
-### Execution log (issue #1244 ingest/Postgres cancellation helpers)
-- Task 1 complete: after merging PR #1250 and syncing `main` to `840377f4`, selected issue #1244, created branch `codex/issue-1244-ingest-postgres-cancel`, fetched the issue, read nested agent notes, and audited `internal/storage/ingest_boot_helpers.go`, stream start call sites, `internal/storage/postgres_repository.go`, auth Postgres stores, and `docs/cleanup-plan.md` before source edits.
+### Execution log (issue #1245 legal Postgres timeout helpers)
+- Task 1 complete: after merging PR #1251 and syncing `main` to `f84717b`, selected issue #1245, created branch `codex/issue-1245-legal-postgres-timeouts`, fetched the issue, read nested storage agent notes, and audited `internal/storage/postgres_legal.go`, existing repository timeout helpers, legal storage behavior, and `docs/cleanup-plan.md` before source edits.
 - Task 1 checks:
-  - GitHub connector: fetched issue #1244.
+  - GitHub connector: fetched issue #1245.
   - `git checkout main`
   - `git pull --ff-only origin main`
-  - `git checkout -b codex/issue-1244-ingest-postgres-cancel`
+  - `git checkout -b codex/issue-1245-legal-postgres-timeouts`
+  - `rg --files -g AGENTS.md`
   - `Get-Content internal/storage/AGENTS.md`
-  - `Get-Content internal/auth/AGENTS.md`
-  - `rg -n "runIngestBootWithRetry|context\\.Background\\(\\)|time\\.Sleep|WithTimeout|Acquire\\(|acquire|timeout|postgres" internal/storage internal/auth`
-  - `Get-Content internal/storage/ingest_boot_helpers.go`
-  - `Get-Content internal/storage/stream_test.go`
-  - `Get-Content internal/storage/storage.go`
+  - `Get-Content internal/storage/postgres_legal.go`
   - `Get-Content internal/storage/postgres_repository.go`
-  - `Get-Content internal/auth/postgres_store.go`
-  - `Get-Content internal/auth/postgres_mfa_challenge_store.go`
-- Task 2 complete: `runIngestBootWithRetry` now accepts a parent context, checks cancellation before attempts, uses per-attempt child timeouts from that parent, and waits between retries with a cancellable timer instead of `time.Sleep`.
+  - `Get-Content internal/storage/legal.go`
+  - `rg -n "DMCACase|DataSubject|LegalState|legal" internal/storage -g "*_test.go"`
+  - `rg -n "context\\.Background\\(\\)|pool\\.(Query|Exec|QueryRow)|withConn\\(|acquireContext\\(" internal/storage --glob "postgres_*.go"`
+- Task 2 complete: Postgres legal list/get/update/create/audit/history methods now run database work through `withConn`, sharing the repository acquire timeout and connection lifecycle instead of using bare background contexts.
 - Task 2 checks:
-  - `gofmt -w internal/storage/ingest_boot_helpers.go internal/storage/storage.go internal/storage/postgres_channels.go internal/storage/stream_test.go internal/auth/postgres_context.go internal/auth/postgres_store.go internal/auth/postgres_mfa_challenge_store.go`
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -run "TestRunIngestBootWithRetry" -count=1 -timeout=120s` - passed.
-- Task 3 complete: added shared auth Postgres operation and ping helpers, then switched session and MFA challenge stores to use them without changing constructors, options, or public method signatures.
-- Task 3 checks:
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/auth -count=1 -timeout=120s` - passed.
-- Task 4 complete: marked `docs/cleanup-plan.md` task 5 complete with notes for cancellable ingest retry waits and shared auth Postgres timeout/ping helpers.
-- Task 4 checks:
+  - `gofmt -w internal/storage/postgres_legal.go`
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -count=1 -timeout=120s` - passed.
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/auth ./internal/storage -count=1 -timeout=120s` - passed.
-  - `rg -n "Task 5|runIngestBootWithRetry|postgresOperationContext|time\\.Sleep\\(retryInterval\\)|operationContext\\(" docs/cleanup-plan.md internal/storage internal/auth TASKS.md PLAN.md` - passed; no bare retry sleep or duplicated auth operation context helper remains.
+  - `rg -n "context\\.Background\\(\\)|r\\.pool\\.(Query|Exec|QueryRow)" internal/storage/postgres_legal.go` - passed; no matches.
+- Task 3 complete: added focused legal trim/status and scan helpers, then reused them across DMCA and data-subject paths while preserving existing status casing and not-found behavior.
+- Task 3 checks:
+  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -count=1 -timeout=120s` - passed.
+- Task 4 complete: marked `docs/cleanup-plan.md` task 6 complete with notes for Postgres legal `withConn` usage and focused normalization helpers.
+- Task 4 checks:
+  - `rg -n "Task 6|withConn|context\\.Background\\(\\)|r\\.pool\\.(Query|Exec|QueryRow)|trimLegalText|normalizeLegalStatus" docs/cleanup-plan.md internal/storage/postgres_legal.go TASKS.md PLAN.md` - passed; source hits show helper usage and no bare background/direct pool calls in `postgres_legal.go`.
+  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/storage -count=1 -timeout=120s` - passed.
 - Task 5 validation progress:
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed with line-ending warnings only.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification; viewer checks were skipped because no viewer files changed.
-- Task 5 complete: committed and pushed the branch, opened draft PR #1251, and confirmed GitHub CI passed on the PR head before merge.
-- Task 5 publishing:
-  - `git add PLAN.md TASKS.md docs/cleanup-plan.md internal/auth/postgres_context.go internal/auth/postgres_mfa_challenge_store.go internal/auth/postgres_store.go internal/storage/ingest_boot_helpers.go internal/storage/postgres_channels.go internal/storage/storage.go internal/storage/stream_test.go`
-  - `git commit -m "storage: make ingest retries cancellable"`
-  - `git push -u origin codex/issue-1244-ingest-postgres-cancel`
-  - GitHub connector: opened draft PR #1251.
-  - GitHub connector: CI completed successfully for the PR head.
+  - `git add PLAN.md TASKS.md docs/cleanup-plan.md internal/storage/postgres_legal.go`
+  - `git commit -m "storage: use timeout helpers for legal postgres"`
+  - `git push -u origin codex/issue-1245-legal-postgres-timeouts`
+  - GitHub connector: opened draft PR #1252.
