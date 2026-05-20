@@ -140,11 +140,14 @@ Evidence collected on 2026-03-21:
     - Completed on 2026-05-20 after verifying the auth session timing tests already use a deterministic test clock.
     - The in-memory rate limiter now has a private clock hook for deterministic tests while defaulting to wall-clock time in runtime code.
 
-- [ ] Task 5 — Make ingest/Postgres helpers cancellation-aware and reduce duplicated timeout plumbing
+- [x] Task 5 — Make ingest/Postgres helpers cancellation-aware and reduce duplicated timeout plumbing
   - Tracking issue: [#1244](https://github.com/ProhibitedTV/BitRiver-Live/issues/1244)
   - Acceptance criteria:
     - `runIngestBootWithRetry` respects caller cancellation between attempts.
     - Shared timeout/context logic is reduced across Postgres-backed stores without changing public APIs.
+  - Notes:
+    - Completed on 2026-05-20 by threading a parent context through ingest boot retries and replacing retry sleeps with a cancellable timer.
+    - Auth Postgres session and MFA challenge stores now share package-private timeout/ping helpers.
 
 - [ ] Task 6 — Route Postgres legal flows through repository timeout helpers
   - Tracking issue: [#1245](https://github.com/ProhibitedTV/BitRiver-Live/issues/1245)

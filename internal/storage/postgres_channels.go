@@ -809,7 +809,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 	deadline := normalizeIngestTimeout(r.ingestTimeout)
-	boot, bootErr := runIngestBootWithRetry(controller, ingest.BootParams{
+	boot, bootErr := runIngestBootWithRetry(context.Background(), controller, ingest.BootParams{
 		ChannelID:  channelID,
 		SessionID:  sessionID,
 		StreamKey:  streamKey,

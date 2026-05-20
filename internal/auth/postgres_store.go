@@ -80,19 +80,7 @@ func (s *PostgresSessionStore) Ping(ctx context.Context) error {
 	if s == nil || s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
-	ctx = normalizeContext(ctx)
-	if s.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.timeout)
-		defer cancel()
-	}
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	_, execErr := conn.Exec(ctx, "SELECT 1")
-	return execErr
+	return pingPostgresPool(ctx, s.pool, s.timeout)
 }
 
 // Save stores or updates the session token.
@@ -104,7 +92,7 @@ func (s *PostgresSessionStore) Save(token, userID string, expiresAt, absoluteExp
 	if err != nil {
 		return err
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	_, err = s.pool.Exec(ctx, `
 INSERT INTO auth_sessions (token, hashed_token, user_id, expires_at, absolute_expires_at)
@@ -123,7 +111,7 @@ func (s *PostgresSessionStore) Get(token string) (SessionRecord, bool, error) {
 	if err != nil {
 		return SessionRecord{}, false, err
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	row := s.pool.QueryRow(ctx, `
 SELECT user_id, expires_at, absolute_expires_at
@@ -150,7 +138,7 @@ func (s *PostgresSessionStore) Delete(token string) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	_, err = s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE hashed_token = $1`, hashedToken)
 	return err
@@ -161,17 +149,10 @@ func (s *PostgresSessionStore) PurgeExpired(now time.Time) error {
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
-	ctx, cancel := s.operationContext()
+	ctx, cancel := postgresOperationContext(s.timeout)
 	defer cancel()
 	_, err := s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE expires_at <= $1 OR absolute_expires_at <= $1`, now.UTC())
 	return err
-}
-
-func (s *PostgresSessionStore) operationContext() (context.Context, context.CancelFunc) {
-	if s.timeout > 0 {
-		return context.WithTimeout(context.Background(), s.timeout)
-	}
-	return context.Background(), func() {}
 }
 
 func isNoRows(err error) bool {

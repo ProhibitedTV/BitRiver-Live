@@ -28,6 +28,7 @@ type fakeIngestController struct {
 	bootDefault     ingest.BootResult
 	bootErr         error
 	bootCalls       int
+	onBoot          func(int)
 	shutdownErr     error
 	shutdownCalls   []shutdownCall
 	healthResponses [][]ingest.HealthStatus
@@ -37,6 +38,9 @@ type fakeIngestController struct {
 func (f *fakeIngestController) BootStream(ctx context.Context, params ingest.BootParams) (ingest.BootResult, error) {
 	idx := f.bootCalls
 	f.bootCalls++
+	if f.onBoot != nil {
+		f.onBoot(idx)
+	}
 	if idx < len(f.bootResponses) {
 		resp := f.bootResponses[idx]
 		if resp.err != nil {
@@ -81,7 +85,7 @@ func TestRunIngestBootWithRetryStopsOnContextTerminalErrors(t *testing.T) {
 	retryInterval := 100 * time.Millisecond
 
 	start := time.Now()
-	_, err := runIngestBootWithRetry(controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
+	_, err := runIngestBootWithRetry(context.Background(), controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
 	elapsed := time.Since(start)
 
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -102,7 +106,7 @@ func TestRunIngestBootWithRetryRetriesOnTransientErrors(t *testing.T) {
 	retryInterval := 25 * time.Millisecond
 
 	start := time.Now()
-	boot, err := runIngestBootWithRetry(controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
+	boot, err := runIngestBootWithRetry(context.Background(), controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -116,6 +120,49 @@ func TestRunIngestBootWithRetryRetriesOnTransientErrors(t *testing.T) {
 	}
 	if elapsed < retryInterval/2 {
 		t.Fatalf("expected retry delay for transient errors; elapsed=%v retryInterval=%v", elapsed, retryInterval)
+	}
+}
+
+func TestRunIngestBootWithRetryStopsWhenParentContextCanceled(t *testing.T) {
+	transientErr := errors.New("transient ingest failure")
+	ctx, cancel := context.WithCancel(context.Background())
+	controller := &fakeIngestController{
+		bootResponses: []bootResponse{{err: transientErr}, {result: ingest.BootResult{PlaybackURL: "https://playback.example"}}},
+		onBoot: func(attempt int) {
+			if attempt == 0 {
+				cancel()
+			}
+		},
+	}
+	retryInterval := time.Hour
+
+	start := time.Now()
+	_, err := runIngestBootWithRetry(ctx, controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if controller.bootCalls != 1 {
+		t.Fatalf("expected exactly 1 boot attempt, got %d", controller.bootCalls)
+	}
+	if elapsed >= 100*time.Millisecond {
+		t.Fatalf("expected retry wait to stop on cancellation, elapsed=%v", elapsed)
+	}
+}
+
+func TestRunIngestBootWithRetrySkipsAttemptsWhenParentContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	controller := &fakeIngestController{bootDefault: ingest.BootResult{PlaybackURL: "https://playback.example"}}
+
+	_, err := runIngestBootWithRetry(ctx, controller, ingest.BootParams{}, 50*time.Millisecond, 3, time.Hour)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if controller.bootCalls != 0 {
+		t.Fatalf("expected no boot attempts, got %d", controller.bootCalls)
 	}
 }
 
