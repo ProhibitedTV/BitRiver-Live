@@ -25,7 +25,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `docs/cleanup-plan.md` task 5 is marked complete after targeted auth/storage tests pass.
     - Notes mention cancellable ingest retries and shared auth Postgres timeout helpers.
 
-- [-] Task 5 - Validate and publish
+- [x] Task 5 - Validate and publish
   - Acceptance criteria:
     - Targeted storage/auth tests, full Go tests, diff hygiene, and the repo verification gate pass or blockers are recorded.
     - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
@@ -62,3 +62,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed with line-ending warnings only.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` - passed full repo verification; viewer checks were skipped because no viewer files changed.
+- Task 5 complete: committed and pushed the branch, opened draft PR #1251, and confirmed GitHub CI passed on the PR head before merge.
+- Task 5 publishing:
+  - `git add PLAN.md TASKS.md docs/cleanup-plan.md internal/auth/postgres_context.go internal/auth/postgres_mfa_challenge_store.go internal/auth/postgres_store.go internal/storage/ingest_boot_helpers.go internal/storage/postgres_channels.go internal/storage/storage.go internal/storage/stream_test.go`
+  - `git commit -m "storage: make ingest retries cancellable"`
+  - `git push -u origin codex/issue-1244-ingest-postgres-cancel`
+  - GitHub connector: opened draft PR #1251.
+  - GitHub connector: CI completed successfully for the PR head.
