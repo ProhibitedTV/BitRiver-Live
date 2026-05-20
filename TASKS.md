@@ -1,3 +1,87 @@
+## Scoped change: issue #1226 split viewer CSS
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the CSS split plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1226 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before source edits begin.
+    - The read-only pass identifies stylesheet size, import constraints, broad selector families, likely stale selectors, and existing visual/unit coverage.
+
+- [x] Task 2 - Split global CSS by feature boundary
+  - Acceptance criteria:
+    - `globals.css` is reduced to tokens, resets, and truly shared utilities.
+    - Navigation, viewer shell/following, directory/browse, channel/watch/media, chat, creator/studio, shared polish, and responsive hardening rules live in clearly named stylesheet files.
+    - `app/layout.tsx` imports the split styles in an order that preserves current overrides.
+
+- [x] Task 3 - Remove confirmed stale selectors
+  - Acceptance criteria:
+    - Obsolete Browse hero/featured-card selectors are removed after code search confirms they are unused.
+    - Obsolete creator live helper selectors are removed after code search confirms they are unused.
+    - Any retained broad/shared selectors have an obvious home in the split files.
+
+- [x] Task 4 - Update CSS regression guardrails
+  - Acceptance criteria:
+    - Existing CSS contract tests are updated if they read `globals.css` directly.
+    - Focused unit tests still cover navbar focus styles and creator/channel shared primitives.
+    - Browser coverage still exercises homepage, nav, mobile layout, channel watch, creator live, uploads, schedule, and Browse/accessibility surfaces.
+
+- [x] Task 5 - Run validation and publish
+  - Acceptance criteria:
+    - Focused tests, targeted Playwright, lint, build, diff check, repo viewer gate, and CI are run or host blockers are recorded.
+    - Changes are committed, pushed, and opened as a draft PR.
+    - PR summary lists split files, deleted stale selectors, and any intentional visual changes.
+
+- [x] Task 6 - Remediate CI mobile nav ordering regression
+  - Acceptance criteria:
+    - PR #1240 Viewer CI mobile navbar failure is recorded with the failing surfaces.
+    - Navbar breakpoint rules live in `navigation.css` after the final `.nav-toggle` base declaration.
+    - `viewer-shell.css` no longer owns navbar-specific responsive rules.
+    - Focused navbar/mobile Playwright coverage passes after the fix.
+
+### Execution log (issue #1226 split viewer CSS)
+- Task 1 complete: after merging PR #1239 and syncing local `main` to `9e5a40c0`, selected issue #1226 as the next oldest open product ticket, created branch `codex/issue-1226-split-viewer-css`, and audited stylesheet size/imports, nested AGENTS scope, existing global style files, app root CSS imports, broad selector families, code/test class usage, and stale Browse/creator-live selectors before source edits.
+- Task 1 checks:
+  - GitHub connector: searched open issues sorted by creation date and selected issue #1226.
+  - `git checkout main`
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1226-split-viewer-css`
+  - `rg --files -g AGENTS.md`
+  - `Get-Content web/AGENTS.md`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content web/viewer/app/layout.tsx`
+  - `(Get-Content -Path web/viewer/styles/globals.css).Count`
+  - `rg -n "^/\\*|^:root|^body|^@media|^\\.([a-zA-Z0-9_-]+)|^#" web/viewer/styles/globals.css`
+  - `Get-ChildItem web/viewer/styles`
+  - `rg -n "className=|className\\s*=|styles/globals|styles/home|workspace-|viewer-shell|channel-|creator-|browse-|chat-|following-|navbar|nav-" web/viewer/app web/viewer/components web/viewer/__tests__ web/viewer/tests`
+  - `rg -n "browse-hero|stat-pill|featured-card|workspace-hero|workspace-summary-grid|summary-card|creator-live__hero-note|creator-live__notes|creator-live__ingest-list|step-grid|step-card__status" web/viewer/app web/viewer/components web/viewer/__tests__ web/viewer/tests`
+  - `rg -n "browse-hero|stat-pill|featured-card|workspace-hero|workspace-summary-grid|summary-card|creator-live__hero-note|creator-live__notes|creator-live__ingest-list|step-grid|step-card__status" web/viewer/styles/globals.css`
+- Task 2 complete: split `globals.css` into base/shared utilities plus `navigation.css`, `viewer-shell.css`, `directory.css`, `channel-watch.css`, `chat.css`, `creator-studio.css`, `shared-polish.css`, and `responsive.css`; `app/layout.tsx` imports the split styles before `home.css`.
+- Task 2 checks:
+  - CSS brace-balance script over `web/viewer/styles/*.css` - passed after fixing mechanical line-range boundaries.
+  - `npm.cmd --prefix web/viewer run build` - first run failed on split range brace boundaries; rerun passed after correcting those ranges, with existing Browserslist and Next.js client-render deopt warnings.
+- Task 3 complete: removed stale CSS-only selectors for the old Browse hero/featured-card flow, unused `.hero`, and obsolete creator-live helper classes after code search confirmed no app/component/test usage.
+- Task 3 checks:
+  - `rg -n "browse-hero|stat-pill|featured-card|creator-live__hero-note|creator-live__notes|creator-live__ingest-list|\\.hero\\b" web/viewer/styles` - no matches after cleanup.
+- Task 4 complete: updated the navbar CSS contract test to read the split `navigation.css` file for focus selector rules while keeping theme variables in `globals.css`; existing unit and browser coverage passed across the CSS-sensitive viewer surfaces.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx creatorLivePage.test.tsx channelManagementPrimitives.test.tsx channelPage.test.tsx --silent` - passed 4 suites and 55 tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/homepage-layout.spec.ts tests/navbar-mobile.spec.ts tests/mobile-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts tests/creator-uploads.spec.ts tests/creator-schedule.spec.ts tests/accessibility.spec.ts` - passed 26 tests with existing Browserslist, Next.js client-render deopt, and non-fatal render-aborted warnings.
+- Task 5 complete: ran lint, build, diff hygiene, and the full repo viewer gate before staging the PR-ready CSS split.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - first run failed on an extra trailing blank line in rewritten CSS; rerun passed after normalizing CSS file endings and undoing the accidental no-op `home.css` normalization.
+  - `npm.cmd --prefix web/viewer run build` - passed during Task 2 and again as the Playwright pretest build, with existing Browserslist and Next.js client-render deopt warnings.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed the full repo viewer gate, including Go tests, architecture/import checks, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks. Existing React `act(...)`, Browserslist, Next.js deopt, and non-fatal render-aborted warnings were observed without failing the gate.
+- Task 6 complete: PR #1240 Viewer CI run #449 failed the mobile navbar Playwright checks because the mobile toggle was absent/hidden at small viewport widths; moved navbar breakpoint rules back into `navigation.css` after the final `.nav-toggle { display: none; }` base rule, removed navbar-specific responsive selectors from `viewer-shell.css`, and added a CSS contract assertion for the ordering.
+- Task 6 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx --silent` - passed 1 suite and 29 tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts tests/mobile-layout.spec.ts` - passed 7 tests with existing Browserslist and Next.js client-render deopt warnings.
+  - `npm.cmd --prefix web/viewer run lint` - passed.
+  - `git diff --check` - passed with expected working-tree line-ending warnings.
+  - `go test ./cmd/transcoder -run TestHealthDegradedWhenUploadPublishFails -count=1 -timeout=120s` - passed on rerun after the first full gate saw this unrelated test return a transient 500.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - first rerun failed on the unrelated transcoder health test above; second rerun passed the full repo viewer gate, including Go tests, contract invariants, Docker Compose config validation, quickstart smoke, and viewer checks.
+
 ## Scoped change: issue #1224 shared channel management primitives
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

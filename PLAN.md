@@ -1,4 +1,35 @@
 ## Scope (current change)
+- Address GitHub issue #1226 by breaking the oversized viewer `globals.css` into feature-scoped stylesheet files while preserving the current visual contract.
+- Keep `globals.css` focused on base tokens, resets, and shared utility primitives; move navigation, viewer shell/following, directory/browse, channel/watch/media, chat, creator/studio, shared polish, and responsive hardening into named CSS files.
+- Remove only selectors proven stale by code search, starting with old Browse hero/featured-card styles and obsolete creator-live helper classes.
+- Update the viewer root layout to import the split styles in a deterministic order.
+- Keep this change viewer-only and CSS-focused, with source component edits limited to stylesheet imports if needed.
+
+## Assumptions
+- Next.js allows multiple global CSS imports from the app root layout; preserving import order is the safest way to keep behavior stable during the split.
+- The earlier issue #1221/#1223/#1224 work removed the old Browse hero/featured shortlist and creator live page-local helper sections, leaving some CSS-only selectors behind.
+- Existing Playwright coverage for homepage, navbar, browse/mobile, channel, creator live/uploads/schedule, and accessibility is the right regression guard for a CSS-only split.
+- This pass should be mostly mechanical; any deeper class renaming or component-level CSS modules should be deferred unless the split exposes a small, obvious stale selector.
+
+## Risks
+- CSS order is behavior: moving late rescue rules ahead of older feature rules can silently regress focus rings, mobile layout, or shell spacing.
+- Broad shared classes such as `.surface`, `.workspace-card`, `.summary-card`, `.chip-row`, and `.stack` are used across multiple pages, so they should remain shared or move to a clearly imported shared file.
+- Some duplicated selectors are intentional later overrides from recent issue work; deletion should be limited to selectors with no app/component/test usage.
+- Visual regressions may only appear at mobile widths, so browser coverage should include the existing mobile layout and navbar/channel suites.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx creatorLivePage.test.tsx channelManagementPrimitives.test.tsx channelPage.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/homepage-layout.spec.ts tests/navbar-mobile.spec.ts tests/mobile-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts tests/creator-uploads.spec.ts tests/creator-schedule.spec.ts tests/accessibility.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `git diff --check`
+- `./scripts/verify.sh --viewer`
+
+## CI remediation note
+- PR #1240 Viewer CI exposed a mobile navbar regression in the split stylesheet ordering: the late `.nav-toggle { display: none; }` navigation base rule can override the mobile media rule when the enabling rule lives in another feature stylesheet.
+- Keep navbar breakpoint rules inside `navigation.css` after the final navbar base declarations, and leave `viewer-shell.css` responsible only for viewer shell/sidebar breakpoints.
+
+## Scope (current change)
 - Address GitHub issue #1224 by extracting shared channel management primitives from the creator live route and consolidating owner workflows around reusable viewer components.
 - Keep the existing compatibility routes (`/creator/live/[channelId]`, `/creator/uploads/[channelId]`) while making route pages thinner and less responsible for page-local UI implementations.
 - Preserve the compact channel-studio shell introduced by issue #1223 and avoid reintroducing broad hero or summary card blocks.
