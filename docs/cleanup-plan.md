@@ -114,11 +114,13 @@ Evidence collected on 2026-03-21:
   - Follow-ups:
     - The full Go suite still fails in `cmd/transcoder` and `scripts`, which lines up with tasks 2 and 3 below.
 
-- [ ] Task 2 — Harden `scripts` quickstart tests against shell availability
+- [x] Task 2 — Harden `scripts` quickstart tests against shell availability
   - Tracking issue: [#1241](https://github.com/ProhibitedTV/BitRiver-Live/issues/1241)
   - Acceptance criteria:
     - `scripts/quickstart_test.go` no longer fails before exercising wrapper logic on Windows.
     - Any skip path is explicit and limited to genuinely unsupported hosts.
+  - Notes:
+    - Verified on 2026-05-20 that `scripts/quickstart_test.go` already discovers `BITRIVER_TEST_BASH`, Git Bash install paths, and `exec.LookPath("bash")`, then skips with a precise reason only when no usable Bash is available.
 
 - [ ] Task 3 — Stabilize `cmd/transcoder` test fixtures and health recovery polling
   - Tracking issue: [#1242](https://github.com/ProhibitedTV/BitRiver-Live/issues/1242)
