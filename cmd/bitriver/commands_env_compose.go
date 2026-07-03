@@ -1574,7 +1574,17 @@ func parseComposeServiceStates(raw []byte) (map[string]quickstartComposeServiceS
 
 	var services []quickstartComposeServiceStatus
 	if err := json.Unmarshal([]byte(trimmed), &services); err != nil {
-		return nil, err
+		decoder := json.NewDecoder(strings.NewReader(trimmed))
+		for {
+			var svc quickstartComposeServiceStatus
+			if decodeErr := decoder.Decode(&svc); decodeErr != nil {
+				if errors.Is(decodeErr, io.EOF) {
+					break
+				}
+				return nil, err
+			}
+			services = append(services, svc)
+		}
 	}
 
 	states := make(map[string]quickstartComposeServiceStatus, len(services))

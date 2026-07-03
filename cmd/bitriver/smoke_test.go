@@ -78,6 +78,22 @@ func TestSmokeCheckComposeStateFailsWithoutBitriverLive(t *testing.T) {
 	}
 }
 
+func TestParseComposeServiceStatesSupportsNDJSON(t *testing.T) {
+	states, err := parseComposeServiceStates([]byte(strings.Join([]string{
+		`{"Service":"bitriver-live","State":"running","Status":"Up","Health":"healthy"}`,
+		`{"Service":"redis","State":"running","Status":"Up","Health":"healthy"}`,
+	}, "\n")))
+	if err != nil {
+		t.Fatalf("parse compose NDJSON: %v", err)
+	}
+	if _, ok := states["bitriver-live"]; !ok {
+		t.Fatalf("missing bitriver-live state: %#v", states)
+	}
+	if _, ok := states["redis"]; !ok {
+		t.Fatalf("missing redis state: %#v", states)
+	}
+}
+
 func TestPortOrDefaultFallsBackOnInvalid(t *testing.T) {
 	values := map[string]string{"BITRIVER_OME_HTTP_PORT": "not-a-number"}
 	if got := portOrDefault(values, "BITRIVER_OME_HTTP_PORT", "8081"); got != "8081" {

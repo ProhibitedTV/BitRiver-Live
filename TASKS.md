@@ -22,13 +22,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `./scripts/verify.sh --viewer` passes or blockers are recorded.
     - The release diff excludes secrets and unsafe local artifacts.
 
-- [-] Task 4 - Commit, merge/sync, and push
+- [x] Task 4 - Commit, merge/sync, and push
   - Acceptance criteria:
     - `origin/main` relationship is checked before pushing.
     - Commit includes only intended scoped files.
     - Push to the requested remote branch succeeds.
 
-- [ ] Task 5 - Deploy and prove health
+- [x] Task 5 - Deploy and prove health
   - Acceptance criteria:
     - Canonical quickstart/Compose deployment is run.
     - API and viewer endpoints respond.
@@ -47,3 +47,20 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed after verifier redaction and Docker-ignore updates; included Go tests, contract checks, Docker Compose config validation, quickstart smoke, viewer lint, and full viewer Jest suite.
   - `docker build --progress=plain --target builder --build-arg GOPROXY=direct --build-arg GOSUMDB=off -f Dockerfile .` - passed and confirmed the root Docker build context is down to roughly 30 KB for the API builder path.
   - Notes: viewer lint still reports the existing `UploadManager` exhaustive-deps warning; Jest still emits existing React `act(...)` warnings while all tests pass.
+- Task 4 complete:
+  - `git fetch origin --prune` - passed.
+  - `git rev-list --left-right --count main...origin/main` - returned `0 0` before release staging.
+  - `git add -u` staged tracked files only; unsafe untracked deployment artifacts were left untracked.
+  - `git commit -m "viewer: simplify UI and first-run flow"` created `68ba0bbb`.
+  - `git push origin main` pushed `main` to `origin/main`.
+- Task 5 deployment proof:
+  - `./scripts/quickstart.sh --compose-file deploy/docker-compose.yml --image-source build` correctly rejected the local persisted production/build `.env` combination.
+  - Local ignored `.env` was restored to development mode for a source build without staging secrets or contract files.
+  - `go run ./cmd/bitriver env render-ome --env-file ./.env --output deploy/ome/Server.generated.xml` rendered the local OME config.
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never` built and started the stack.
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps` showed core services healthy and viewer/transcoder public services running.
+  - `Invoke-WebRequest` probes returned HTTP 200 for `/healthz`, `/readyz`, and `/viewer`.
+  - First smoke run exposed Docker Compose 5 newline-delimited JSON output from `ps --format json`; updated the smoke parser to accept both arrays and JSON object streams.
+  - Focused Go smoke parser tests passed.
+  - `go run ./cmd/bitriver smoke --compose-file deploy/docker-compose.yml --env-file ./.env` passed all 7 smoke checks against the running deployment.
+  - Final `./scripts/verify.sh --viewer` rerun passed after the smoke parser fix; it rebuilt/restarted the source stack, completed quickstart smoke, and ran viewer lint plus all 205 Jest tests.
