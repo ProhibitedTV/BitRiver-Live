@@ -65,7 +65,7 @@ describe("CreatorGettingStartedPage", () => {
     renderWithProviders(<CreatorGettingStartedPage />);
 
     expect(await screen.findByRole("heading", { level: 3, name: /create your first channel/i })).toBeInTheDocument();
-    expect(screen.getByText(/We'll upgrade this account for creator tools automatically/i)).toBeInTheDocument();
+    expect(screen.getByText(/creator tools unlock after the first channel is created/i)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Channel name"), "My First Channel");
     await user.type(screen.getByLabelText("Primary category"), "Just Chatting");
@@ -155,7 +155,7 @@ describe("CreatorGettingStartedPage", () => {
     renderWithProviders(<CreatorGettingStartedPage />);
 
     expect(await screen.findByText(/current status: live/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Live").length).toBeGreaterThan(1);
+    expect(screen.getByText("Live")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /copy viewer link/i }));
     expect(await screen.findByText(/viewer link copied/i)).toBeInTheDocument();

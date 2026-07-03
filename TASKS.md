@@ -1,62 +1,49 @@
-## Scoped change: issue #1246 upload helper extraction
+## Scoped change: release, push, and first-run deployment readiness
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the upload helper plan
+- [x] Task 1 - Reframe the release/deploy scope
   - Acceptance criteria:
-    - `PLAN.md` captures issue #1246 scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists ordered implementation and validation tasks before source edits continue.
-    - The read-only pass identifies backend multipart parsing/default logic, viewer payload/state mapping, existing upload tests, and cleanup-plan task 7.
+    - `PLAN.md` captures release, first-run guidance, deployment, and verification scope.
+    - `TASKS.md` lists ordered tasks before any source/doc edits for this pass.
+    - Unsafe local deployment artifacts are identified before staging.
 
-- [x] Task 2 - Extract backend upload parsing helpers
+- [x] Task 2 - Tighten first-run process guidance
   - Acceptance criteria:
-    - `internal/api/uploads_handlers.go` sheds at least one pure parsing/state-mapping helper.
-    - Multipart field parsing and file-derived defaults preserve current trimming, metadata, title, filename, and size behavior.
-    - Focused Go tests cover the extracted helper behavior.
+    - Any doc/process change uses commands that already exist in the repository.
+    - Windows/PowerShell guidance avoids the WSL Bash failure mode seen during verification.
+    - Verification no longer prints local secrets during a successful Compose config check.
+    - Docker source-build context excludes local caches and generated viewer build output.
+    - No deployment contract files are changed.
 
-- [x] Task 3 - Extract viewer upload payload helpers
+- [x] Task 3 - Re-run release verification
   - Acceptance criteria:
-    - `web/viewer/components/UploadManager.tsx` sheds at least one pure payload/state-mapping helper.
-    - Metadata and size parsing keep the same `undefined` and trimming behavior.
-    - Focused Jest tests cover the extracted helper behavior.
+    - Diff hygiene passes.
+    - `./scripts/verify.sh --viewer` passes or blockers are recorded.
+    - The release diff excludes secrets and unsafe local artifacts.
 
-- [x] Task 4 - Update cleanup tracking
+- [-] Task 4 - Commit, merge/sync, and push
   - Acceptance criteria:
-    - `docs/cleanup-plan.md` task 7 is marked complete after targeted API/viewer tests pass.
-    - Notes mention backend and frontend helper extraction.
+    - `origin/main` relationship is checked before pushing.
+    - Commit includes only intended scoped files.
+    - Push to the requested remote branch succeeds.
 
-- [ ] Task 5 - Validate and publish
+- [ ] Task 5 - Deploy and prove health
   - Acceptance criteria:
-    - Targeted API/viewer tests, full Go tests, diff hygiene, and the viewer-inclusive repo verification gate pass or blockers are recorded.
-    - Changes are committed, pushed, opened as a draft PR, CI is checked, and the PR is merged when green.
+    - Canonical quickstart/Compose deployment is run.
+    - API and viewer endpoints respond.
+    - Smoke/health checks pass or blockers are recorded.
 
-### Execution log (issue #1246 upload helper extraction)
-- Task 1 complete: after merging PR #1252 and syncing `main` to `e457f91`, selected issue #1246, created branch `codex/issue-1246-extract-upload-helpers`, fetched the issue, read nested API/viewer agent notes, and audited `internal/api/uploads_handlers.go`, `web/viewer/components/UploadManager.tsx`, existing upload tests, viewer test config, and `docs/cleanup-plan.md` before source edits.
-- Task 1 checks:
-  - GitHub connector: fetched issue #1246.
-  - `git checkout main`
-  - `git pull --ff-only origin main`
-  - `git checkout -b codex/issue-1246-extract-upload-helpers`
-  - `Get-Content internal/api/AGENTS.md`
-  - `Get-Content web/viewer/AGENTS.md`
-  - `Get-Content internal/api/uploads_handlers.go`
-  - `Get-Content web/viewer/components/UploadManager.tsx`
-  - `rg -n "Upload|upload|UploadManager|createUpload|metadata|deriveTitle|formatFileSize" internal/api web/viewer -g "*_test.go" -g "*.test.ts" -g "*.test.tsx"`
-  - `Get-Content internal/api/uploads_handlers_test.go`
-  - `Get-Content web/viewer/__tests__/uploadManager.test.tsx`
-- Task 2 complete: extracted backend multipart field parsing and file-derived default mapping into focused helpers, then switched `createUploadFromMultipart` to use them.
-- Task 2 checks:
-  - `gofmt -w internal/api/uploads_handlers.go internal/api/uploads_handlers_test.go`
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/api -count=1 -timeout=120s` - passed.
-- Task 3 complete: extracted viewer metadata and upload-payload construction helpers from the React submit callback, then added focused Jest coverage for trim, blank metadata value, empty metadata, and size parsing behavior.
+### Execution log
+- Task 1 read-only pass:
+  - `git status --short --branch` showed the viewer simplification diff on `main` plus untracked deployment docs/scripts.
+  - Read root/deploy/scripts/docs agent notes, `PLAN.md`, `TASKS.md`, quickstart docs, canonical scripts, and deployment docs before source edits.
+  - Inspected untracked deployment files and found local credential values plus non-canonical/stale deployment workflow claims; they will not be staged as-is.
+- Task 2 complete: updated `README.md`, `docs/quickstart.md`, and `deploy/README.md` with native PowerShell quickstart/preflight guidance and Git Bash/WSL clarification without changing deployment contract files.
+- Task 2 follow-up: updated `scripts/verify.sh` so successful Compose config validation prints only a success line and failure output is redacted; updated `.dockerignore` to keep local caches and generated viewer build output out of Docker build contexts.
 - Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx` - passed.
-- Task 4 complete: marked `docs/cleanup-plan.md` task 7 complete with notes for backend multipart helpers and viewer payload builders.
-- Task 4 checks:
-  - `rg -n "Task 7|applyUploadMultipartField|applyUploadMediaDefaults|buildUploadMetadata|buildUploadPayload" docs/cleanup-plan.md internal/api web/viewer TASKS.md PLAN.md` - passed.
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./internal/api -count=1 -timeout=120s` - passed.
-  - `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx` - passed.
-- Task 5 validation progress:
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.codex-tmp\go-build'; go test ./... -count=1 -timeout=120s` - passed.
-  - `git diff --check` - passed with line-ending warnings only.
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed full repo verification with viewer lint/test included.
+  - `git diff --check` - passed with line-ending normalization warnings only.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -n ./scripts/verify.sh` - passed.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - passed after verifier redaction and Docker-ignore updates; included Go tests, contract checks, Docker Compose config validation, quickstart smoke, viewer lint, and full viewer Jest suite.
+  - `docker build --progress=plain --target builder --build-arg GOPROXY=direct --build-arg GOSUMDB=off -f Dockerfile .` - passed and confirmed the root Docker build context is down to roughly 30 KB for the API builder path.
+  - Notes: viewer lint still reports the existing `UploadManager` exhaustive-deps warning; Jest still emits existing React `act(...)` warnings while all tests pass.

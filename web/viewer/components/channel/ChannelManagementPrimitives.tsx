@@ -319,7 +319,7 @@ export function ChannelSetupCard({
     <Card className="workspace-card step-card" aria-labelledby="channel-section-heading">
       <CardHeader className="workspace-card__header">
         <h3 id="channel-section-heading">1) Channel</h3>
-        <p className="muted">Confirm the channel and title viewers should see before you open OBS.</p>
+        <p className="muted">Confirm channel, title, and schedule.</p>
       </CardHeader>
       <CardBody className="creator-live__section">
         <ChannelIdentityPanel
@@ -390,7 +390,7 @@ export function ObsSettingsPanel({
     <Card className="workspace-card step-card" aria-labelledby="obs-setup-heading">
       <CardHeader className="workspace-card__header">
         <h3 id="obs-setup-heading">2) Stream settings</h3>
-        <p className="muted">Use these values in OBS &gt; Settings &gt; Stream.</p>
+        <p className="muted">Paste these values into OBS.</p>
       </CardHeader>
       <CardBody className="creator-live__section">
         <div className="creator-live__field-group">
@@ -455,7 +455,7 @@ export function ObsSettingsPanel({
           <strong>OBS</strong>
           <p className="muted">Service: Custom</p>
           <p className="muted">Server: {preferredIngestEndpoint ?? "Not available yet"}</p>
-          <p className="muted">Stream key: reveal or copy it above when you need it.</p>
+          <p className="muted">Stream key: reveal or copy above.</p>
         </div>
 
         <div className="workspace-card__actions">
@@ -463,7 +463,7 @@ export function ObsSettingsPanel({
             Copy OBS settings
           </Button>
         </div>
-        <p className="muted">Paste the copied settings into OBS and start streaming.</p>
+        <p className="muted">Start streaming after OBS is configured.</p>
         {obsSettingsCopyMessage ? (
           <p className={obsSettingsCopyMessage.startsWith("Copied") ? "muted" : "error"}>{obsSettingsCopyMessage}</p>
         ) : null}
@@ -497,9 +497,7 @@ export function LivePreviewPanel({
     <Card className="workspace-card step-card" aria-labelledby="test-stream-heading">
       <CardHeader className="workspace-card__header">
         <h3 id="test-stream-heading">3) Go live</h3>
-        <p className="muted">
-          Start the stream in OBS. This page checks the signal every 4 seconds and shows the preview as soon as playback is ready.
-        </p>
+        <p className="muted">Start OBS; preview appears when playback is ready.</p>
       </CardHeader>
       <CardBody className="creator-live__section">
         <div className="creator-live__signal-card surface--empty" data-testid="test-stream-status-card">
@@ -544,7 +542,7 @@ export function ShareLinkPanel({ viewerPageHref, viewerLinkCopyMessage, onCopyVi
     <Card id="channel-share" className="workspace-card step-card" aria-labelledby="share-heading">
       <CardHeader className="workspace-card__header">
         <h3 id="share-heading">4) Share</h3>
-        <p className="muted">When the preview looks right, copy the viewer link and open the same page your audience will use.</p>
+        <p className="muted">Copy the viewer link.</p>
       </CardHeader>
       <CardBody className="creator-live__section">
         <label className="input-stack" htmlFor="viewer-link">

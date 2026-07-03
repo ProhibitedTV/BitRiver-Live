@@ -36,7 +36,6 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const tipTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
   const donationAddresses = data.donationAddresses ?? [];
   const isOwner = user?.id === data.owner.id;
@@ -162,7 +161,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             onClick={handleToggleFollow}
             disabled={loading || isOwner}
             aria-pressed={follow.following}
-            aria-label={`${follow.following ? "Following" : "Follow"} - ${follow.followers.toLocaleString()} supporters`}
+            aria-label={`${follow.following ? "Following" : "Follow"} - ${follow.followers.toLocaleString()} followers`}
             type="button"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -173,6 +172,16 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             </svg>
             {follow.following ? "Following" : "Follow"}
             <span className="pill-action__meta">{follow.followers.toLocaleString()}</span>
+          </button>
+          <button
+            className="pill-action"
+            onClick={handleToggleSubscription}
+            disabled={subscriptionLoading}
+            aria-pressed={subscription.subscribed}
+            aria-label={`${subscription.subscribed ? `Subscribed${subscription.tier ? ` - ${subscription.tier}` : ""}` : "Subscribe"} - ${subscription.subscribers.toLocaleString()} subscribers`}
+            type="button"
+          >
+            {subscription.subscribed ? `Subscribed${subscription.tier ? ` - ${subscription.tier}` : ""}` : "Subscribe"}
           </button>
           <button
             className="pill-action pill-action--accent"
@@ -213,50 +222,27 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
           <p className="muted" role="status">
             {status ??
               (isOwner
-                ? "You manage this channel. Followers will see your updates here."
+                ? "Owner view. Followers will see public updates here."
                 : data.live
-                  ? "Enjoy low-latency playback powered by the ingest pipeline."
-                  : "Offline for now - follow to be notified when the stream returns.")}
+                  ? "Live now."
+                  : "Offline. Follow for updates.")}
           </p>
         </div>
       </div>
-      <details
-        className="channel-hero__drawer"
-        open={drawerOpen}
-        onToggle={(event) => setDrawerOpen(event.currentTarget.open)}
-      >
-        <summary>
-          <span>Community insights</span>
-          <span className="muted">Followers, subscribers, and tipping</span>
-        </summary>
-        {drawerOpen && (
-          <div className="channel-hero__drawer-grid">
-            <dl>
-              <dt>Followers</dt>
-              <dd>{follow.followers.toLocaleString()}</dd>
-            </dl>
-            <dl>
-              <dt>Subscribers</dt>
-              <dd>{subscription.subscribers.toLocaleString()}</dd>
-            </dl>
-            <dl>
-              <dt>Status</dt>
-              <dd>{data.live ? "Live session active" : "Waiting for the next stream"}</dd>
-            </dl>
-            <div className="channel-hero__drawer-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={handleToggleSubscription}
-                disabled={subscriptionLoading}
-                aria-pressed={subscription.subscribed}
-              >
-                {subscription.subscribed ? `Subscribed${subscription.tier ? ` - ${subscription.tier}` : ""}` : "Subscribe"}
-              </button>
-            </div>
-          </div>
-        )}
-      </details>
+      <div className="channel-hero__stats" aria-label="Channel stats">
+        <dl>
+          <dt>Followers</dt>
+          <dd>{follow.followers.toLocaleString()}</dd>
+        </dl>
+        <dl>
+          <dt>Subscribers</dt>
+          <dd>{subscription.subscribers.toLocaleString()}</dd>
+        </dl>
+        <dl>
+          <dt>Status</dt>
+          <dd>{data.live ? "Live" : "Offline"}</dd>
+        </dl>
+      </div>
       <TipDrawer
         open={tipOpen}
         channelId={data.channel.id}
@@ -318,31 +304,15 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
         />
       )}
       <div className="stack" style={{ gap: "0.5rem" }}>
-        <h3>About {data.owner.displayName}</h3>
+        <h3>About</h3>
         {data.profile.bio ? (
           <p className="muted">{data.profile.bio}</p>
         ) : (
-          <p className="muted">The broadcaster hasn&apos;t shared a bio yet.</p>
-        )}
-      </div>
-      <div className="channel-about__details">
-        <dl>
-          <dt>Channel created</dt>
-          <dd>{new Date(data.channel.createdAt).toLocaleString()}</dd>
-        </dl>
-        <dl>
-          <dt>Last updated</dt>
-          <dd>{new Date(data.channel.updatedAt).toLocaleString()}</dd>
-        </dl>
-        {data.channel.category && (
-          <dl>
-            <dt>Category</dt>
-            <dd>{data.channel.category}</dd>
-          </dl>
+          <p className="muted">No bio yet.</p>
         )}
       </div>
       <div className="channel-about__social stack">
-        <h4>Find {data.owner.displayName} online</h4>
+        <h4>Links</h4>
         {socialLinks.length > 0 ? (
           <ul className="social-links" role="list">
             {socialLinks.map((link, index) => {
@@ -369,12 +339,12 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
             })}
           </ul>
         ) : (
-          <p className="muted">The broadcaster hasn&apos;t shared any social links yet.</p>
+          <p className="muted">No links yet.</p>
         )}
       </div>
       {data.playback?.renditions && data.playback.renditions.length > 0 && (
         <div className="channel-about__renditions stack">
-          <h4>Available renditions</h4>
+          <h4>Renditions</h4>
           <ul>
             {data.playback.renditions.map((rendition) => (
               <li key={rendition.name}>
@@ -386,10 +356,10 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
         </div>
       )}
       <div className="channel-about__donations stack">
-        <h4>Support this channel</h4>
+        <h4>Support</h4>
         {donations.length > 0 ? (
           <>
-            <p className="muted">Send tips using the crypto addresses below.</p>
+            <p className="muted">Donation addresses.</p>
             <ul className="donation-list" role="list">
               {donations.map((donation, index) => {
                 const currencyLabel = donation.currency
@@ -439,7 +409,7 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
             </ul>
           </>
         ) : (
-          <p className="muted">The broadcaster hasn&apos;t shared any donation addresses yet.</p>
+          <p className="muted">No donation addresses yet.</p>
         )}
         {copyStatus && (
           <p

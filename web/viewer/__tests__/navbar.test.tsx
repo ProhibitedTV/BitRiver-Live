@@ -475,7 +475,7 @@ describe("Navbar", () => {
     renderWithProviders(<Navbar />);
 
     const banner = screen.getByRole("status");
-    expect(within(banner).getByText(/running in local setup mode/i)).toBeInTheDocument();
+    expect(within(banner).getByText(/local setup mode/i)).toBeInTheDocument();
     expect(within(banner).getByRole("link", { name: /setup guide/i })).toHaveAttribute("href", "/getting-started");
   });
 
@@ -486,7 +486,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar />);
 
-    expect(screen.getByText(/running in local setup mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/local setup mode/i)).toBeInTheDocument();
   });
 
   test("hides the local setup banner for non-local URLs", () => {

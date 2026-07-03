@@ -48,10 +48,8 @@ export default function CreatorIndexPage() {
         <Card className="creator-overview-card">
           <CardHeader className="workspace-card__header">
             <span className="page-eyebrow">Creator access</span>
-            <h2>Sign in to open your studio</h2>
-            <p className="muted">
-              BitRiver will guide you from account creation to channel setup to OBS and your public viewer link.
-            </p>
+            <h2>Open your studio</h2>
+            <p className="muted">Sign in to create channels, copy stream settings, and manage replays.</p>
           </CardHeader>
           <CardBody className="workspace-card__actions">
             <Button onClick={() => void signIn("/creator")}>Sign in</Button>
@@ -65,57 +63,41 @@ export default function CreatorIndexPage() {
   }
 
   return (
-    <section className="creator-overview-grid" aria-label="Creator overview">
-      <article className="creator-overview-card">
+    <section className="creator-overview-grid creator-overview-grid--simple" aria-label="Creator overview">
+      <article className="creator-overview-card creator-overview-card--primary">
         <span className="page-eyebrow">{hasChannels ? "Go live" : "First stream"}</span>
-        <h2>{hasChannels ? "Jump back into your live workflow" : "Create your first channel"}</h2>
-        <p className="muted">
-          {hasChannels
-            ? "Pick up where you left off with OBS settings, preview checks, and a share-ready viewer link."
-            : "Start with one public channel. BitRiver will upgrade this account for creator tools automatically after creation."}
-        </p>
+        <h2>{hasChannels ? "Resume live setup" : "Create your first channel"}</h2>
+        <p className="muted">{hasChannels ? "Open OBS settings, preview, and sharing." : "Create one public channel to unlock creator tools."}</p>
         <div className="creator-overview-card__actions">
           <Link href={hasChannels ? liveHref : "/creator/getting-started"} className={buttonClassName()}>
-            {hasChannels ? "Open go-live dashboard" : "Open first-channel setup"}
+            {hasChannels ? "Open live setup" : "Start setup"}
           </Link>
-        </div>
-      </article>
-
-      <article className="creator-overview-card">
-        <span className="page-eyebrow">Onboarding</span>
-        <h2>Use the guided checklist</h2>
-        <p className="muted">
-          The checklist keeps channel setup, live confirmation, sharing, and VOD follow-up in one place so nothing gets skipped.
-        </p>
-        <div className="creator-overview-card__actions">
           <Link href="/creator/getting-started" className={buttonClassName("secondary")}>
-            Open getting started
+            Checklist
           </Link>
         </div>
       </article>
 
-      <article className="creator-overview-card">
+      <article className="creator-overview-card creator-overview-card--compact">
         <span className="page-eyebrow">Uploads</span>
-        <h2>Keep replays visible</h2>
-        <p className="muted">
-          Register VODs, watch processing states, and jump back to the same public page your audience will use.
-        </p>
+        <h2>Replays</h2>
+        <p className="muted">Register VODs and track processing.</p>
         <div className="creator-overview-card__actions">
           <Link href={uploadsHref} className={buttonClassName("secondary")}>
-            {hasChannels ? "Open uploads" : "Unlock with first channel"}
+            {hasChannels ? "Open uploads" : "Unlock uploads"}
           </Link>
         </div>
       </article>
 
-      <article className="creator-overview-card">
+      <article className="creator-overview-card creator-overview-card--compact">
         <span className="page-eyebrow">Status</span>
         <h2>{hasChannels ? primaryChannel?.title ?? "Channel ready" : "No channel yet"}</h2>
         <p className="muted">
           {channelsLoading
-            ? "Loading your creator setup..."
+            ? "Loading setup..."
             : hasChannels
-              ? "Your primary channel is ready for live setup and public playback."
-              : "Create your first channel to unlock OBS settings, preview monitoring, and viewer sharing."}
+              ? "Ready for live setup and playback."
+              : "Create a channel to unlock OBS settings."}
         </p>
         {channelsError ? <p className="error">{channelsError}</p> : null}
       </article>

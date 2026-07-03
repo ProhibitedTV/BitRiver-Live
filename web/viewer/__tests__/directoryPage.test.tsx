@@ -108,19 +108,13 @@ describe("DirectoryPage", () => {
     await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("heading", { level: 1, name: /live channels worth opening right now/i })).toBeInTheDocument();
-    const quickJumpNav = screen.getByRole("navigation", { name: /popular topics and quick actions/i });
-    expect(within(quickJumpNav).getByRole("link", { name: /live channels we think you'll like/i })).toHaveAttribute(
-      "href",
-      "#recommended",
-    );
-    expect(within(quickJumpNav).getByRole("link", { name: /live now/i })).toHaveAttribute("href", "#live-now");
-    expect(within(quickJumpNav).getByRole("link", { name: /categories/i })).toHaveAttribute("href", "#top-categories");
-    expect(within(quickJumpNav).getByRole("link", { name: /videos/i })).toHaveAttribute("href", "/videos");
-    expect(within(quickJumpNav).getByRole("link", { name: /go live/i })).toHaveAttribute(
-      "href",
-      "/creator/getting-started",
-    );
+    expect(await screen.findByRole("heading", { level: 1, name: /browse channels/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /browse channels/i })).toHaveAttribute("href", "#directory");
+    expect(screen.getByRole("link", { name: /go live/i })).toHaveAttribute("href", "/creator/getting-started");
+    expect(screen.queryByRole("navigation", { name: /popular topics and quick actions/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /live now/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /browse categories/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /channel directory/i })).toBeInTheDocument();
 
     const heading = await screen.findByRole("heading", { level: 3, name: "Deep Space Beats" });
     const card = heading.closest("article");
@@ -204,7 +198,7 @@ describe("DirectoryPage", () => {
     await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
-    expect(screen.getByRole("heading", { level: 2, name: /more live channels/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /channel directory/i })).toBeInTheDocument();
   });
 
   test("keeps the streamlined homepage focused on discovery when follows are empty", async () => {
@@ -212,7 +206,9 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect((await screen.findAllByRole("heading", { level: 2, name: /live channels we think you'll like/i })).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { level: 2, name: /channel directory/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: /live channels we think you'll like/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/create an account, follow channels, and launch your own stream/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });
 
@@ -222,7 +218,7 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByRole("heading", { level: 1, name: /live channels worth opening right now/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /browse channels/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /create account/i })[0]).toHaveAttribute("href", "/?auth=signup");
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });

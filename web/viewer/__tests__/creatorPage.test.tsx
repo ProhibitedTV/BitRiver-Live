@@ -35,15 +35,15 @@ describe("CreatorIndexPage", () => {
       expect(fetchManagedChannelsMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole("link", { name: /open first-channel setup/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /start setup/i })).toHaveAttribute(
       "href",
       "/creator/getting-started",
     );
-    expect(screen.getByRole("link", { name: /unlock with first channel/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /unlock uploads/i })).toHaveAttribute(
       "href",
       "/creator/getting-started",
     );
-    expect(screen.getByText(/create your first channel to unlock obs settings/i)).toBeInTheDocument();
+    expect(screen.getByText(/create a channel to unlock obs settings/i)).toBeInTheDocument();
   });
 
   test("links creators with channels back into the live dashboard", async () => {
@@ -64,7 +64,7 @@ describe("CreatorIndexPage", () => {
 
     renderWithProviders(<CreatorIndexPage />);
 
-    expect(await screen.findByRole("link", { name: /open go-live dashboard/i })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: /open live setup/i })).toHaveAttribute(
       "href",
       "/creator/live/chan-1",
     );

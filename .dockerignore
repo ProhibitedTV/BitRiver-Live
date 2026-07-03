@@ -9,13 +9,23 @@
 # Build artifacts and caches
 *.log
 *.out
+.codex-tmp/
+.npm-cache/
+.tmp/
 .gocache/
+.gocache*/
 coverage/
 tmp/
+test-results/
 
 # Large or dev-only directories
 data/
 node_modules/
+web/viewer/node_modules/
+web/viewer/.next/
+web/viewer/.swc/
+web/viewer/playwright-report/
+web/viewer/test-results/
 scripts/
 !scripts/
 scripts/*

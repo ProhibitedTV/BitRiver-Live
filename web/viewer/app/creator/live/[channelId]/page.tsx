@@ -215,12 +215,12 @@ export default function CreatorLivePage() {
 
   const previewMessage = useMemo(() => {
     if (previewReady && testStreamStatus.key === "live") {
-      return "Preview is live. Check video and audio, then share the channel.";
+      return "Preview is live. Check video and audio, then share.";
     }
     if (previewPending) {
-      return "BitRiver is receiving your stream. Keep OBS running while the preview starts.";
+      return "Receiving stream. Keep OBS running.";
     }
-    return "Start streaming in OBS. The preview will appear here automatically.";
+    return "Start OBS. Preview appears here.";
   }, [previewPending, previewReady, testStreamStatus.key]);
 
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -407,7 +407,7 @@ export default function CreatorLivePage() {
         channelTitle={currentChannelTitle || playback.channel.title}
         liveState={playback.channel.liveState}
         activeTool="live"
-        description="Confirm the channel, copy OBS settings, check the live preview, update schedule, and share the same public channel page viewers use."
+        description="Copy OBS settings, check preview, update schedule, and share."
       />
 
       <ChannelSetupCard

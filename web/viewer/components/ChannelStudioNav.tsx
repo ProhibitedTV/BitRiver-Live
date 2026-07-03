@@ -28,7 +28,7 @@ export function ChannelStudioNav({
   activeTool,
   eyebrow = "Channel tools",
   heading = `${channelTitle} studio`,
-  description = "Manage the same channel your viewers see: preview the public page, prepare a stream, keep uploads current, update schedule, and copy the share link.",
+  description = "Preview, go live, manage uploads, update schedule, and share.",
   className,
 }: ChannelStudioNavProps) {
   const liveHref = `/creator/live/${channelId}`;

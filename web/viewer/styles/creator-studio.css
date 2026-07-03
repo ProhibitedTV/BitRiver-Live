@@ -190,22 +190,16 @@
   display: grid;
   gap: var(--space-xl);
   padding: var(--space-2xl);
-  border-radius: calc(var(--radius-lg) + 0.2rem);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: var(--hero-background);
-  box-shadow: var(--shadow-lg);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
   position: relative;
 }
 
 .workspace-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 86% 16%, rgba(249, 115, 22, 0.14), transparent 24%),
-    radial-gradient(circle at 14% 84%, rgba(45, 212, 191, 0.14), transparent 24%);
-  pointer-events: none;
+  content: none;
 }
 
 .workspace-hero > * {
@@ -401,14 +395,26 @@
   gap: var(--space-lg);
 }
 
+.creator-overview-grid--simple {
+  align-items: stretch;
+}
+
 .creator-overview-card {
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-xl);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--surface-alt), var(--surface-strong));
-  box-shadow: var(--shadow-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.creator-overview-card--primary {
+  min-height: 15rem;
+}
+
+.creator-overview-card--compact {
+  align-content: start;
 }
 
 .creator-overview-card__actions {
@@ -429,11 +435,7 @@
 }
 
 .step-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--accent-gradient);
+  content: none;
 }
 
 .step-card__status {
@@ -615,6 +617,10 @@
 
   .creator-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .creator-overview-card--primary {
+    grid-row: span 2;
   }
 }
 

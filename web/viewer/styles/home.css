@@ -1375,3 +1375,40 @@
     padding-inline: 1rem;
   }
 }
+
+/* Simplified viewer discovery pass */
+
+.home-page--simple {
+  gap: var(--space-2xl);
+}
+
+.home-hero--simple .home-hero__layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.home-hero__main--simple {
+  display: grid;
+  gap: var(--space-xl);
+  min-width: 0;
+}
+
+.home-sections--simple {
+  gap: var(--space-xl);
+}
+
+.home-hero--simple .home-hero__search-panel {
+  max-width: 720px;
+}
+
+@media (min-width: 960px) {
+  .home-hero__main--simple {
+    grid-template-columns: minmax(0, 0.78fr) minmax(360px, 1fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .home-hero__main--simple {
+    gap: var(--space-lg);
+  }
+}

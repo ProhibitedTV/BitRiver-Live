@@ -20,8 +20,16 @@ The Compose stack provides a one-command bootstrap for development and demos:
 ./scripts/quickstart.sh
 ```
 
-`./scripts/quickstart.sh` is a thin wrapper around `go run ./cmd/bitriver quickstart`, so source checkouts require Go 1.21+
-available on `PATH` (it does not provide a pure-Docker startup path with no local Go toolchain).
+PowerShell:
+
+```powershell
+.\scripts\quickstart.ps1
+```
+
+Both wrappers are thin shims around `go run ./cmd/bitriver quickstart`, so source checkouts require Go 1.21+
+available on `PATH` (they do not provide a pure-Docker startup path with no local Go toolchain). On Windows, use
+PowerShell or Git Bash for repository scripts; a broken WSL `bash` can fail before the quickstart reaches Docker or
+BitRiver validation.
 
 If you're operating from an installed package rather than a source checkout, use the installed `bitriver-live` launcher flow in
 [`docs/quickstart.md`](../docs/quickstart.md) instead of invoking the repository wrapper script directly.

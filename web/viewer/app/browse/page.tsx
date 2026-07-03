@@ -158,7 +158,7 @@ export default function BrowsePage() {
   const showEmpty = !loading && !error && sortedChannels.length === 0;
   const resultLabel = `${sortedChannels.length.toLocaleString()} channel${sortedChannels.length === 1 ? "" : "s"}`;
   const resultSummary = `${filter ? `${filter} - ` : ""}${resultLabel}`;
-  const resultsHeading = query ? `Search results for "${query}"` : filter ? `${filter} channels` : "Live directory";
+  const resultsHeading = query ? `Results for "${query}"` : filter ? `${filter} channels` : "All channels";
   const hasActiveControls = Boolean(query || filter || sort !== "live");
 
   return (
@@ -225,9 +225,8 @@ export default function BrowsePage() {
         <div className="browse-results__header">
           <div>
             <h2>{resultsHeading}</h2>
-            {hasActiveControls && <p className="muted">Filtered by the controls above.</p>}
+            {hasActiveControls && <p className="muted">Filters applied.</p>}
           </div>
-          {!loading && !error && <span className="muted">{resultSummary}</span>}
         </div>
 
         {loading && (
@@ -252,7 +251,7 @@ export default function BrowsePage() {
         {error && (
           <div className="surface surface--alert" role="alert">
             <div className="stack">
-              <h2>We hit a snag</h2>
+              <h2>Directory unavailable</h2>
               <p className="muted">{error}</p>
               <div className="browse-actions">
                 <button className="primary-button" onClick={() => void loadChannels(query, filter ?? "")}>
@@ -269,8 +268,8 @@ export default function BrowsePage() {
         {showEmpty && (
           <div className="surface surface--empty">
             <div className="stack">
-              <h2>No channels match your filters</h2>
-              <p className="muted">Clear the filters or try another search.</p>
+              <h2>No matches</h2>
+              <p className="muted">Clear filters or try another search.</p>
               <div className="browse-actions">
                 <button className="primary-button" onClick={handleReset}>
                   Clear filters

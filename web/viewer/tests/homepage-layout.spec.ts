@@ -57,7 +57,7 @@ async function mockFollowing(page: Page, channels = [followedChannel]) {
 }
 
 test.describe("homepage desktop shell", () => {
-  test("keeps guest following state out of the persistent discovery sidebar", async ({ page }) => {
+  test("keeps guest following state out of discovery chrome", async ({ page }) => {
     await mockViewerSession(page, false);
     await page.setViewportSize({ width: 1600, height: 1100 });
     await page.goto("/");
@@ -67,22 +67,29 @@ test.describe("homepage desktop shell", () => {
 
     await expect(hero).toBeVisible();
     await expect(sidebar).toHaveCount(0);
-    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--desktop/);
     await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-disabled/);
     await expect(page.getByText(/keep an eye on the creators you already know while you browse the rest of the platform/i)).toHaveCount(0);
     await expect(page.getByText("Sign in to see channels you follow.")).toHaveCount(0);
   });
 
-  test("renders followed channels in the desktop discovery sidebar", async ({ page }) => {
+  test("keeps followed channels behind an intentional desktop drawer", async ({ page }) => {
     await mockViewerSession(page, true);
     await mockFollowing(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     await page.goto("/");
 
-    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-persistent/);
+    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-enabled/);
+    await expect(page.locator(".viewer-shell")).not.toHaveClass(/viewer-shell--following-persistent/);
+    await expect(page.locator(".viewer-shell")).not.toHaveClass(/viewer-shell--sidebar-open/);
+    await expect(page.locator(".viewer-shell__mobile-bar").getByText("1 followed")).toBeVisible();
+    await expect(page.locator(".viewer-sidebar")).toHaveCSS("opacity", "0");
+
+    await page.getByRole("button", { name: "Show following" }).click();
+
+    await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--sidebar-open/);
+    await expect(page.locator(".viewer-sidebar")).toHaveCSS("opacity", "1");
     await expect(page.locator(".viewer-sidebar").getByRole("link", { name: /ari wave/i })).toBeVisible();
-    await expect(page.getByText("1 followed")).toBeVisible();
   });
 
   test("keeps empty following out of the mobile drawer chrome", async ({ page }) => {

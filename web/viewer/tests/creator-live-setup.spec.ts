@@ -174,12 +174,12 @@ test.describe("creator live setup", () => {
     ).toBeVisible();
     await expect(
       page.getByText(
-        "Start streaming in OBS. The preview will appear here automatically."
+        "Start OBS. Preview appears here."
       )
     ).toBeVisible();
     await expect(page.getByText("Service: Custom")).toBeVisible();
     await expect(page.getByText(`Server: ${ingestUrl}`)).toBeVisible();
-    await expect(page.getByText("Stream key: reveal or copy it above when you need it.")).toBeVisible();
+    await expect(page.getByText("Stream key: reveal or copy above.")).toBeVisible();
 
     await expect(copyKeyButton).toBeEnabled();
     await copyKeyButton.click();
@@ -225,7 +225,7 @@ test.describe("creator live setup", () => {
     await expect(
       page.getByTestId("test-stream-status-card").getByText("Live", { exact: true })
     ).toBeVisible();
-    await expect(page.getByText("Preview is live. Check video and audio, then share the channel.")).toBeVisible();
+    await expect(page.getByText("Preview is live. Check video and audio, then share.")).toBeVisible();
     await expect(page.getByLabel("Viewer link")).toHaveValue(`http://127.0.0.1:3000/channels/${channelId}`);
     await expect(page.getByRole("link", { name: "Open viewer" })).toHaveAttribute(
       "href",

@@ -152,11 +152,11 @@ test.describe("channel route", () => {
     await page.goto("/channels/chan-42");
 
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
-    await expect(page.getByText(/enjoy low-latency playback powered by the ingest pipeline/i)).toBeVisible();
+    await expect(page.getByText(/live now/i)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Manage this channel" })).toHaveCount(0);
 
-    await page.getByRole("button", { name: /follow - 10 supporters/i }).click();
-    await expect(page.getByRole("button", { name: /following - 11 supporters/i })).toBeVisible();
+    await page.getByRole("button", { name: /follow - 10 followers/i }).click();
+    await expect(page.getByRole("button", { name: /following - 11 followers/i })).toBeVisible();
     await expect.poll(() => followCalls).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: /subscribe/i }).click();
@@ -231,7 +231,7 @@ test.describe("channel route", () => {
     await tipButton.click();
     await expect(page.getByText(/sign in from the header to send a tip/i)).toBeVisible();
 
-    const followButton = page.getByRole("button", { name: /follow - 10 supporters/i });
+    const followButton = page.getByRole("button", { name: /follow - 10 followers/i });
     await followButton.click();
     await expect(page).toHaveURL(/\/login\?redirect=%2Fchannels%2Fchan-42$/);
     await expect.poll(() => followAttempted).toBe(false);
@@ -272,7 +272,7 @@ test.describe("channel route", () => {
     await page.goto("/channels/chan-42");
 
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
-    await expect(page.getByText(/you manage this channel/i)).toBeVisible();
+    await expect(page.getByText(/owner view/i)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Manage this channel" })).toBeVisible();
     const studioNav = page.getByRole("navigation", { name: /deep space beats channel tools/i });
     await expect(studioNav.getByRole("link", { name: "Public preview" })).toHaveAttribute("href", "/channels/chan-42");

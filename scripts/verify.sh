@@ -178,9 +178,17 @@ should_run_viewer_checks() {
   viewer_changes_present
 }
 
+redact_sensitive_output() {
+  sed -E \
+    -e 's/^([[:space:]]*[A-Za-z0-9_]*(PASSWORD|TOKEN|SECRET|DSN|CREDENTIAL)[A-Za-z0-9_]*:[[:space:]]*).*/\1<redacted>/g' \
+    -e 's#(postgres://[^:[:space:]]+:)[^@[:space:]]+(@)#\1<redacted>\2#g'
+}
+
 run_docker_compose_config_validation() {
   local compose_env_file=".env"
   local created_temp_env_file=false
+  local compose_output
+  local compose_rc
 
   if [[ ! -f "$compose_env_file" ]]; then
     if [[ ! -f deploy/.env.example ]]; then
@@ -193,15 +201,26 @@ run_docker_compose_config_validation() {
     created_temp_env_file=true
   fi
 
+  compose_output="$(mktemp)"
+
   set +e
-  docker compose --env-file "$compose_env_file" -f deploy/docker-compose.yml config
-  local compose_rc=$?
+  docker compose --env-file "$compose_env_file" -f deploy/docker-compose.yml config >"$compose_output" 2>&1
+  compose_rc=$?
   set -e
 
   if [[ "$created_temp_env_file" == true ]]; then
     rm -f "$compose_env_file"
   fi
 
+  if [[ "$compose_rc" -ne 0 ]]; then
+    echo "Docker Compose config validation failed. Redacted output:" >&2
+    redact_sensitive_output <"$compose_output" >&2
+    rm -f "$compose_output"
+    return "$compose_rc"
+  fi
+
+  rm -f "$compose_output"
+  echo "Docker Compose config rendered successfully."
   return "$compose_rc"
 }
 

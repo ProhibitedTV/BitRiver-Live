@@ -106,7 +106,7 @@ test("toggles follow and subscribe state", async () => {
     />
   );
 
-  const followButton = screen.getByRole("button", { name: /follow.+10 supporters/i });
+  const followButton = screen.getByRole("button", { name: /follow.+10 followers/i });
   fireEvent.click(followButton);
 
   await waitFor(() => {
@@ -114,7 +114,7 @@ test("toggles follow and subscribe state", async () => {
     expect(onFollowChange).toHaveBeenCalledWith({ followers: 11, following: true });
   });
 
-  expect(screen.getByRole("button", { name: /following.+11 supporters/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /following.+11 followers/i })).toBeInTheDocument();
 
   const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
   fireEvent.click(subscribeButton);
@@ -136,7 +136,7 @@ test("disables follow actions for channel owners", () => {
 
   render(<ChannelHeader data={baseData} />);
 
-  const followButton = screen.getByRole("button", { name: /follow.+10 supporters/i });
+  const followButton = screen.getByRole("button", { name: /follow.+10 followers/i });
   expect(followButton).toBeDisabled();
 
   fireEvent.click(followButton);
@@ -144,7 +144,7 @@ test("disables follow actions for channel owners", () => {
   expect(followMock).not.toHaveBeenCalled();
   expect(unfollowMock).not.toHaveBeenCalled();
   expect(
-    screen.getByText(/you manage this channel\. followers will see your updates here\./i)
+    screen.getByText(/owner view\. followers will see public updates here\./i)
   ).toBeInTheDocument();
 });
 
@@ -238,7 +238,7 @@ test("renders donation addresses and copies to clipboard", async () => {
 
   render(<ChannelAboutPanel data={baseData} />);
 
-  expect(screen.getByRole("heading", { name: /support this channel/i })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /support/i })).toBeInTheDocument();
   const donationItems = screen.getAllByRole("listitem");
   expect(donationItems).toHaveLength(2);
   const firstDonation = donationItems[0];

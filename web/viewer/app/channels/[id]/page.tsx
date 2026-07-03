@@ -318,23 +318,23 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const showPlayerRecoveryActions = Boolean(data?.live || data?.channel.liveState === "starting");
   const hasScheduleEntries = scheduleEntries.length > 0;
   const offlineActionHeading = latestVod
-    ? "Catch the latest broadcast even while the channel is offline"
+    ? "Latest replay available"
     : vodError
-      ? "Replay shelf needs a retry"
+      ? "Replays need a retry"
       : vodsLoading
-        ? "Checking for recent replays"
+        ? "Checking replays"
         : hasScheduleEntries
-          ? "This channel is offline; the next stream is scheduled"
-          : "This channel is offline right now";
+          ? "Next stream scheduled"
+          : "Channel offline";
   const offlineActionBody = latestVod
-    ? `${latestVod.title} is ready from the Videos tab. Published ${new Date(latestVod.publishedAt).toLocaleDateString()} - ${formatVodDuration(latestVod.durationSeconds)}.`
+    ? `${latestVod.title}. ${formatVodDuration(latestVod.durationSeconds)}.`
     : vodError
-      ? `We couldn't load the replay shelf yet: ${vodError}`
+      ? vodError
       : vodsLoading
-        ? "BitRiver is checking whether this creator has recent VODs ready for playback."
+        ? "Looking for recent VODs."
         : hasScheduleEntries
           ? `${scheduleEntries[0].title} starts ${formatScheduleStart(scheduleEntries[0].startsAt)}.`
-          : "There are no published replays or upcoming schedule entries yet. Browse other live channels or check again in a moment.";
+          : "No replay or schedule yet.";
   const isChannelOwner = Boolean(data && user?.id === data.channel.ownerId);
 
   return (
@@ -519,7 +519,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                 activeTool="preview"
                 eyebrow="Creator-only tools"
                 heading="Manage this channel"
-                description="Tune the live setup, uploads, schedule, and share link from this same public channel context."
+                description="Open live setup, uploads, schedule, and sharing."
                 className="channel-owner-card"
               />
             ) : null}

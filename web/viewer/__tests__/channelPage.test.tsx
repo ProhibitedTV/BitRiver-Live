@@ -157,12 +157,12 @@ describe("ChannelPage", () => {
     expect(screen.getByText(/streaming vinyl sets/i)).toBeInTheDocument();
     expect(await screen.findByText(/welcome to the stream/i)).toBeInTheDocument();
 
-    const followButton = screen.getByRole("button", { name: /follow.+10 supporters/i });
+    const followButton = screen.getByRole("button", { name: /follow.+10 followers/i });
     await act(async () => {
       await user.click(followButton);
     });
     await waitFor(() => expect(followChannelMock).toHaveBeenCalledWith("chan-42"));
-    expect(screen.getByRole("button", { name: /following.+11 supporters/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /following.+11 followers/i })).toBeInTheDocument();
     expect(screen.getByText("11", { selector: "dd" })).toBeInTheDocument();
 
     const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
@@ -248,7 +248,7 @@ describe("ChannelPage", () => {
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(1));
 
-    expect(await screen.findByRole("button", { name: /follow.+10 supporters/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /follow.+10 followers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
 
     await act(async () => {
@@ -261,7 +261,7 @@ describe("ChannelPage", () => {
     expect(screen.queryByText(/loading channel/i)).not.toBeInTheDocument();
 
     expect(
-      await screen.findByRole("button", { name: /following.+11 supporters/i })
+      await screen.findByRole("button", { name: /following.+11 followers/i })
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribed.+plus/i })).toBeInTheDocument();
   });
@@ -273,7 +273,7 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalled());
-    const followButton = await screen.findByRole("button", { name: /follow.+10 supporters/i });
+    const followButton = await screen.findByRole("button", { name: /follow.+10 followers/i });
 
     await act(async () => {
       await user.click(followButton);
@@ -346,7 +346,7 @@ describe("ChannelPage", () => {
 
     const { rerender } = render(<ChannelPage params={{ id: "chan-42" }} />);
 
-    expect(await screen.findByRole("button", { name: /follow.+10 supporters/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /follow.+10 followers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
 
     await act(async () => {
@@ -369,7 +369,7 @@ describe("ChannelPage", () => {
       resolveSecondPlayback?.(secondChannelPlayback as any);
     });
 
-    expect(await screen.findByRole("button", { name: /follow.+18 supporters/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /follow.+18 followers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
     expect(await screen.findByTestId("player")).toBeInTheDocument();
   });
@@ -436,7 +436,7 @@ describe("ChannelPage", () => {
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     expect(
-      await screen.findByRole("heading", { name: /catch the latest broadcast even while the channel is offline/i }),
+      await screen.findByRole("heading", { name: /latest replay available/i }),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/late night replay/i).length).toBeGreaterThan(0);
 
@@ -467,7 +467,7 @@ describe("ChannelPage", () => {
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
-    expect(await screen.findByRole("heading", { name: "This channel is offline right now" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Channel offline" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry player playback" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /open videos tab/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /browse live channels/i })).toHaveAttribute("href", "/browse");
@@ -509,7 +509,7 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     expect(
-      await screen.findByRole("heading", { name: "This channel is offline; the next stream is scheduled" }),
+      await screen.findByRole("heading", { name: "Next stream scheduled" }),
     ).toBeInTheDocument();
 
     await act(async () => {

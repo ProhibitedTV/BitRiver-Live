@@ -82,6 +82,14 @@ For a local source-based demo, keep the saved `.env` in production mode and use 
 BITRIVER_LIVE_MODE=development go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --image-source build
 ```
 
+PowerShell:
+
+```powershell
+$env:BITRIVER_LIVE_MODE = "development"
+go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --image-source build
+Remove-Item Env:BITRIVER_LIVE_MODE
+```
+
 ### 4. Verify the install
 
 ```bash
@@ -139,6 +147,8 @@ Recommended repo gate:
 ```bash
 ./scripts/verify.sh
 ```
+
+PowerShell users should run the Go CLI and PowerShell shims directly, or run Bash scripts from Git Bash. If `bash` resolves to a broken WSL install, use Git Bash or `scripts/quickstart.ps1` instead of the Bash wrapper.
 
 Common focused commands:
 

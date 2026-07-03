@@ -1,10 +1,9 @@
 /* Channel watch, support, player, VOD, and replay styles. */
 
 .channel-hero {
-  border-radius: 1rem;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(79, 209, 197, 0.05), rgba(16, 18, 24, 0.85)),
-    var(--surface);
+  background: var(--surface-card);
   display: grid;
   gap: var(--space-md);
   padding: var(--space-lg);
@@ -100,37 +99,27 @@
   flex: 1 1 260px;
 }
 
-.channel-hero__drawer {
-  border: 1px dashed var(--border);
-  border-radius: 0.9rem;
-  padding: var(--space-md);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.channel-hero__drawer summary {
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  font-weight: 600;
-}
-
-.channel-hero__drawer summary::-webkit-details-marker {
-  display: none;
-}
-
-.channel-hero__drawer-grid {
-  margin-top: var(--space-md);
+.channel-hero__stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-md);
-  align-items: start;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
 }
 
-.channel-hero__drawer-actions {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
+.channel-hero__stats dl {
+  margin: 0;
+}
+
+.channel-hero__stats dt {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+}
+
+.channel-hero__stats dd {
+  margin: 0.2rem 0 0;
+  font-weight: 700;
 }
 
 .channel-tabs {

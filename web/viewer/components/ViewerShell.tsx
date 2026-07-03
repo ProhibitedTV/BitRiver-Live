@@ -10,7 +10,6 @@ interface ViewerShellProps {
   children: ReactNode;
 }
 
-const DESKTOP_SIDEBAR_QUERY = "(min-width: 1024px)";
 const FOLLOWING_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSABLE_SELECTORS =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -37,13 +36,12 @@ export function ViewerShell({ children }: ViewerShellProps) {
     refreshIntervalMs: followingSurfaceEnabled ? FOLLOWING_REFRESH_INTERVAL_MS : undefined,
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [desktopSidebar, setDesktopSidebar] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const followingChromeVisible = followingSurfaceEnabled && followingStatus === "ready" && followingChannels.length > 0;
-  const persistentSidebar = desktopSidebar && followingChromeVisible;
-  const drawerAvailable = !desktopSidebar && followingChromeVisible;
+  const drawerAvailable = followingChromeVisible;
+  const followedCountLabel = `${followingChannels.length} followed`;
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -54,31 +52,6 @@ export function ViewerShell({ children }: ViewerShellProps) {
   };
 
   const modalSidebarOpen = drawerAvailable && sidebarOpen;
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) {
-      return;
-    }
-
-    const query = window.matchMedia(DESKTOP_SIDEBAR_QUERY);
-    const syncDesktopState = (matches: boolean) => {
-      setDesktopSidebar(matches);
-      if (matches) {
-        setSidebarOpen(false);
-      }
-    };
-
-    syncDesktopState(query.matches);
-
-    const handler = (event: MediaQueryListEvent) => {
-      syncDesktopState(event.matches);
-    };
-
-    query.addEventListener("change", handler);
-    return () => {
-      query.removeEventListener("change", handler);
-    };
-  }, []);
 
   useEffect(() => {
     if (!followingChromeVisible && sidebarOpen) {
@@ -183,35 +156,30 @@ export function ViewerShell({ children }: ViewerShellProps) {
 
   return (
     <div
-      className={`viewer-shell${modalSidebarOpen ? " viewer-shell--sidebar-open" : ""}${desktopSidebar ? " viewer-shell--desktop" : ""}${
+      className={`viewer-shell${modalSidebarOpen ? " viewer-shell--sidebar-open" : ""}${
         followingChromeVisible ? " viewer-shell--following-enabled" : " viewer-shell--following-disabled"
-      }${persistentSidebar ? " viewer-shell--following-persistent" : ""}`}
+      }`}
     >
       {followingChromeVisible && (
         <aside
           id="viewer-sidebar"
           className="viewer-sidebar"
-          aria-label={persistentSidebar ? "Following sidebar" : undefined}
           role={modalSidebarOpen ? "dialog" : undefined}
           aria-modal={modalSidebarOpen ? true : undefined}
-          aria-labelledby={!persistentSidebar ? "viewer-sidebar-title" : undefined}
+          aria-hidden={modalSidebarOpen ? undefined : true}
+          aria-labelledby="viewer-sidebar-title"
           ref={sidebarRef}
           tabIndex={-1}
         >
-          {!persistentSidebar && (
-            <div className="viewer-sidebar__header-row">
-              <div className="stack stack--2xs">
-                <p className="viewer-sidebar__eyebrow">Your network</p>
-                <h2 id="viewer-sidebar-title">Following</h2>
-              </div>
-              <button type="button" className="viewer-sidebar__close" onClick={closeSidebar} aria-label="Close following sidebar">
-                Close
-              </button>
+          <div className="viewer-sidebar__header-row">
+            <div className="stack stack--2xs">
+              <p className="viewer-sidebar__eyebrow">Following</p>
+              <h2 id="viewer-sidebar-title">Followed channels</h2>
             </div>
-          )}
-          <p className="viewer-sidebar__intro muted">
-            Keep your regular creators one click away while you explore live rooms, replays, and new communities.
-          </p>
+            <button type="button" className="viewer-sidebar__close" onClick={closeSidebar} aria-label="Close following sidebar">
+              Close
+            </button>
+          </div>
           <FollowingSidebarContent
             channels={followingChannels}
             status={followingStatus}
@@ -229,24 +197,25 @@ export function ViewerShell({ children }: ViewerShellProps) {
           {drawerAvailable && (
             <div className="viewer-shell__mobile-bar surface">
               <div className="stack stack--2xs">
-                <span className="viewer-sidebar__eyebrow">Your network</span>
-                <strong>Following</strong>
+                <span className="viewer-sidebar__eyebrow">Following</span>
+                <strong>{followedCountLabel}</strong>
               </div>
               <button
                 type="button"
                 className="viewer-shell__toggle"
                 aria-expanded={sidebarOpen}
+                aria-label={sidebarOpen ? "Hide following" : "Show following"}
                 aria-controls="viewer-sidebar"
                 onClick={toggleSidebar}
                 ref={toggleButtonRef}
               >
-                {sidebarOpen ? "Hide following" : "Show following"}
+                {sidebarOpen ? "Hide" : "Open"}
               </button>
             </div>
           )}
 
           <main className="viewer-main">{children}</main>
-          <footer className="footer">BitRiver Live helps independent creators go live, keep replays visible, and stay close to their audience.</footer>
+          <footer className="footer">BitRiver Live: live channels, replays, and creator tools.</footer>
         </div>
       </div>
     </div>

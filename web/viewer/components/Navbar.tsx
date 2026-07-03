@@ -406,7 +406,7 @@ export function Navbar() {
     <header className="navbar">
       {shouldShowLocalSetupBanner && (
         <div className="local-setup-banner" role="status">
-          <span>Running in local setup mode. Before going public, configure your domain and CORS settings.</span>{" "}
+          <span>Local setup mode. Configure domain and CORS before going public.</span>{" "}
           <Link href={LOCAL_SETUP_DOCS_ROUTE} className="local-setup-banner__link" onClick={closeMenu}>
             Setup guide
           </Link>
@@ -434,7 +434,6 @@ export function Navbar() {
               </span>
               <span className="navbar-logo__copy">
                 <span className="navbar-logo__text">BitRiver Live</span>
-                <span className="navbar-logo__meta">Independent live creators, replays, and go-live tools</span>
               </span>
             </Link>
           </div>
@@ -465,7 +464,7 @@ export function Navbar() {
                 id="navbar-search"
                 className="nav-search__input"
                 type="search"
-                placeholder="Search channels, creators, or tags"
+                placeholder="Search channels"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
@@ -509,7 +508,7 @@ export function Navbar() {
                 >
                   <div className="avatar-menu__header">
                     <span className="avatar-menu__eyebrow">{user ? "Signed in as" : "Site menu"}</span>
-                    <span className="avatar-menu__name">{user?.displayName ?? "Preferences and tools"}</span>
+                    <span className="avatar-menu__name">{user?.displayName ?? "Tools"}</span>
                   </div>
                   <Link href={LOCAL_SETUP_DOCS_ROUTE} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
                     Setup guide
@@ -570,7 +569,7 @@ export function Navbar() {
         <div className="nav-drawer__header">
           <div className="stack stack--2xs">
             <span className="navbar-context__eyebrow">Navigation</span>
-            <h2>Explore BitRiver Live</h2>
+            <h2>Menu</h2>
           </div>
           <button type="button" className="secondary-button" onClick={closeMenu}>
             Close
@@ -602,7 +601,7 @@ export function Navbar() {
             id="navbar-search-mobile"
             className="nav-search__input"
             type="search"
-            placeholder="Search channels, creators, or tags"
+            placeholder="Search channels"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />

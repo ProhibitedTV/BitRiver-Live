@@ -108,11 +108,11 @@ test("directory page keeps topic URLs, reset, and empty states clear", async ({ 
 
   await page.getByRole("button", { name: "Reset" }).click();
   await expect(page).toHaveURL(/\/browse$/);
-  await expect(page.getByRole("heading", { level: 2, name: "Live directory" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "All channels" })).toBeVisible();
 
   await page.getByLabel("Search channels").fill("nothing");
   await page.getByRole("main").getByRole("button", { name: "Search" }).click();
 
-  await expect(page.getByRole("heading", { level: 2, name: "No channels match your filters" })).toBeVisible();
-  await expect(page.getByText("Clear the filters or try another search.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "No matches" })).toBeVisible();
+  await expect(page.getByText("Clear filters or try another search.")).toBeVisible();
 });

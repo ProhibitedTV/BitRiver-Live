@@ -49,6 +49,17 @@ BITRIVER_LIVE_MODE=development go run ./cmd/bitriver quickstart --compose-file d
 go run ./cmd/bitriver smoke --env-file ./.env
 ```
 
+Native PowerShell:
+
+```powershell
+Copy-Item deploy/.env.example .env
+go run ./cmd/bitriver env init --env-file ./.env
+$env:BITRIVER_LIVE_MODE = "development"
+go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --image-source build
+Remove-Item Env:BITRIVER_LIVE_MODE
+go run ./cmd/bitriver smoke --env-file ./.env
+```
+
 Success looks like:
 
 - `http://localhost:8080/viewer` serves the viewer
@@ -68,7 +79,7 @@ If your local scripts still include that override filename or env toggle, remove
 | macOS 12+ | Docker Desktop with Compose V2 enabled | Start Docker Desktop first and leave at least 15GB free on Docker's data root. |
 | Ubuntu 22.04+ / other Linux | Docker Engine + Compose plugin | Install the Compose plugin, add yourself to the `docker` group (or prefix commands with `sudo`), and confirm `docker compose` works without root. |
 | Windows 11 (WSL 2 backend) | Docker Desktop | Run the quickstart inside WSL with the WSL 2 backend enabled; check `docker-desktop` has 15GB free. |
-| Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Same Docker Desktop install as above; native shells call the same Go CLI. |
+| Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Use the Go CLI or `.\scripts\quickstart.ps1`; do not rely on `bash` unless it is Git Bash or a healthy WSL shell. |
 
 Install Go 1.21+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. Installer-backed
 launchers ship a bundled CLI and do not require Go on the host.
@@ -114,6 +125,13 @@ Before quickstart, run the canonical environment check wrapper:
 bash deploy/check-env.sh
 ```
 
+PowerShell users can run the same checks without Bash:
+
+```powershell
+go run ./cmd/bitriver doctor
+go run ./cmd/bitriver env validate --env-file ./.env
+```
+
 This runs `bitriver doctor` (with the canonical Compose contract) and then
 `bitriver env validate` against your chosen env file. Use
 `bash deploy/check-env.sh --skip-doctor` only as a temporary bypass when
@@ -140,6 +158,9 @@ go run ./cmd/bitriver quickstart
 
 # Windows PowerShell (same CLI, different shell)
 pwsh -c "go run ./cmd/bitriver quickstart"
+
+# Windows PowerShell wrapper from a source checkout
+.\scripts\quickstart.ps1
 ```
 
 Need setup-wizard style control on first run instead of taking the default quickstart/env-init values? Add `--wizard` to either command:
@@ -199,7 +220,7 @@ If preflight fails, quickstart exits immediately with actionable guidance that n
 
 When stdin is not attached to a terminal (for example in CI, scripted deployments, or some Windows shells), the quickstart runs database migrations with `docker compose run -T` to disable TTY allocation and avoid interactive console errors.
 
-Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell. Both scripts are thin wrappers around `go run ./cmd/bitriver quickstart`, and all OME auth/env validation lives inside the Go CLI.
+Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell. Both scripts are thin wrappers around `go run ./cmd/bitriver quickstart`, and all OME auth/env validation lives inside the Go CLI. On Windows, prefer PowerShell or Git Bash for repository scripts; a partial WSL install can make `bash ./scripts/verify.sh` fail before any BitRiver checks run.
 
 ### Quickstart profiles
 
@@ -381,6 +402,8 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
 1. Restart Docker Desktop to reset the engine and pipe.
 2. Confirm the WSL 2 backend is healthy (`wsl --status`, and verify the `docker-desktop` distro is running).
 3. Re-run `docker compose up -d` from the repository root (or re-run `bitriver-live` / `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`).
+
+If `bash` itself fails with a missing `/bin/bash` error, your shell is resolving to WSL before BitRiver starts. Use native PowerShell (`.\scripts\quickstart.ps1` or `go run ./cmd/bitriver quickstart`) or launch Git Bash from the repository root.
 
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 8083, 8443, 9000, 9001, or 1935 (plus 1985 when the `srs-api` profile is enabled). Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090` or `BITRIVER_OME_LLHLS_HOST_PORT=8083`) and rerun `docker compose up -d`.
 - **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env`. Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN` if you want the health probe to use a distinct header, rerun `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`), and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
