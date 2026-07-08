@@ -24,6 +24,7 @@ Run these before requesting review:
 
 ```bash
 ./scripts/generate-contract-doc.sh
+go run ./cmd/bitriver release contract-snapshot --env-file deploy/.env.example --compose-file deploy/docker-compose.yml --output .tmp/contract-snapshot.json
 ./scripts/verify.sh
 ./scripts/require-image-digests.sh
 ./scripts/test-quickstart.sh
@@ -39,6 +40,7 @@ If your branch uses an equivalent smoke/quickstart verification flow, include th
 - [ ] `docs/contract.md` reflects the new/changed root `.env` expectations.
 - [ ] Generated files were re-rendered and committed when applicable (OME/SRS).
 - [ ] `./scripts/generate-contract-doc.sh` completed successfully.
+- [ ] `go run ./cmd/bitriver release contract-snapshot --env-file deploy/.env.example --compose-file deploy/docker-compose.yml --output .tmp/contract-snapshot.json` completed successfully, and any drift from the baseline is documented.
 - [ ] `./scripts/verify.sh` completed successfully.
 - [ ] `./scripts/require-image-digests.sh` completed successfully for production envs (`BITRIVER_LIVE_MODE=production` and `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`).
 - [ ] `./scripts/test-quickstart.sh` (or equivalent smoke verification) completed successfully.
@@ -50,6 +52,7 @@ If your branch uses an equivalent smoke/quickstart verification flow, include th
 - [ ] Contract docs and generated artifacts are synchronized with the env changes.
 - [ ] Verification command results are attached and indicate success:
   - `./scripts/generate-contract-doc.sh`
+  - `go run ./cmd/bitriver release contract-snapshot --env-file deploy/.env.example --compose-file deploy/docker-compose.yml --output .tmp/contract-snapshot.json`
   - `./scripts/verify.sh`
   - `./scripts/require-image-digests.sh` (production env contexts)
   - `./scripts/test-quickstart.sh` (or equivalent smoke verification)

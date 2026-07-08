@@ -9,7 +9,7 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | Gate | Risk caught | When it runs | Status | Command or workflow | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Blocking | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, `Go unit tests`, viewer jobs when paths match | Test logs, verifier phase output, viewer lint/test output |
-| 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking when implemented; currently partially covered by verifier contract checks | Current: `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check`; planned: contract snapshot/diff gate | Compose config output, contract invariant output, generated OME check, future drift report |
+| 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver quickstart`; `go run ./cmd/bitriver smoke --env-file ./.env` | Quickstart smoke log, Compose service state, smoke check results, selected service logs on failure |
 | 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory until automated; reviewer-blocking by policy when risk is unresolved | PR template plus reviewer checklist; planned scorecard automation | PR summary, changed-area classification, verification commands, docs/release note decisions |
 | 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh` | Release workflow artifacts, release notes, image digest list, env validation logs, pgx guard output |
@@ -40,7 +40,24 @@ Contract drift covers operator-facing changes to:
 - release launcher inputs and artifact layout
 - security-sensitive defaults for auth, sessions, CORS, metrics, public URLs, and image source
 
-Current checks are spread across the verifier, Compose config validation, OME render checks, and contract invariant scripts. Planned contract snapshot and diff automation should produce one human-readable report that separates additive changes from breaking removals and security-sensitive default drift.
+Current checks are spread across the release contract snapshot command, the verifier, Compose config validation, OME render checks, and contract invariant scripts. Generate a stable contract snapshot with:
+
+```bash
+go run ./cmd/bitriver release contract-snapshot \
+  --env-file deploy/.env.example \
+  --compose-file deploy/docker-compose.yml \
+  --output .tmp/contract-snapshot.json
+```
+
+Compare two snapshots with:
+
+```bash
+go run ./cmd/bitriver release contract-diff \
+  --base .tmp/base-contract.json \
+  --head .tmp/head-contract.json
+```
+
+The first snapshot version is intentionally modest. It captures env template keys/defaults/comments, Compose service shape, migration file hashes, generated artifact presence, health endpoint names, and release artifact inputs without requiring Docker or a running stack. The diff report separates additive changes from breaking removals, security-sensitive default drift, and undocumented env additions.
 
 Intentional drift needs matching documentation in the same PR. Use `docs/contract-change-recipe.md` for deployment contract edits and include release notes or upgrade notes when the change affects existing operators.
 
