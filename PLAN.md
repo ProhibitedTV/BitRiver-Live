@@ -1,20 +1,24 @@
 ## Scope (current change)
-- Address GitHub issue #1269: document the BitRiver Live release-gate ladder.
-- Add a concise source-of-truth release-gates document that maps promotion gates to intent, timing, blocking status, commands/workflows, artifacts, and failure triage.
-- Link the new guidance from existing release-facing docs so future gate implementation issues can reference it.
-- Preserve the supported baseline: single-host, operator-managed, Docker Compose deployment with source quickstart and packaged launcher paths.
+- Address GitHub issue #1265 with a modest first contract/schema drift gate.
+- Add a repeatable `cmd/bitriver` release contract snapshot command that emits stable JSON for the operator-facing contract.
+- Add a diff command that compares two snapshots and classifies additive, removal/breaking, and security-sensitive default drift.
+- Document how to generate and review snapshots without changing the deployment contract itself.
 
 ## Assumptions
-- Documentation should lead the heavier release-gate implementation issues (#1265, #1266, #1267, #1268, #1270, #1271).
-- Existing commands and workflows are the only commands that should be named as available; planned gates should be clearly marked as staged/future work.
-- This pass is documentation-only and does not change runtime behavior, deployment contract files, CI behavior, schemas, or release artifacts.
+- The first version should be useful and small: env template keys/defaults/comments, Compose service shape, migration file list, generated artifact presence, and health endpoint names are enough to catch practical drift.
+- Snapshot generation should not require a running stack or Docker daemon; it can parse files in the checkout directly.
+- The checked-in deployment contract files remain unchanged in this pass.
+- Future CI workflow wiring and PR comments can build on the command added here.
 
 ## Risks
-- Overstating planned gates as implemented could mislead operators and contributors.
-- Adding another release document could fragment the release process unless it is linked from `docs/production-release.md` and README key docs.
-- Release-gate guidance can become compliance-style noise if it is too long or vague.
+- A drift gate that depends on unstable formatting will create noisy diffs.
+- Parsing Compose YAML without adding dependencies is limited; the first pass should capture stable service names and obvious contract fields, not pretend to fully understand every YAML feature.
+- Secret-like env values must be treated as defaults from `deploy/.env.example`, not real secrets from root `.env`.
+- Over-classifying additive drift as breaking would slow harmless changes.
 
 ## Test plan
+- `gofmt -w cmd/bitriver/release_contract.go cmd/bitriver/release_contract_test.go cmd/bitriver/main.go`
+- `go test ./cmd/bitriver -run "TestRunRelease|TestBuildContractSnapshot|TestDiffContractSnapshots" -count=1 -timeout=120s`
+- `go run ./cmd/bitriver release contract-snapshot --env-file deploy/.env.example --compose-file deploy/docker-compose.yml --output .tmp/contract-snapshot.json`
+- `go run ./cmd/bitriver release contract-diff --base .tmp/contract-snapshot.json --head .tmp/contract-snapshot.json`
 - `git diff --check`
-- Documentation review against issue #1269 acceptance criteria.
-- No runtime tests required unless source or workflow files change.
