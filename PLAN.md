@@ -1,29 +1,20 @@
 ## Scope (current change)
-- Release the viewer UI/UX simplification work already implemented and verified.
-- Improve first-run guidance and verification ergonomics only where it removes ambiguity found during local verification, especially Windows shell guidance, secret-safe verifier output, source-build context size, and Docker Compose 5 smoke parsing.
-- Preserve the canonical deployment contract: no changes to `deploy/docker-compose.yml`, root `.env`, generated OME expectations, backend API shape, auth behavior, or data model.
-- Exclude unsafe untracked deployment reports/scripts unless they are sanitized and intentionally folded into canonical docs.
+- Address GitHub issue #1269: document the BitRiver Live release-gate ladder.
+- Add a concise source-of-truth release-gates document that maps promotion gates to intent, timing, blocking status, commands/workflows, artifacts, and failure triage.
+- Link the new guidance from existing release-facing docs so future gate implementation issues can reference it.
+- Preserve the supported baseline: single-host, operator-managed, Docker Compose deployment with source quickstart and packaged launcher paths.
 
 ## Assumptions
-- A first-time source-checkout user should prefer `go run ./cmd/bitriver quickstart` or `scripts/quickstart.ps1` on Windows PowerShell, not a Bash wrapper that might resolve to a broken WSL install.
-- The existing Go quickstart, env validation, smoke command, and `./scripts/verify.sh --viewer` remain the source of truth for deployment readiness.
-- The untracked deployment assurance/guide files are local artifacts because they contain environment credentials and stale parallel workflow claims.
-- Docker Compose may print `ps --format json` either as one JSON array or as newline-delimited JSON objects depending on Compose version.
+- Documentation should lead the heavier release-gate implementation issues (#1265, #1266, #1267, #1268, #1270, #1271).
+- Existing commands and workflows are the only commands that should be named as available; planned gates should be clearly marked as staged/future work.
+- This pass is documentation-only and does not change runtime behavior, deployment contract files, CI behavior, schemas, or release artifacts.
 
 ## Risks
-- Staging untracked deployment files could leak secrets or document a non-canonical startup path.
-- Process tweaks can become stale if they introduce commands or Docker-ignore rules that do not match the repository build.
-- Pushing directly from `main` requires confirming `origin/main` has not moved unexpectedly.
-- Deployment verification depends on Docker Desktop/engine availability and local ports.
-- Smoke parser changes are shared with quickstart diagnostics and need focused CLI coverage.
+- Overstating planned gates as implemented could mislead operators and contributors.
+- Adding another release document could fragment the release process unless it is linked from `docs/production-release.md` and README key docs.
+- Release-gate guidance can become compliance-style noise if it is too long or vague.
 
 ## Test plan
 - `git diff --check`
-- `./scripts/verify.sh --viewer`
-- `BITRIVER_VERIFY_SOURCE_ONLY=1 ./scripts/verify.sh`
-- `go test ./cmd/bitriver -run "TestRunSmoke|TestSmokeCheckComposeState|TestParseComposeServiceStatesSupportsNDJSON|TestPortOrDefault" -count=1 -timeout=120s`
-- `git fetch origin --prune`
-- `git rev-list --left-right --count main...origin/main`
-- `git status --short --branch`
-- Deploy with the canonical quickstart or equivalent Compose path.
-- Smoke/health checks after deployment: `go run ./cmd/bitriver smoke --env-file ./.env`, Compose status, and viewer/API endpoint probes.
+- Documentation review against issue #1269 acceptance criteria.
+- No runtime tests required unless source or workflow files change.

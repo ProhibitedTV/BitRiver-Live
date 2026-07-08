@@ -4,6 +4,10 @@ This checklist keeps production releases consistent across the API, viewer, and
 supporting services. Follow each section in order before publishing a new tag or
 rolling out the artefacts to your infrastructure.
 
+For the promotion ladder that explains which checks are blocking or advisory at
+each stage, read [`docs/release-gates.md`](release-gates.md) before changing CI,
+release workflows, or operator-facing deployment behavior.
+
 **Canonical deployment path:** Production rollouts must flow through the
 repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails
 (`deploy/check-env.sh`, `scripts/render-ome-config.sh`). Go CLI shims and CI

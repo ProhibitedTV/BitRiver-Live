@@ -136,6 +136,7 @@ flowchart LR
 - Security hardening: [`docs/security.md`](docs/security.md)
 - Monitoring: [`docs/monitoring.md`](docs/monitoring.md)
 - Upgrades: [`docs/upgrades.md`](docs/upgrades.md)
+- Release gates: [`docs/release-gates.md`](docs/release-gates.md)
 - Release process: [`docs/production-release.md`](docs/production-release.md)
 - Versioning policy: [`docs/versioning.md`](docs/versioning.md)
 - Support expectations: [`SUPPORT.md`](SUPPORT.md)
@@ -174,6 +175,7 @@ The repository already contains release automation under [`.github/workflows/rel
 
 - verify the canonical deployment contract
 - rotate real secrets for the target environment
+- classify promotion evidence through the gate ladder in [`docs/release-gates.md`](docs/release-gates.md)
 - confirm docs, changelog, release notes, and digests agree on the final tag
 - follow the checklist in [`docs/production-release.md`](docs/production-release.md)
 
