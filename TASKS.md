@@ -32,6 +32,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Snapshot and self-diff commands pass locally.
     - `git diff --check` passes.
 
+- [-] Task 6 - Unblock PR #1285 macOS Go CI
+  - Acceptance criteria:
+    - CI Go test matrices use a stable macOS runner label instead of the currently failing floating `macos-latest` image.
+    - Go workflow convention checks pass locally.
+    - PR #1285 checks are rechecked after pushing the workflow fix.
+
 ### Execution log
 - Task 1 read-only pass:
   - PR #1284 was marked ready and squash-merged into `main`; issue #1269 is closed.
@@ -53,3 +59,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `git diff --check` - passed with line-ending warnings only.
   - `./scripts/verify.sh` via Git Bash - attempted; failed during the Go test phase because the Windows host reported paging-file/out-of-memory errors while compiling unrelated packages (`fatal error: out of memory allocating heap arena map`, `The paging file is too small for this operation to complete`).
   - Note: the host disk was full during focused Go tests. Cleared generated cache directories to continue, then restored tracked `.gocache-*` files so they are not part of this change.
+- Task 6 read-only pass:
+  - Confirmed PR #1285 is blocked only by `Go tests (macos-latest)` while Ubuntu, Windows, docs, image scan, and quickstart checks pass or skip as expected.
+  - Failing macOS logs abort generated Go test binaries with `missing LC_UUID load command` on the floating macOS runner image.
+- Task 6 local fix:
+  - Updated Go test matrices in `.github/workflows/ci.yml` and `.github/workflows/go-unit-tests.yml` from `macos-latest` to `macos-15`.
+  - Check: `git diff --check` passed with line-ending warnings only.
+  - Check: `& 'C:\Program Files\Git\bin\bash.exe' -lc 'export PATH=/usr/bin:/bin:$PATH; command -v grep; scripts/check-go-workflow-config.sh'` passed.
