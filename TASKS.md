@@ -32,7 +32,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Snapshot and self-diff commands pass locally.
     - `git diff --check` passes.
 
-- [-] Task 6 - Unblock PR #1285 macOS Go CI
+- [x] Task 6 - Unblock PR #1285 macOS Go CI
   - Acceptance criteria:
     - CI Go test matrices use a stable macOS runner label instead of the currently failing floating `macos-latest` image.
     - Go workflow convention checks pass locally.
@@ -66,3 +66,4 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Updated Go test matrices in `.github/workflows/ci.yml` and `.github/workflows/go-unit-tests.yml` from `macos-latest` to `macos-15`.
   - Check: `git diff --check` passed with line-ending warnings only.
   - Check: `& 'C:\Program Files\Git\bin\bash.exe' -lc 'export PATH=/usr/bin:/bin:$PATH; command -v grep; scripts/check-go-workflow-config.sh'` passed.
+  - Check: `gh pr checks 1285 --json name,state,bucket,link,workflow` passed after push; `Go tests (macos-15)`, `Go tests (windows-latest)`, Ubuntu test-all, docs, image scan, workflow consistency, and quickstart sanity all passed; viewer/shell/monitoring/wizard jobs skipped as expected.
