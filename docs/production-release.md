@@ -69,6 +69,20 @@ The full tier writes `.artifacts/release-gate/release-gate-report.json`, redacte
 ./scripts/release-gate-smoke.sh --tier fast --target vX.Y.Z
 ```
 
+After deploying the release candidate to staging or the production canary host, run the canary/rollback gate and attach its artifact directory to the change request:
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file ./.env logs --tail=200 > .tmp/recent-compose-logs.txt
+./scripts/release-canary.sh \
+  --base-url https://api.example.com \
+  --logs-file .tmp/recent-compose-logs.txt \
+  --rollback-notes .tmp/rollback-notes.md \
+  --require-rollback-notes \
+  --artifact-dir .artifacts/release-canary
+```
+
+The canary gate is non-mutating. It checks `/readyz`, `/healthz`, `/api/status`, and `/viewer`, saves redacted response artifacts, scans supplied logs for high-confidence rollout blockers, and verifies rollback notes cover previous version/tag, data or migration handling, env/config rollback, and artifact/image rollback path.
+
 ### GitHub Actions supply-chain pinning
 
 All workflow `uses:` references must pin to immutable commit SHAs rather than

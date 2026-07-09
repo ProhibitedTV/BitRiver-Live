@@ -12,6 +12,12 @@ func TestRunReleaseRequiresSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunReleaseRejectsUnknownSubcommand(t *testing.T) {
+	if err := runRelease([]string{"does-not-exist"}); err == nil {
+		t.Fatal("expected unknown release subcommand to fail")
+	}
+}
+
 func TestBuildContractSnapshotCapturesOperatorContract(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env.example")

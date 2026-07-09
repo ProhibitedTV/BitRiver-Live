@@ -153,6 +153,22 @@ Each alert in `deploy/monitoring/prometheus-alerts.yml` should page to the remed
 | `BitRiverIngestFailureRateHigh` | Ingest failure ratio exceeds 5% for 10 minutes. | Compare `bitriver_ingest_failures_total` by operation; inspect recent ingest API calls and dependency health in `/api/status`. | Repair failing operation path (credentials/network), retry failed ingest workflows, and confirm failure ratio drops. |
 | `BitRiverTranscoderFailuresHigh` | Transcoder fail ratio exceeds 5% for 10 minutes. | Inspect transcoder logs for ffmpeg exits, missing inputs, or permission issues; verify CPU/memory and `./transcoder-data` free space. | Restart/recover transcoder workers, fix input or codec config issues, and rebalance workload/capacity. |
 
+### Release canary gate
+
+After a staging or production-candidate deploy, run the canary gate from a host that can reach the public API endpoint:
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file ./.env logs --tail=200 > .tmp/recent-compose-logs.txt
+./scripts/release-canary.sh \
+  --base-url https://api.example.com \
+  --logs-file .tmp/recent-compose-logs.txt \
+  --rollback-notes .tmp/rollback-notes.md \
+  --require-rollback-notes \
+  --artifact-dir .artifacts/release-canary
+```
+
+The command does not start or stop services. It records CLI version metadata, redacted responses from `/readyz`, `/healthz`, `/api/status`, and `/viewer`, a conservative log scan, and rollback readiness evidence. Treat a failed canary as a stop-promotion signal. Treat warnings as missing evidence that must be resolved or explicitly accepted in the release ticket before expanding traffic.
+
 ## Resource sizing + kernel tuning
 
 Use `deploy/docker-compose.limits.yml` for enforceable CPU/memory limits under non-Swarm Docker Compose:
