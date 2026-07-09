@@ -66,3 +66,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Check: `git diff --check` passed with line-ending warnings only.
   - Check: `./scripts/verify.sh --go-packages ./cmd/bitriver` was attempted under Git Bash and stopped at `Env example placeholder hygiene` because no Python runtime is installed on this host (`python`, `python3`, and `py -3` are unavailable). Docker Compose is also unavailable locally (`docker compose version` fails), so full local Docker-dependent release smoke remains unproven on this machine.
   - Cleanup: removed generated `.tmp/release-gate-smoke`, `.tmp/release-gate-wrapper`, and `.gocache-release-gate` directories.
+- PR #1286 CI follow-up:
+  - Ubuntu test-all initially failed in the new `Release smoke gate fast tier` step after `verify.sh`/quickstart cleanup removed root `.env`; `deploy/.env.example` as `--env-file` did not satisfy Compose service-level `env_file: ../.env`.
+  - Updated the smoke gate to create a temporary root `.env` from the fallback env only when the requested default root `.env` is absent, remove it after the gate, and include command-output tails in failed phase errors.
+  - Check: focused Go test passed again with workspace-local `GOCACHE=.gocache-release-gate`.
+  - Check: wrapper fast tier passed again with workspace-local `GOCACHE=.gocache-release-gate`; local Compose config remained skipped because Docker Compose is unavailable on this host.
+  - Check: `git diff --check` passed with line-ending warnings only.

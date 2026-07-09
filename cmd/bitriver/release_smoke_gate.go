@@ -140,6 +140,11 @@ func executeReleaseSmokeGate(cfg releaseSmokeGateConfig, report *releaseSmokeGat
 	if effectiveEnv != cfg.EnvFile {
 		report.EffectiveEnv = filepath.ToSlash(effectiveEnv)
 	}
+	composeEnv, composeEnvDetails, cleanupComposeEnv, err := prepareReleaseGateComposeEnv(cfg.EnvFile, effectiveEnv)
+	if err != nil {
+		return err
+	}
+	defer cleanupComposeEnv()
 
 	if err := runReleaseGatePhase(report, "version evidence", []string{"bitriver", "version"}, filepath.Join(cfg.ArtifactDir, "version.txt"), "records CLI version metadata for release evidence", func(artifact string) error {
 		return captureStdoutToFile(artifact, func() error {
@@ -175,7 +180,7 @@ func executeReleaseSmokeGate(cfg releaseSmokeGateConfig, report *releaseSmokeGat
 		report.Phases = append(report.Phases, releaseSmokeGatePhase{
 			Name:     "compose config",
 			Status:   "skipped",
-			Command:  []string{"docker", "compose", "--env-file", effectiveEnv, "-f", cfg.ComposeFile, "config"},
+			Command:  []string{"docker", "compose", "--env-file", composeEnv, "-f", cfg.ComposeFile, "config"},
 			Artifact: filepath.ToSlash(composeConfigArtifact),
 			Details:  details,
 		})
@@ -183,8 +188,8 @@ func executeReleaseSmokeGate(cfg releaseSmokeGateConfig, report *releaseSmokeGat
 			return fmt.Errorf("release smoke gate phase %q failed (artifact: %s): %w", "compose config", filepath.ToSlash(composeConfigArtifact), err)
 		}
 	} else {
-		if err := runReleaseGatePhase(report, "compose config", []string{"docker", "compose", "--env-file", effectiveEnv, "-f", cfg.ComposeFile, "config"}, composeConfigArtifact, "renders the canonical compose contract for the selected env file", func(artifact string) error {
-			return releaseGateCommandRunner("docker", []string{"compose", "--env-file", effectiveEnv, "-f", cfg.ComposeFile, "config"}, artifact)
+		if err := runReleaseGatePhase(report, "compose config", []string{"docker", "compose", "--env-file", composeEnv, "-f", cfg.ComposeFile, "config"}, composeConfigArtifact, "renders the canonical compose contract for the selected env file. "+composeEnvDetails, func(artifact string) error {
+			return releaseGateCommandRunner("docker", []string{"compose", "--env-file", composeEnv, "-f", cfg.ComposeFile, "config"}, artifact)
 		}); err != nil {
 			return err
 		}
@@ -196,9 +201,9 @@ func executeReleaseSmokeGate(cfg releaseSmokeGateConfig, report *releaseSmokeGat
 			Status:  "skipped",
 			Details: "skipped: pass --target vX.Y.Z to capture upgrade-plan evidence for a release candidate.",
 		})
-	} else if err := runReleaseGatePhase(report, "upgrade plan", []string{"bitriver", "upgrade-plan", "--compose-file", cfg.ComposeFile, "--env-file", effectiveEnv, "--target", cfg.Target}, filepath.Join(cfg.ArtifactDir, "upgrade-plan.txt"), "records migration and operator upgrade checklist evidence", func(artifact string) error {
+	} else if err := runReleaseGatePhase(report, "upgrade plan", []string{"bitriver", "upgrade-plan", "--compose-file", cfg.ComposeFile, "--env-file", composeEnv, "--target", cfg.Target}, filepath.Join(cfg.ArtifactDir, "upgrade-plan.txt"), "records migration and operator upgrade checklist evidence", func(artifact string) error {
 		return captureStdoutToFile(artifact, func() error {
-			return releaseGateUpgradePlanRunner([]string{"--compose-file", cfg.ComposeFile, "--env-file", effectiveEnv, "--target", cfg.Target})
+			return releaseGateUpgradePlanRunner([]string{"--compose-file", cfg.ComposeFile, "--env-file", composeEnv, "--target", cfg.Target})
 		})
 	}); err != nil {
 		return err
@@ -274,6 +279,42 @@ func resolveReleaseGateEvidenceEnv(envFile string) (string, string) {
 		return example, fmt.Sprintf("runtime env %s was not present; used %s for non-secret evidence.", envFile, example)
 	}
 	return envFile, "records environment keys only; values are redacted."
+}
+
+func prepareReleaseGateComposeEnv(envFile, fallbackEnv string) (string, string, func(), error) {
+	cleanup := func() {}
+	if _, err := os.Stat(envFile); err == nil {
+		return envFile, "Using requested env file for Compose evidence.", cleanup, nil
+	}
+	if !sameCleanPath(envFile, defaultEnvFile()) {
+		return fallbackEnv, fmt.Sprintf("Requested env file %s is absent; using %s for Compose evidence.", envFile, fallbackEnv), cleanup, nil
+	}
+	if _, err := os.Stat(fallbackEnv); err != nil {
+		return envFile, "", cleanup, err
+	}
+	data, err := os.ReadFile(fallbackEnv)
+	if err != nil {
+		return envFile, "", cleanup, err
+	}
+	if err := os.WriteFile(envFile, data, 0o600); err != nil {
+		return envFile, "", cleanup, err
+	}
+	cleanup = func() {
+		_ = os.Remove(envFile)
+	}
+	return envFile, fmt.Sprintf("Root .env was absent; created a temporary copy from %s for Compose env_file compatibility and removed it after the gate.", fallbackEnv), cleanup, nil
+}
+
+func sameCleanPath(a, b string) bool {
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	if errA == nil {
+		a = absA
+	}
+	if errB == nil {
+		b = absB
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 type envRedactionSummary struct {
@@ -352,9 +393,25 @@ func runReleaseGateCommandToFile(name string, args []string, output string) erro
 	cmd.Stdout = file
 	cmd.Stderr = file
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+		return fmt.Errorf("%s %s: %w%s", name, strings.Join(args, " "), err, commandOutputTail(output))
 	}
 	return nil
+}
+
+func commandOutputTail(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	const limit = 4096
+	if len(data) > limit {
+		data = data[len(data)-limit:]
+	}
+	tail := strings.TrimSpace(string(data))
+	if tail == "" {
+		return ""
+	}
+	return ": " + tail
 }
 
 func defaultReleaseGateComposeAvailable() error {
