@@ -93,10 +93,15 @@ else
 fi
 
 if [[ "$run_quickstart" == true ]]; then
-  if command -v docker >/dev/null 2>&1; then
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    run_step "Release smoke gate fast tier" ./scripts/release-gate-smoke.sh \
+      --tier fast \
+      --artifact-dir "${BITRIVER_RELEASE_GATE_ARTIFACT_DIR:-.artifacts/release-gate-fast}" \
+      --target "${BITRIVER_RELEASE_GATE_TARGET:-v0.0.0-ci}"
     run_step "Quickstart smoke" ./scripts/test-quickstart.sh
   else
-    skip_step "Quickstart smoke" "docker is not installed or not on PATH."
+    skip_step "Release smoke gate fast tier" "docker compose is not installed, not on PATH, or unavailable."
+    skip_step "Quickstart smoke" "docker compose is not installed, not on PATH, or unavailable."
   fi
 else
   skip_step "Quickstart smoke" "disabled by default (set BITRIVER_TEST_QUICKSTART=1 to enable)."

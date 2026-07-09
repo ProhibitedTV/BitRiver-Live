@@ -10,7 +10,7 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | --- | --- | --- | --- | --- | --- |
 | 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Blocking | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, `Go unit tests`, viewer jobs when paths match | Test logs, verifier phase output, viewer lint/test output |
 | 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
-| 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver quickstart`; `go run ./cmd/bitriver smoke --env-file ./.env` | Quickstart smoke log, Compose service state, smoke check results, selected service logs on failure |
+| 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
 | 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory until automated; reviewer-blocking by policy when risk is unresolved | PR template plus reviewer checklist; planned scorecard automation | PR summary, changed-area classification, verification commands, docs/release note decisions |
 | 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh` | Release workflow artifacts, release notes, image digest list, env validation logs, pgx guard output |
 | 6. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; mostly manual today | `docs/operations.md`, `docs/upgrades.md`, `/readyz`, `/healthz`, `/api/status`, monitoring dashboards and backup/restore runbooks | Canary notes, health snapshots, alert dashboard links, backup/restore evidence, rollback decision record |
@@ -71,6 +71,31 @@ The golden path protects the source checkout and packaged launcher flows that co
 4. Start the Compose stack.
 5. Run smoke checks against API, viewer, and service health.
 
+Run the fast PR tier with:
+
+```bash
+./scripts/release-gate-smoke.sh --tier fast --target vX.Y.Z
+```
+
+The fast tier writes `.artifacts/release-gate/` evidence by default:
+
+- `release-gate-report.json` with phase status, artifact paths, and staged follow-up notes
+- `version.txt`
+- `env-redaction-summary.json` with keys and redaction coverage only, never env values
+- `contract-snapshot.json`
+- `compose-config.yml` when Docker Compose is available, or an explicit skipped artifact when it is not
+- `upgrade-plan.txt` when `--target` is supplied
+
+PR CI runs this fast tier automatically through `scripts/test-all.sh` whenever the existing quickstart path filter enables `BITRIVER_TEST_QUICKSTART=1`. This keeps the workflow wiring centralized while making Gate 3 visible by name.
+
+Before tagging or promoting a release candidate, run the full source-checkout tier on a host with Docker Compose available:
+
+```bash
+./scripts/release-gate-smoke.sh --tier full --target vX.Y.Z
+```
+
+The full tier runs the fast evidence phases, then executes source quickstart, runs the smoke command, and captures `compose-ps.json` plus selected `compose-logs.txt` diagnostics. A failed phase returns a non-zero exit and names the artifact to inspect.
+
 For source validation, use:
 
 ```bash
@@ -79,6 +104,13 @@ go run ./cmd/bitriver smoke --env-file ./.env
 ```
 
 `./scripts/test-quickstart.sh` packages this into the release smoke path used by verification. When this gate fails, collect the failed phase, `docker compose ps`, relevant service logs, and smoke output before changing code.
+
+Packaged launcher and upgrade execution evidence remain staged release-candidate follow-ups for now:
+
+- Packaged launcher smoke: install or unpack the release artifact, run the launcher against a clean env, run smoke, and attach launcher logs plus version output.
+- Upgrade smoke: start the previous release or baseline, preserve stateful data, apply the target release, run migrations if applicable, run smoke, and attach upgrade notes.
+
+The `--target` flag produces an upgrade-plan artifact in both tiers so release reviewers can see the migration and operator checklist even before a slower baseline-to-target upgrade rehearsal is automated.
 
 ### 4. AI-authored PR risk scorecard
 
