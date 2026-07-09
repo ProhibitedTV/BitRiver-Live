@@ -1,29 +1,28 @@
 ## Scope (current change)
-- Address GitHub issue #1265 with a modest first contract/schema drift gate.
-- Add a repeatable `cmd/bitriver` release contract snapshot command that emits stable JSON for the operator-facing contract.
-- Add a diff command that compares two snapshots and classifies additive, removal/breaking, and security-sensitive default drift.
-- Document how to generate and review snapshots without changing the deployment contract itself.
-- Follow up on PR #1285 CI by pinning the Go-test macOS runner away from the broken floating `macos-latest` image.
+- Address GitHub issue #1266 with a named golden-path release gate.
+- Add `go run ./cmd/bitriver release smoke-gate` as the evidence-producing gate command.
+- Add `./scripts/release-gate-smoke.sh` as the operator/CI wrapper for the command.
+- Wire the fast tier into the existing `scripts/test-all.sh` quickstart path so PR CI runs it when quickstart/deploy/runtime paths change.
+- Document how fast, full, packaged, and upgrade-path evidence map to Gate 3 without changing deployment contract files.
 
 ## Assumptions
-- The first version should be useful and small: env template keys/defaults/comments, Compose service shape, migration file list, generated artifact presence, and health endpoint names are enough to catch practical drift.
-- Snapshot generation should not require a running stack or Docker daemon; it can parse files in the checkout directly.
-- The checked-in deployment contract files remain unchanged in this pass.
-- Future CI workflow wiring and PR comments can build on the command added here.
-- `macos-15` is an available GitHub-hosted macOS runner label and keeps macOS Go coverage without relying on the current `macos-latest` resolution.
+- The first pass should compose existing checks instead of duplicating quickstart, smoke, contract snapshot, or upgrade-plan logic.
+- Fast PR tier should stay bounded: version evidence, env redaction summary, contract snapshot, and Compose config output.
+- Full release-candidate tier can run the source quickstart plus smoke and collect Compose state/log artifacts.
+- Packaged launcher and real baseline-to-target upgrade execution are slower release/nightly concerns; this pass should document staged follow-up evidence and provide an upgrade-plan artifact hook.
+- Existing CI path filters already enable quickstart-focused validation through `BITRIVER_TEST_QUICKSTART=1`; `scripts/test-all.sh` is the right centralized entrypoint for the new fast tier.
 
 ## Risks
-- A drift gate that depends on unstable formatting will create noisy diffs.
-- Parsing Compose YAML without adding dependencies is limited; the first pass should capture stable service names and obvious contract fields, not pretend to fully understand every YAML feature.
-- Secret-like env values must be treated as defaults from `deploy/.env.example`, not real secrets from root `.env`.
-- Over-classifying additive drift as breaking would slow harmless changes.
-- Pinning the macOS label is a CI workflow change; keep it limited to Go test jobs that failed on the floating runner and verify workflow conventions.
+- Running the full Compose quickstart on every PR would be too slow; keep full mode opt-in.
+- Artifact files must avoid leaking secrets; env evidence should report redaction coverage, not values.
+- Failure output must name the failed phase and artifact path so operators can debug without guessing.
+- CI script wiring changes required checks for quickstart-path PRs, so local verification must include the new wrapper and relevant Go tests.
 
 ## Test plan
-- `gofmt -w cmd/bitriver/release_contract.go cmd/bitriver/release_contract_test.go cmd/bitriver/main.go`
-- `go test ./cmd/bitriver -run "TestRunRelease|TestBuildContractSnapshot|TestDiffContractSnapshots" -count=1 -timeout=120s`
-- `go run ./cmd/bitriver release contract-snapshot --env-file deploy/.env.example --compose-file deploy/docker-compose.yml --output .tmp/contract-snapshot.json`
-- `go run ./cmd/bitriver release contract-diff --base .tmp/contract-snapshot.json --head .tmp/contract-snapshot.json`
+- `gofmt -w cmd/bitriver/release_contract.go cmd/bitriver/release_contract_test.go`
+- `go test ./cmd/bitriver -run "TestRunRelease|TestReleaseSmokeGate" -count=1 -timeout=120s`
+- `go run ./cmd/bitriver release smoke-gate --tier fast --artifact-dir .tmp/release-gate-smoke --target v0.0.0-test`
+- `./scripts/release-gate-smoke.sh --tier fast --artifact-dir .tmp/release-gate-wrapper --target v0.0.0-test`
+- `BITRIVER_VERIFY_SOURCE_ONLY=1 ./scripts/verify.sh`
+- `bash -n scripts/release-gate-smoke.sh scripts/test-all.sh`
 - `git diff --check`
-- `bash scripts/check-go-workflow-config.sh`
-- `gh pr checks 1285 --json name,state,bucket,link,workflow`

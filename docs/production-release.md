@@ -57,6 +57,18 @@ workflow does not discover failures after the tag is pushed.
 
 For the default local quality gate, run `./scripts/verify.sh`; it covers Go and contract checks plus Docker-gated Compose validation and quickstart smoke (`./scripts/test-quickstart.sh`) in deterministic order when Docker is available.
 
+Before tagging or promoting a release candidate, run the named golden-path release gate and attach its artifact directory to the release ticket/change request:
+
+```bash
+./scripts/release-gate-smoke.sh --tier full --target vX.Y.Z
+```
+
+The full tier writes `.artifacts/release-gate/release-gate-report.json`, redacted env evidence, a contract snapshot, Compose config output, quickstart/smoke logs, and Compose diagnostics. If Docker Compose is not available on a local review machine, the fast tier can still produce non-mutating evidence, but the full tier must pass on a Docker-capable release-candidate host before tagging:
+
+```bash
+./scripts/release-gate-smoke.sh --tier fast --target vX.Y.Z
+```
+
 ### GitHub Actions supply-chain pinning
 
 All workflow `uses:` references must pin to immutable commit SHAs rather than

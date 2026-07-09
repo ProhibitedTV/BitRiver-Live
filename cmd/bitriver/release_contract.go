@@ -102,7 +102,7 @@ type contractDiffItem struct {
 
 func runRelease(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: release <contract-snapshot|contract-diff> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: release <contract-snapshot|contract-diff|smoke-gate> [flags]")
 		return errors.New("release subcommand required")
 	}
 	switch args[0] {
@@ -110,6 +110,8 @@ func runRelease(args []string) error {
 		return runContractSnapshot(args[1:])
 	case "contract-diff":
 		return runContractDiff(args[1:])
+	case "smoke-gate":
+		return runReleaseSmokeGate(args[1:])
 	default:
 		return fmt.Errorf("unknown release subcommand: %s", args[0])
 	}
