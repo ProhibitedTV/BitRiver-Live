@@ -1,55 +1,57 @@
-## Scoped change: add PR release scorecard (#1267)
+## Scoped change: add production canary and rollback gate (#1268)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish scorecard scope
+- [x] Task 1 - Establish canary-gate scope
   - Acceptance criteria:
-    - `PLAN.md` captures #1267 scope, assumptions, risks, and test plan.
+    - `PLAN.md` captures #1268 scope, assumptions, risks, and test plan.
     - `TASKS.md` lists ordered tasks before source/doc edits for this pass.
-    - Existing PR template, release-gate docs, and CI/doc scripts are reviewed.
+    - Existing release command, smoke command, operations docs, and production release docs are reviewed.
 
-- [x] Task 2 - Update PR template scorecard
+- [x] Task 2 - Add release canary command
   - Acceptance criteria:
-    - PR template includes changed-area classification.
-    - PR template includes risk level, evidence map, release/operator impact, and blocked-check disclosure.
-    - Medium/high-risk prompts are concise and reviewable.
+    - `bitriver release canary` accepts `--base-url`, `--artifact-dir`, optional `--logs-file`, optional `--rollback-notes`, and `--require-rollback-notes`.
+    - The command writes a JSON canary report and endpoint response artifacts.
+    - High-confidence endpoint failures return non-zero; warnings are recorded without implying success where checks were skipped.
 
-- [x] Task 3 - Add advisory scorecard validator
+- [x] Task 3 - Add log scan and rollback readiness checks
   - Acceptance criteria:
-    - `./scripts/check-pr-release-scorecard.sh` validates a PR body file.
-    - Optional changed-file input warns on obvious mismatches.
-    - `--strict` exits non-zero for warnings; advisory mode exits zero with clear warnings.
+    - Supplied logs are scanned for conservative fatal/error patterns with matching lines recorded.
+    - Rollback notes can be required and checked for previous-version, migration/data, env/config, and artifact rollback coverage.
+    - Unit tests cover clean logs, bad logs, missing rollback notes, and complete rollback notes.
 
-- [x] Task 4 - Document Codex/release-gate expectations
+- [x] Task 4 - Add wrapper and docs
   - Acceptance criteria:
-    - Docs explain how Codex-authored PRs disclose risk, evidence, blocked checks, and operator impact.
-    - `docs/release-gates.md` maps the scorecard to Gate 4.
-    - Docs stay short and practical.
+    - `scripts/release-canary.sh` delegates to `bitriver release canary`.
+    - `docs/release-gates.md`, `docs/production-release.md`, and `docs/operations.md` explain when/how to run the canary gate.
+    - Docs keep the gate scoped to the supported single-host path.
 
 - [x] Task 5 - Verify and record results
   - Acceptance criteria:
-    - Script syntax and sample validator runs pass.
-    - Expected strict failure case fails.
+    - Focused Go tests pass.
+    - Wrapper syntax passes.
+    - A local command run against a controlled test endpoint/log fixture passes.
     - `git diff --check` passes.
 
 ### Execution log
 - Task 1 read-only pass:
-  - Confirmed #1266 is closed after PR #1286; selected open issue #1267 as the next release-gate ticket under #1264.
-  - Reviewed `.github/pull_request_template.md`, `docs/release-gates.md`, `scripts/check-ci-contract.sh`, docs consistency workflow, and Codex/test agent docs.
-  - Chose an advisory-first implementation: PR template scorecard, local validation script, and documentation without workflow YAML changes.
+  - Confirmed #1267 is closed after PR #1287; selected open issue #1268 as the next release-gate ticket under #1264.
+  - Reviewed `cmd/bitriver/release_contract.go`, `cmd/bitriver/release_smoke_gate.go`, `cmd/bitriver/smoke.go`, `docs/release-gates.md`, `docs/operations.md`, and `docs/production-release.md`.
+  - Chose a bounded first pass: a non-mutating `release canary` command for already-running stacks, optional log-file scanning, enforceable rollback-note checks, and docs/wrapper updates without deployment contract edits.
 - Task 2 implementation:
-  - Expanded `.github/pull_request_template.md` with changed-area classification, risk level, evidence map, operator/release impact, blocked-check disclosure, and medium/high-risk review prompts.
+  - Added `bitriver release canary` with `--base-url`, `--artifact-dir`, `--logs-file`, `--rollback-notes`, `--require-rollback-notes`, and `--timeout`.
+  - The command writes `canary-report.json`, CLI version evidence, and redacted endpoint response artifacts for `/readyz`, `/healthz`, `/api/status`, and `/viewer`.
+  - Endpoint failures and explicit unhealthy JSON status fields fail the gate; skipped optional evidence is recorded as warnings.
 - Task 3 implementation:
-  - Added `scripts/check-pr-release-scorecard.sh` with advisory default mode, strict failure mode, required scorecard section checks, medium/high-risk evidence checks, and changed-file mismatch heuristics.
+  - Added conservative log scanning for fatal/panic, migration failure, connection refused, missing required config, auth/session failure, and transcoder/ffmpeg failure patterns.
+  - Added rollback-note coverage checks for previous version/tag, data or migration handling, env/config rollback, and artifact/image rollback path.
+  - Added focused tests for healthy canary evidence, degraded endpoint failure, log pattern detection, and rollback-note coverage.
 - Task 4 implementation:
-  - Added `docs/pr-release-scorecard.md` with scorecard field guidance, Codex skipped-check expectations, and advisory/strict validator examples.
-  - Updated `docs/release-gates.md` Gate 4 to reference the PR template, scorecard validator, and scorecard guide.
-  - Updated `docs/codex-cli.md` with Codex-authored PR scorecard expectations.
+  - Added `scripts/release-canary.sh` as the operator wrapper for `go run ./cmd/bitriver release canary`.
+  - Updated `docs/release-gates.md`, `docs/production-release.md`, and `docs/operations.md` with Gate 6 command usage, artifacts, failure behavior, and single-host scope.
 - Task 5 verification:
-  - Passed: `bash -n scripts/check-pr-release-scorecard.sh`.
-  - Passed with expected advisory warnings: `./scripts/check-pr-release-scorecard.sh --body .github/pull_request_template.md --advisory`.
-  - Passed: strict validation of a complete temporary scorecard with changed-file input.
-  - Passed as expected failure: strict validation of an incomplete temporary deployment scorecard returned non-zero with warnings.
+  - Passed: `gofmt -w cmd/bitriver/release_contract.go cmd/bitriver/release_canary.go cmd/bitriver/release_canary_test.go`.
+  - Passed: `bash -n scripts/release-canary.sh`.
   - Passed: `git diff --check`.
-  - Skipped: `shellcheck scripts/check-pr-release-scorecard.sh` because `shellcheck` is not installed on this host.
-  - Blocked locally: `./scripts/verify.sh` stopped at `Env example placeholder hygiene` because this host has no `python3`, `python`, or Windows `py` launcher available.
+  - Blocked locally: `go test ./cmd/bitriver -run "TestRunRelease|TestReleaseCanary" -count=1 -timeout=120s` with workspace-local `GOCACHE=.gocache-canary-gate` failed at link time because this host reported `There is not enough space on the disk`.
+  - Not run locally: `./scripts/verify.sh`; this host still lacks `python3`, `python`, or the Windows `py` launcher required by the env placeholder hygiene phase.

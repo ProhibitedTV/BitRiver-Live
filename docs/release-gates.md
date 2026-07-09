@@ -13,7 +13,7 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
 | 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
 | 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh` | Release workflow artifacts, release notes, image digest list, env validation logs, pgx guard output |
-| 6. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; mostly manual today | `docs/operations.md`, `docs/upgrades.md`, `/readyz`, `/healthz`, `/api/status`, monitoring dashboards and backup/restore runbooks | Canary notes, health snapshots, alert dashboard links, backup/restore evidence, rollback decision record |
+| 6. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; non-mutating command plus operator evidence | `./scripts/release-canary.sh`; `go run ./cmd/bitriver release canary`; `docs/operations.md`; `/readyz`, `/healthz`, `/api/status` | Canary report JSON, redacted health snapshots, log scan summary, version metadata, rollback readiness notes |
 
 ## Gate details
 
@@ -154,6 +154,19 @@ Production promotion needs operator evidence, not just CI logs. Before reopening
 - confirm recent backup and restore-rehearsal evidence for stateful releases
 - keep rollback notes aligned with `docs/upgrades.md`
 - record canary duration, observed errors, and the decision to continue or roll back
+
+After a release-candidate stack is deployed, run the non-mutating canary gate from a host that can reach the API:
+
+```bash
+./scripts/release-canary.sh \
+  --base-url https://api.example.com \
+  --logs-file .tmp/recent-compose-logs.txt \
+  --rollback-notes .tmp/rollback-notes.md \
+  --require-rollback-notes \
+  --artifact-dir .artifacts/release-canary
+```
+
+The gate writes `canary-report.json`, CLI version evidence, redacted endpoint response artifacts, a log scan summary, and rollback readiness evidence. It fails on endpoint transport/HTTP failures, explicit unhealthy/degraded JSON status fields, high-confidence fatal/error log patterns, or missing required rollback-note coverage. Optional evidence that is not supplied is recorded as a warning so local dry-runs remain useful without implying production approval.
 
 If canary health is ambiguous, stop promotion and collect logs before applying more changes. A successful release is one that can be explained and reversed, not only one that started.
 
