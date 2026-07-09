@@ -34,7 +34,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Viewer lint passes or any host/tooling blocker is recorded.
     - `git diff --check` passes.
 
-- [-] Task 6 - Fix PR CI fallout
+- [x] Task 6 - Fix PR CI fallout
   - Acceptance criteria:
     - Production viewer build type-checks the chat notice parser.
     - Transcoder live symlink lifecycle test no longer races the stub process exit.
@@ -81,3 +81,4 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
   - Check: `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` passed.
   - Check: `NODE_OPTIONS=--max-old-space-size=4096 npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/mobile-layout.spec.ts` completed `next build` but timed out locally while running browser tests; CI rerun is required for Playwright proof.
+  - CI: PR #1289 run `29034283507` passed image vulnerability scan, Ubuntu test-all, macOS Go, Windows Go, and Viewer CI.
