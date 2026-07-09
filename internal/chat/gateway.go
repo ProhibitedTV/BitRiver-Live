@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,11 @@ type chatFilterCacheEntry struct {
 	version   int64
 }
 
+type presenceState struct {
+	user        UserMetadata
+	connections int
+}
+
 // Gateway coordinates live chat fan-out, managing WebSocket clients and
 // publishing persistence events to the configured queue.
 type Gateway struct {
@@ -61,6 +67,7 @@ type Gateway struct {
 
 	mu       sync.RWMutex
 	rooms    map[string]map[*client]struct{}
+	presence map[string]map[string]*presenceState
 	bans     map[string]map[string]struct{}
 	timeouts map[string]map[string]time.Time
 
@@ -95,6 +102,7 @@ func NewGateway(cfg GatewayConfig) *Gateway {
 		heartbeatInterval:  cfg.HeartbeatInterval,
 		chatFilterCacheTTL: cacheTTL,
 		rooms:              make(map[string]map[*client]struct{}),
+		presence:           make(map[string]map[string]*presenceState),
 		bans:               snapshot.Bans,
 		timeouts:           snapshot.Timeouts,
 		regexCache:         make(map[string]*regexp.Regexp),
@@ -156,14 +164,17 @@ func (g *Gateway) CreateMessage(ctx context.Context, author domain.User, channel
 	if err != nil {
 		return MessageEvent{}, err
 	}
+	now := time.Now().UTC()
+	user := g.userMetadata(channelID, author)
 	message := MessageEvent{
 		ID:        id,
 		ChannelID: channelID,
 		UserID:    author.ID,
+		User:      &user,
 		Content:   trimmed,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
 	}
-	event := Event{Type: EventTypeMessage, Message: &message, OccurredAt: time.Now().UTC()}
+	event := Event{Type: EventTypeMessage, Message: &message, OccurredAt: now}
 	g.broadcast(event)
 	g.publish(ctx, event)
 	metrics.Default().ObserveChatEvent("message")
@@ -361,6 +372,50 @@ func (g *Gateway) SubmitReport(ctx context.Context, reporter domain.User, channe
 	return report, nil
 }
 
+// BroadcastSystemEvent emits a live room-scoped system notice without adding it
+// to chat transcript persistence.
+func (g *Gateway) BroadcastSystemEvent(event SystemEvent) (SystemEvent, error) {
+	event.ChannelID = strings.TrimSpace(event.ChannelID)
+	event.Kind = strings.TrimSpace(event.Kind)
+	event.Message = strings.TrimSpace(event.Message)
+	if event.ChannelID == "" || event.Kind == "" || event.Message == "" {
+		return SystemEvent{}, fmt.Errorf("channel, kind, and message are required")
+	}
+	if g.store != nil {
+		if _, ok := g.store.GetChannel(event.ChannelID); !ok {
+			return SystemEvent{}, fmt.Errorf("channel %s not found", event.ChannelID)
+		}
+	}
+	if event.ID == "" {
+		id, err := generateID()
+		if err != nil {
+			return SystemEvent{}, err
+		}
+		event.ID = id
+	}
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now().UTC()
+	} else {
+		event.CreatedAt = event.CreatedAt.UTC()
+	}
+	if event.Actor == nil && event.ActorID != "" {
+		if actor, ok := g.lookupUser(event.ActorID); ok {
+			metadata := g.userMetadata(event.ChannelID, actor)
+			event.Actor = &metadata
+		}
+	}
+	if event.Target == nil && event.TargetID != "" {
+		if target, ok := g.lookupUser(event.TargetID); ok {
+			metadata := g.userMetadata(event.ChannelID, target)
+			event.Target = &metadata
+		}
+	}
+	evt := Event{Type: EventTypeSystem, System: &event, OccurredAt: event.CreatedAt}
+	g.broadcast(evt)
+	metrics.Default().ObserveChatEvent("system:" + event.Kind)
+	return event, nil
+}
+
 // publish performs publish and propagates validation or dependency failures to the caller.
 func (g *Gateway) publish(ctx context.Context, event Event) {
 	if g.queue == nil {
@@ -391,6 +446,44 @@ func (g *Gateway) ensureChannelAccessible(channelID, userID string) error {
 		g.clearTimeout(channelID, userID)
 	}
 	return nil
+}
+
+func (g *Gateway) lookupUser(userID string) (domain.User, bool) {
+	if g.store == nil || strings.TrimSpace(userID) == "" {
+		return domain.User{}, false
+	}
+	return g.store.GetUser(userID)
+}
+
+func (g *Gateway) userMetadata(channelID string, user domain.User) UserMetadata {
+	displayName := strings.TrimSpace(user.DisplayName)
+	if displayName == "" {
+		displayName = user.ID
+	}
+	role := "viewer"
+	badges := make([]UserBadge, 0, 2)
+	if g.store != nil {
+		if channel, ok := g.store.GetChannel(channelID); ok && channel.OwnerID == user.ID {
+			role = "owner"
+			badges = append(badges,
+				UserBadge{ID: "owner", Label: "Owner"},
+				UserBadge{ID: "broadcaster", Label: "Broadcaster"},
+			)
+			return UserMetadata{ID: user.ID, DisplayName: displayName, Role: role, Badges: badges}
+		}
+	}
+	switch {
+	case user.HasRole("admin"):
+		role = "admin"
+		badges = append(badges, UserBadge{ID: "admin", Label: "Admin"})
+	case user.HasRole("moderator"):
+		role = "moderator"
+		badges = append(badges, UserBadge{ID: "moderator", Label: "Moderator"})
+	case user.HasRole("creator"):
+		role = "broadcaster"
+		badges = append(badges, UserBadge{ID: "broadcaster", Label: "Broadcaster"})
+	}
+	return UserMetadata{ID: user.ID, DisplayName: displayName, Role: role, Badges: badges}
 }
 
 // validateModeration validates moderation and reports an error when required invariants are not met.
@@ -424,23 +517,38 @@ func (g *Gateway) broadcast(event Event) {
 			g.applyModeration(*event.Moderation)
 		}
 	}
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	var channelID string
-	if event.Message != nil {
-		channelID = event.Message.ChannelID
-	} else if event.Moderation != nil {
-		channelID = event.Moderation.ChannelID
-	} else if event.Report != nil {
-		channelID = event.Report.ChannelID
-	}
+	g.broadcastExcept(event, nil)
+}
+
+func (g *Gateway) broadcastExcept(event Event, skip *client) {
+	channelID := event.channelID()
 	if channelID == "" {
 		return
 	}
-	recipients := g.rooms[channelID]
+	recipients := g.roomRecipients(channelID, skip)
 	if len(recipients) == 0 {
 		return
 	}
+	g.sendEvent(recipients, event)
+}
+
+func (g *Gateway) roomRecipients(channelID string, skip *client) []*client {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	recipients := g.rooms[channelID]
+	if len(recipients) == 0 {
+		return nil
+	}
+	out := make([]*client, 0, len(recipients))
+	for client := range recipients {
+		if client != skip {
+			out = append(out, client)
+		}
+	}
+	return out
+}
+
+func (g *Gateway) sendEvent(recipients []*client, event Event) {
 	payload, err := json.Marshal(outboundMessage{Type: "event", Event: &event})
 	if err != nil {
 		if g.logger != nil {
@@ -448,7 +556,7 @@ func (g *Gateway) broadcast(event Event) {
 		}
 		return
 	}
-	for client := range recipients {
+	for _, client := range recipients {
 		select {
 		case client.send <- outboundMessage{Raw: payload}:
 		default:
@@ -528,6 +636,124 @@ func (g *Gateway) clearTimeout(channelID, userID string) {
 	if timeouts := g.timeouts[channelID]; timeouts != nil {
 		delete(timeouts, userID)
 	}
+}
+
+func (g *Gateway) joinRoom(c *client, channelID string) (Event, *Event) {
+	now := time.Now().UTC()
+	user := g.userMetadata(channelID, c.user)
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.rooms[channelID] == nil {
+		g.rooms[channelID] = make(map[*client]struct{})
+	}
+	_, alreadyJoined := g.rooms[channelID][c]
+	g.rooms[channelID][c] = struct{}{}
+
+	var joinEvent *Event
+	if !alreadyJoined {
+		if g.presence[channelID] == nil {
+			g.presence[channelID] = make(map[string]*presenceState)
+		}
+		state := g.presence[channelID][c.user.ID]
+		if state == nil {
+			state = &presenceState{user: user}
+			g.presence[channelID][c.user.ID] = state
+		}
+		state.user = user
+		state.connections++
+		if state.connections == 1 {
+			presence := g.presenceDeltaLocked(channelID, user)
+			evt := Event{Type: EventTypePresenceJoin, Presence: &presence, OccurredAt: now}
+			joinEvent = &evt
+		}
+	}
+
+	return g.presenceSnapshotLocked(channelID, now), joinEvent
+}
+
+func (g *Gateway) leaveRoom(c *client, channelID string) *Event {
+	now := time.Now().UTC()
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	joined := false
+	if clients := g.rooms[channelID]; clients != nil {
+		if _, ok := clients[c]; ok {
+			joined = true
+			delete(clients, c)
+			if len(clients) == 0 {
+				delete(g.rooms, channelID)
+			}
+		}
+	}
+	if !joined {
+		return nil
+	}
+
+	users := g.presence[channelID]
+	if users == nil {
+		return nil
+	}
+	state := users[c.user.ID]
+	if state == nil {
+		return nil
+	}
+	state.connections--
+	if state.connections > 0 {
+		return nil
+	}
+
+	user := state.user
+	delete(users, c.user.ID)
+	chatterCount := len(users)
+	if chatterCount == 0 {
+		delete(g.presence, channelID)
+	}
+	presence := PresenceEvent{
+		ChannelID:    channelID,
+		User:         &user,
+		ViewerCount:  g.roomConnectionCountLocked(channelID),
+		ChatterCount: chatterCount,
+	}
+	evt := Event{Type: EventTypePresenceLeave, Presence: &presence, OccurredAt: now}
+	return &evt
+}
+
+func (g *Gateway) presenceSnapshotLocked(channelID string, occurredAt time.Time) Event {
+	usersByID := g.presence[channelID]
+	users := make([]UserMetadata, 0, len(usersByID))
+	for _, state := range usersByID {
+		users = append(users, state.user)
+	}
+	sort.Slice(users, func(i, j int) bool {
+		if users[i].DisplayName == users[j].DisplayName {
+			return users[i].ID < users[j].ID
+		}
+		return users[i].DisplayName < users[j].DisplayName
+	})
+	presence := PresenceEvent{
+		ChannelID:    channelID,
+		Users:        users,
+		ViewerCount:  g.roomConnectionCountLocked(channelID),
+		ChatterCount: len(users),
+	}
+	return Event{Type: EventTypePresenceSnapshot, Presence: &presence, OccurredAt: occurredAt}
+}
+
+func (g *Gateway) presenceDeltaLocked(channelID string, user UserMetadata) PresenceEvent {
+	return PresenceEvent{
+		ChannelID:    channelID,
+		User:         &user,
+		ViewerCount:  g.roomConnectionCountLocked(channelID),
+		ChatterCount: len(g.presence[channelID]),
+	}
+}
+
+func (g *Gateway) roomConnectionCountLocked(channelID string) int {
+	return len(g.rooms[channelID])
 }
 
 // generateID performs generate id and propagates validation or dependency failures to the caller.
@@ -648,16 +874,14 @@ func (c *client) handleJoin(channelID string) {
 		c.sendError(err.Error())
 		return
 	}
-	c.gateway.mu.Lock()
-	if c.gateway.rooms[channelID] == nil {
-		c.gateway.rooms[channelID] = make(map[*client]struct{})
-	}
-	c.gateway.rooms[channelID][c] = struct{}{}
-	c.gateway.mu.Unlock()
+	snapshot, joinEvent := c.gateway.joinRoom(c, channelID)
 	c.rooms[channelID] = struct{}{}
 
-	payload, _ := json.Marshal(outboundMessage{Type: "ack"})
-	c.send <- outboundMessage{Raw: payload}
+	c.sendAck(nil)
+	c.sendEvent(snapshot)
+	if joinEvent != nil {
+		c.gateway.broadcastExcept(*joinEvent, c)
+	}
 }
 
 // handleLeave routes and serves leave requests, writing HTTP errors for invalid input or backend failures.
@@ -665,15 +889,11 @@ func (c *client) handleLeave(channelID string) {
 	if channelID == "" {
 		return
 	}
-	c.gateway.mu.Lock()
-	if clients := c.gateway.rooms[channelID]; clients != nil {
-		delete(clients, c)
-		if len(clients) == 0 {
-			delete(c.gateway.rooms, channelID)
-		}
-	}
-	c.gateway.mu.Unlock()
+	leaveEvent := c.gateway.leaveRoom(c, channelID)
 	delete(c.rooms, channelID)
+	if leaveEvent != nil {
+		c.gateway.broadcast(*leaveEvent)
+	}
 }
 
 // handleMessage routes and serves message requests, writing HTTP errors for invalid input or backend failures.
@@ -692,8 +912,7 @@ func (c *client) handleMessage(ctx context.Context, msg inboundMessage) {
 		return
 	}
 	ack := Event{Type: EventTypeMessage, Message: &event, OccurredAt: time.Now().UTC()}
-	payload, _ := json.Marshal(outboundMessage{Type: "ack", Event: &ack})
-	c.send <- outboundMessage{Raw: payload}
+	c.sendAck(&ack)
 }
 
 // handleModeration routes and serves moderation requests, writing HTTP errors for invalid input or backend failures.
@@ -743,7 +962,16 @@ func (c *client) handleReport(ctx context.Context, msg inboundMessage) {
 		return
 	}
 	evt := Event{Type: EventTypeReport, Report: &report, OccurredAt: report.CreatedAt}
-	payload, _ := json.Marshal(outboundMessage{Type: "ack", Event: &evt})
+	c.sendAck(&evt)
+}
+
+func (c *client) sendAck(event *Event) {
+	payload, _ := json.Marshal(outboundMessage{Type: "ack", Event: event})
+	c.send <- outboundMessage{Raw: payload}
+}
+
+func (c *client) sendEvent(event Event) {
+	payload, _ := json.Marshal(outboundMessage{Type: "event", Event: &event})
 	c.send <- outboundMessage{Raw: payload}
 }
 

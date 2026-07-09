@@ -44,6 +44,12 @@ type ChatGatewayEnvelope = {
       id?: string;
       channelId?: string;
       userId?: string;
+      user?: {
+        id?: string;
+        displayName?: string;
+        role?: string;
+        badges?: { id?: string; label?: string }[];
+      };
       content?: string;
       createdAt?: string;
     };
@@ -67,6 +73,18 @@ function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUs
   }
 
   const userId = message.userId?.trim() ?? "";
+  const displayName = message.user?.displayName?.trim();
+  const role = message.user?.role?.trim();
+  const badges = message.user?.badges
+    ?.map((badge) => {
+      const id = badge.id?.trim();
+      if (!id) {
+        return undefined;
+      }
+      const label = badge.label?.trim();
+      return { id, label: label || undefined };
+    })
+    .filter((badge): badge is { id: string; label?: string } => Boolean(badge));
   return {
     id: message.id,
     message: message.content,
@@ -74,7 +92,9 @@ function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUs
     user: userId
       ? {
           id: userId,
-          displayName: currentUser?.id === userId ? currentUser.displayName : userId,
+          displayName: displayName || (currentUser?.id === userId ? currentUser.displayName : userId),
+          role: role || undefined,
+          badges: badges && badges.length > 0 ? badges : undefined,
         }
       : undefined,
   };

@@ -1,84 +1,79 @@
-## Scoped change: implement compact live-room chat panel (#1273)
+## Scoped change: extend chat room protocol events (#1274)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish live-room chat scope
+- [x] Task 1 - Establish protocol scope
   - Acceptance criteria:
-    - `PLAN.md` captures #1273 scope, assumptions, risks, and test plan.
-    - `TASKS.md` lists ordered tasks before source/doc edits for this pass.
-    - Existing channel page layout, `ChatPanel`, chat API helpers, protocol docs, CSS, and tests are reviewed.
+    - `PLAN.md` captures #1274 scope, assumptions, risks, and test plan.
+    - `TASKS.md` lists ordered tasks before source edits for this pass.
+    - Existing chat gateway, event types, queue persistence, protocol docs, and viewer parsing are reviewed.
+  - Check:
+    - Read-only analysis only.
 
-- [x] Task 2 - Refine chat panel structure and live-room header
+- [x] Task 2 - Add protocol event shapes
   - Acceptance criteria:
-    - Chat header shows room/channel identity, live/offline state, viewer count, message count, and compact sync state.
-    - A compact roster/presence affordance is visible without consuming the transcript on mobile.
-    - Secondary controls remain behind the options menu.
+    - Chat events can carry optional display metadata without breaking message persistence.
+    - Presence and system events have typed payloads with channel IDs, counts, and timestamps.
+    - Event channel routing includes message, moderation, report, automod, presence, and system payloads.
+  - Check:
+    - `gofmt -w internal/chat/event.go internal/chat/gateway.go internal/chat/gateway_test.go` passed.
+    - `go test ./internal/chat -run "TestGateway(Presence|MessageMetadata|SystemEvent|MessageFlow|ModerationFlow)" -count=1` blocked by the default Go build cache error, then by zero free disk space in the Windows temp directory.
 
-- [x] Task 3 - Add transcript row and scroll-follow behavior
+- [x] Task 3 - Track room presence in the gateway
   - Acceptance criteria:
-    - Transcript preserves scroll position when the user is reading older messages.
-    - Transcript auto-follows when the user is already at the bottom.
-    - A jump-to-latest control appears when new messages arrive while the user is not at the bottom.
-    - System/moderation row variants are visibly distinct from normal chat rows.
+    - `join` sends `ack` and a `presence_snapshot` to the joining connection.
+    - First connection for a user broadcasts `presence_join`; final disconnect/leave broadcasts `presence_leave`.
+    - Multiple tabs for the same user do not inflate `chatterCount`.
+    - Existing `join`, `leave`, `message`, and moderation commands still behave.
+  - Check:
+    - Focused gateway test command attempted; blocked by local disk exhaustion before package compilation completed.
 
-- [x] Task 4 - Update channel page styling and docs
+- [x] Task 4 - Emit role/badge metadata and system events
   - Acceptance criteria:
-    - Desktop keeps video primary with chat as a right-side dock.
-    - Tablet/mobile stack keeps video first, chat reachable below the player, and composer pinned inside the panel.
-    - Viewer README/chat contract notes reflect the live-room panel behavior if needed.
+    - Message events include safe author metadata for compact viewer rows.
+    - Owner/admin/creator/moderator/viewer role resolution is deterministic.
+    - Backend code can broadcast a room `system` event without writing it to chat history.
+  - Check:
+    - Focused gateway test command attempted; blocked by local disk exhaustion before package compilation completed.
 
-- [x] Task 5 - Verify and record results
+- [x] Task 5 - Update protocol docs
   - Acceptance criteria:
-    - Focused chat panel tests pass.
-    - Channel page tests pass if affected.
-    - Viewer lint passes or any host/tooling blocker is recorded.
+    - `internal/chat/PROTOCOL.md` documents presence snapshot/join/leave, user metadata, system events, and compatibility notes.
+    - Docs state that presence/system room notices are live events and not transcript persistence.
+  - Check:
+    - `git diff --check` passed.
+
+- [-] Task 6 - Verify, publish, and merge
+  - Acceptance criteria:
+    - Focused chat tests pass.
+    - Relevant storage compatibility test passes.
     - `git diff --check` passes.
-
-- [x] Task 6 - Fix PR CI fallout
-  - Acceptance criteria:
-    - Production viewer build type-checks the chat notice parser.
-    - Transcoder live symlink lifecycle test no longer races the stub process exit.
-    - Focused build/test commands pass and CI can be rerun.
+    - `./scripts/verify.sh` runs or host blockers are recorded.
+    - PR is opened, CI is monitored, and #1274 is closed by merge.
+  - Check:
+    - Pending.
 
 ### Execution log
 - Task 1 read-only pass:
-  - Confirmed #1268 is closed after PR #1288; selected open issue #1273 as the next v1-visible product issue under #1272.
-  - Reviewed `web/viewer/components/ChatPanel.tsx`, `web/viewer/__tests__/chatPanel.test.tsx`, `web/viewer/app/channels/[id]/page.tsx`, `web/viewer/lib/viewer-api-chat.ts`, `internal/chat/PROTOCOL.md`, `web/viewer/styles/chat.css`, `web/viewer/styles/channel-watch.css`, `web/viewer/styles/responsive.css`, and `web/viewer/README.md`.
-  - Chose an incremental upgrade: preserve the existing REST/WebSocket/report/auth implementation while improving live-room identity, transcript behavior, roster affordance, system rows, and responsive layout.
+  - Confirmed #1274 is open and scoped to backend/protocol support for room roster, presence events, role/badge metadata, and system events.
+  - Reviewed `internal/chat/event.go`, `internal/chat/gateway.go`, `internal/chat/gateway_test.go`, `internal/chat/websocket.go`, `internal/chat/queue.go`, `internal/chat/redis_queue.go`, `internal/storage/chat_events.go`, `internal/chat/PROTOCOL.md`, `web/viewer/components/ChatPanel.tsx`, and `web/viewer/lib/viewer-api-types.ts`.
+  - Chose ephemeral gateway presence: live `event` envelopes to room subscribers, no queue persistence for presence or system notices by default.
 - Task 2 implementation:
-  - Updated `ChatPanel` header to show room identity, live/offline state, viewer count, message count, and compact sync state.
-  - Added compact roster/presence affordance using available auth/chat users and viewer count.
-  - Kept pop-out, sync detail, and display toggles behind the existing options menu.
-  - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
+  - Added `presence_snapshot`, `presence_join`, `presence_leave`, and `system` event types.
+  - Added `UserMetadata`, `UserBadge`, `PresenceEvent`, and `SystemEvent` payloads.
+  - Added optional `message.user` metadata while leaving `message.userId` unchanged for existing clients and storage consumers.
 - Task 3 implementation:
-  - Added mixed transcript entries for user messages plus system/moderation notices.
-  - Added scroll-follow behavior with a `Jump to latest` control when new messages arrive while the viewer is reading older chat.
-  - Added focused tests for moderation rows and scroll preservation.
-  - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
+  - Added gateway presence tracking keyed by channel and user with per-user connection counts.
+  - `join` now sends `ack` plus a `presence_snapshot` to the joining connection.
+  - First user connection broadcasts `presence_join`; final user leave/disconnect broadcasts `presence_leave`.
 - Task 4 implementation:
-  - Passed channel title, live state, and viewer count from the watch page into `ChatPanel`.
-  - Adjusted chat panel, watch-page desktop grid, and responsive roster styling for a compact live-room dock.
-  - Updated `web/viewer/README.md` chat contract with room identity, video-first layout, scroll-follow, and system/moderation row behavior.
-  - Check: `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` passed.
-- Task 5 verification:
-  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
-  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` passed.
-  - `npm.cmd --prefix web/viewer run test -- --silent` hit a local Node heap OOM after `channelPage.test.tsx`; rerun with `NODE_OPTIONS=--max-old-space-size=4096` passed 25 suites / 208 tests.
-  - `npm.cmd --prefix web/viewer run lint` passed with an existing warning in `components/UploadManager.tsx` about the `formValues` hook dependency.
+  - Added deterministic role/badge metadata for owner, admin, moderator, broadcaster, and viewer users.
+  - Added `BroadcastSystemEvent` for live room notices that do not enter chat transcript persistence.
+  - Updated the viewer chat WebSocket parser to prefer live author display metadata when present.
+- Task 5 documentation:
+  - Updated `internal/chat/PROTOCOL.md` with message metadata, presence event, system event, and compatibility examples.
+- Local verification:
   - `git diff --check` passed.
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` passed non-Docker stages through Compose config rendering and OME config validation, then failed at quickstart image build because the local Docker daemon pipe `npipe:////./pipe/dockerDesktopLinuxEngine` was unavailable. `com.docker.service` could not be started from this session; Docker Desktop launch did not make `docker version` responsive within the wait window.
-- Task 6 CI follow-up:
-  - PR #1289 image build failed strict TypeScript on `ChatPanel.tsx` because `event.type` remained `string | undefined` in the notice label path.
-  - PR #1289 Ubuntu test gate failed `TestJobProducesSegmentsAndCanBeStopped` because the fast stub process could remove the live symlink before the post-readiness `Lstat`.
-  - Tightened the notice parser guard so production TypeScript build narrows `event.type`.
-  - Applied the stub FFmpeg delay on all hosts so the live symlink remains present during the lifecycle assertion.
-  - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
-  - Check: `NODE_OPTIONS=--max-old-space-size=4096 npm.cmd --prefix web/viewer run build` passed.
-  - Local blocker: `go test ./cmd/transcoder -run TestJobProducesSegmentsAndCanBeStopped -count=1` and the low-parallel rerun with a workspace `GOCACHE` both failed during Windows compilation with out-of-memory errors before the focused test could execute. CI rerun is required for the Ubuntu transcoder proof.
-  - PR #1289 rerun passed Ubuntu test-all, image vulnerability scan, macOS Go, and Windows Go, then Viewer CI failed two Playwright expectations: `Live chat` remained the expected accessible heading, and `Available renditions` remained the expected recovery heading.
-  - Restored `Live chat` as the chat panel heading while keeping channel identity as supporting room text.
-  - Renamed the channel hero rendition heading to `Available renditions`.
-  - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
-  - Check: `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` passed.
-  - Check: `NODE_OPTIONS=--max-old-space-size=4096 npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/mobile-layout.spec.ts` completed `next build` but timed out locally while running browser tests; CI rerun is required for Playwright proof.
-  - CI: PR #1289 run `29034283507` passed image vulnerability scan, Ubuntu test-all, macOS Go, Windows Go, and Viewer CI.
+  - `go test ./internal/chat -run "TestGateway(Presence|MessageMetadata|SystemEvent|MessageFlow|ModerationFlow)" -count=1` failed before compilation because the default Go build cache could not create `AppData\Local\go-build\00`.
+  - Rerunning with repo-local `GOCACHE` reached compilation, then failed because `C:\Users\RHYTHM~1\AppData\Local\Temp` reported `There is not enough space on the disk`.
+  - `Get-PSDrive -Name C` reported zero free space, so local Go verification and full `./scripts/verify.sh` are blocked until disk space is recovered or CI runs.
