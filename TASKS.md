@@ -34,6 +34,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Viewer lint passes or any host/tooling blocker is recorded.
     - `git diff --check` passes.
 
+- [-] Task 6 - Fix PR CI fallout
+  - Acceptance criteria:
+    - Production viewer build type-checks the chat notice parser.
+    - Transcoder live symlink lifecycle test no longer races the stub process exit.
+    - Focused build/test commands pass and CI can be rerun.
+
 ### Execution log
 - Task 1 read-only pass:
   - Confirmed #1268 is closed after PR #1288; selected open issue #1273 as the next v1-visible product issue under #1272.
@@ -61,3 +67,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `npm.cmd --prefix web/viewer run lint` passed with an existing warning in `components/UploadManager.tsx` about the `formValues` hook dependency.
   - `git diff --check` passed.
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` passed non-Docker stages through Compose config rendering and OME config validation, then failed at quickstart image build because the local Docker daemon pipe `npipe:////./pipe/dockerDesktopLinuxEngine` was unavailable. `com.docker.service` could not be started from this session; Docker Desktop launch did not make `docker version` responsive within the wait window.
+- Task 6 CI follow-up:
+  - PR #1289 image build failed strict TypeScript on `ChatPanel.tsx` because `event.type` remained `string | undefined` in the notice label path.
+  - PR #1289 Ubuntu test gate failed `TestJobProducesSegmentsAndCanBeStopped` because the fast stub process could remove the live symlink before the post-readiness `Lstat`.
+  - Tightened the notice parser guard so production TypeScript build narrows `event.type`.
+  - Applied the stub FFmpeg delay on all hosts so the live symlink remains present during the lifecycle assertion.
+  - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
+  - Check: `NODE_OPTIONS=--max-old-space-size=4096 npm.cmd --prefix web/viewer run build` passed.
+  - Local blocker: `go test ./cmd/transcoder -run TestJobProducesSegmentsAndCanBeStopped -count=1` and the low-parallel rerun with a workspace `GOCACHE` both failed during Windows compilation with out-of-memory errors before the focused test could execute. CI rerun is required for the Ubuntu transcoder proof.

@@ -621,9 +621,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping transcoder lifecycle in short mode")
 	}
-	if runtime.GOOS == "windows" {
-		t.Setenv("FFMPEG_STUB_DELAY", "1")
-	}
+	t.Setenv("FFMPEG_STUB_DELAY", "1")
 	useStubFFmpeg(t)
 	canAssertLiveMirror := supportsDirectorySymlink(t)
 

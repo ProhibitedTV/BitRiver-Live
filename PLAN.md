@@ -5,6 +5,9 @@
 - Add scroll-follow behavior: auto-follow when the user is already near the bottom, preserve position when reading older messages, and expose a jump-to-latest control.
 - Reserve visible row treatments for system/moderation events without implementing the full moderation console from #1275.
 - Keep the implementation inside `web/viewer` and avoid deployment contract changes.
+- Address CI failures found on PR #1289 without expanding runtime behavior:
+  tighten the chat notice TypeScript guard and remove the transcoder live
+  symlink test race that can occur when the stub process exits quickly.
 
 ## Assumptions
 - The existing `ChatPanel` already satisfies core connection/send/report behavior; this pass should refine the live-room UX rather than introduce a second chat client.
@@ -17,9 +20,13 @@
 - Auto-scroll can annoy users reading older chat; only follow when already near the bottom and provide an explicit latest button otherwise.
 - WebSocket event shapes may evolve; parse defensively and keep user content rendered as text, never HTML.
 - Viewer test/build may be constrained by the host environment; use focused Jest tests first, then viewer lint/test if available.
+- CI-only failures may come from stricter production TypeScript builds or test
+  timing differences; keep fixes minimal and covered by focused checks.
 
 ## Test plan
 - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx`
 - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx`
 - `npm.cmd --prefix web/viewer run lint`
 - `git diff --check`
+- `npm.cmd --prefix web/viewer run build`
+- `go test ./cmd/transcoder -run TestJobProducesSegmentsAndCanBeStopped -count=1`

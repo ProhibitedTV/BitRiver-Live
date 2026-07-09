@@ -101,11 +101,11 @@ function chatNoticeFromGatewayEnvelope(envelope: ChatGatewayEnvelope): ChatRoomN
     };
   }
 
-  if (envelope.type !== "event" || !envelope.event?.type || envelope.event.type === "message") {
+  const event = envelope.event;
+  if (envelope.type !== "event" || !event?.type || event.type === "message") {
     return undefined;
   }
 
-  const event = envelope.event;
   const eventType = event.type;
   const occurredAt = event.occurredAt ?? new Date().toISOString();
   const moderationTypes = new Set(["automod", "timeout", "ban", "unban", "remove_timeout"]);
