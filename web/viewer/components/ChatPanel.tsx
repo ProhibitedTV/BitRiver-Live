@@ -75,16 +75,15 @@ function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUs
   const userId = message.userId?.trim() ?? "";
   const displayName = message.user?.displayName?.trim();
   const role = message.user?.role?.trim();
-  const badges = message.user?.badges
-    ?.map((badge) => {
-      const id = badge.id?.trim();
-      if (!id) {
-        return undefined;
-      }
-      const label = badge.label?.trim();
-      return { id, label: label || undefined };
-    })
-    .filter((badge): badge is { id: string; label?: string } => Boolean(badge));
+  const badges = message.user?.badges?.reduce<{ id: string; label?: string }[]>((items, badge) => {
+    const id = badge.id?.trim();
+    if (!id) {
+      return items;
+    }
+    const label = badge.label?.trim();
+    items.push(label ? { id, label } : { id });
+    return items;
+  }, []);
   return {
     id: message.id,
     message: message.content,

@@ -557,10 +557,7 @@ func (g *Gateway) sendEvent(recipients []*client, event Event) {
 		return
 	}
 	for _, client := range recipients {
-		select {
-		case client.send <- outboundMessage{Raw: payload}:
-		default:
-		}
+		client.queueOutbound(outboundMessage{Raw: payload})
 	}
 }
 
@@ -967,20 +964,31 @@ func (c *client) handleReport(ctx context.Context, msg inboundMessage) {
 
 func (c *client) sendAck(event *Event) {
 	payload, _ := json.Marshal(outboundMessage{Type: "ack", Event: event})
-	c.send <- outboundMessage{Raw: payload}
+	c.queueOutbound(outboundMessage{Raw: payload})
 }
 
 func (c *client) sendEvent(event Event) {
 	payload, _ := json.Marshal(outboundMessage{Type: "event", Event: &event})
-	c.send <- outboundMessage{Raw: payload}
+	c.queueOutbound(outboundMessage{Raw: payload})
 }
 
 // sendError performs send error and propagates validation or dependency failures to the caller.
 func (c *client) sendError(message string) {
 	payload, _ := json.Marshal(outboundMessage{Type: "error", Error: message})
+	c.queueOutbound(outboundMessage{Raw: payload})
+}
+
+func (c *client) queueOutbound(message outboundMessage) (queued bool) {
+	defer func() {
+		if recover() != nil {
+			queued = false
+		}
+	}()
 	select {
-	case c.send <- outboundMessage{Raw: payload}:
+	case c.send <- message:
+		return true
 	default:
+		return false
 	}
 }
 
