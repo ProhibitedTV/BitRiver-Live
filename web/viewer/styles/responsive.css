@@ -109,6 +109,10 @@
     flex-wrap: wrap;
   }
 
+  .chat-panel__roster {
+    max-height: none;
+  }
+
   .chat-panel__actions {
     margin-left: auto;
   }
@@ -156,6 +160,13 @@
 
   .chat-message__avatar {
     display: none;
+  }
+
+  .chat-panel__roster-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    scrollbar-width: thin;
   }
 
   .chat-panel__signin-card .primary-button {

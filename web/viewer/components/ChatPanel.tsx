@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { ChatMessage } from "../lib/viewer-api";
 import { fetchChannelChat, reportChatMessage, sendChatMessage, viewerWebSocketUrl } from "../lib/viewer-api";
@@ -18,18 +18,38 @@ type ChatMessageEntry = {
   sentAtTs: number;
 };
 
+type ChatRoomNotice = {
+  id: string;
+  tone: "system" | "moderation" | "error";
+  label: string;
+  message: string;
+  occurredAt: string;
+  occurredAtTs: number;
+};
+
+type ChatTranscriptEntry =
+  | { type: "message"; entry: ChatMessageEntry }
+  | { type: "notice"; notice: ChatRoomNotice };
+
 type ChatGatewayEnvelope = {
   type?: string;
   error?: string;
   event?: {
     type?: string;
     occurredAt?: string;
+    targetId?: string;
+    actorId?: string;
+    reason?: string;
     message?: {
       id?: string;
       channelId?: string;
       userId?: string;
       content?: string;
       createdAt?: string;
+    };
+    filter?: {
+      name?: string;
+      action?: string;
     };
   };
 };
@@ -60,17 +80,69 @@ function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUs
   };
 }
 
+function formatNoticeEventType(type: string) {
+  return type
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function chatNoticeFromGatewayEnvelope(envelope: ChatGatewayEnvelope): ChatRoomNotice | undefined {
+  if (envelope.type === "error") {
+    const now = new Date().toISOString();
+    return {
+      id: `error-${now}-${envelope.error ?? "chat"}`,
+      tone: "error",
+      label: "Chat error",
+      message: envelope.error || "Live chat connection error",
+      occurredAt: now,
+      occurredAtTs: new Date(now).getTime(),
+    };
+  }
+
+  if (envelope.type !== "event" || !envelope.event?.type || envelope.event.type === "message") {
+    return undefined;
+  }
+
+  const event = envelope.event;
+  const eventType = event.type;
+  const occurredAt = event.occurredAt ?? new Date().toISOString();
+  const moderationTypes = new Set(["automod", "timeout", "ban", "unban", "remove_timeout"]);
+  const label = eventType === "automod" ? "Automod" : formatNoticeEventType(eventType);
+  const detailParts = [
+    event.filter?.name ? `Filter: ${event.filter.name}` : undefined,
+    event.filter?.action ? `Action: ${event.filter.action}` : undefined,
+    event.targetId ? `Target: ${event.targetId}` : undefined,
+    event.reason ? `Reason: ${event.reason}` : undefined,
+  ].filter(Boolean);
+
+  return {
+    id: `${eventType}-${occurredAt}-${event.targetId ?? event.actorId ?? detailParts.join("-")}`,
+    tone: moderationTypes.has(eventType) ? "moderation" : "system",
+    label,
+    message: detailParts.length > 0 ? detailParts.join(" - ") : `${label} event received.`,
+    occurredAt,
+    occurredAtTs: new Date(occurredAt).getTime(),
+  };
+}
+
 export function ChatPanel({
   channelId,
   roomId,
+  roomName,
+  live,
   viewerCount
 }: {
   channelId: string;
   roomId?: string;
+  roomName?: string;
+  live?: boolean;
   viewerCount?: number;
 }) {
   const { user, loading: authLoading, signIn } = useAuth();
   const [messageEntries, setMessageEntries] = useState<ChatMessageEntry[]>([]);
+  const [noticeEntries, setNoticeEntries] = useState<ChatRoomNotice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [content, setContent] = useState("");
@@ -90,7 +162,10 @@ export function ChatPanel({
   const reportDialogRef = useRef<HTMLElement | null>(null);
   const reportHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldFollowTranscriptRef = useRef(true);
   const [socketReady, setSocketReady] = useState(false);
+  const [newMessagesWaiting, setNewMessagesWaiting] = useState(false);
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -153,6 +228,40 @@ export function ChatPanel({
     });
   };
 
+  const appendNotice = (notice: ChatRoomNotice) => {
+    setNoticeEntries((prev) => {
+      if (prev.some((entry) => entry.id === notice.id)) {
+        return prev;
+      }
+      const next = [...prev, notice];
+      return next.length <= 80 ? next : next.slice(next.length - 80);
+    });
+  };
+
+  const handleTranscriptScroll = () => {
+    const scrollElement = transcriptScrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+    const distanceFromBottom =
+      scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+    const isNearBottom = distanceFromBottom <= 64;
+    shouldFollowTranscriptRef.current = isNearBottom;
+    if (isNearBottom) {
+      setNewMessagesWaiting(false);
+    }
+  };
+
+  const scrollTranscriptToBottom = () => {
+    const scrollElement = transcriptScrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+    shouldFollowTranscriptRef.current = true;
+    scrollElement.scrollTop = scrollElement.scrollHeight;
+    setNewMessagesWaiting(false);
+  };
+
   useEffect(() => {
     if (!user || typeof window === "undefined" || typeof WebSocket === "undefined") {
       setSocketReady(false);
@@ -194,12 +303,27 @@ export function ChatPanel({
       }
       if (envelope.type === "error") {
         setError(envelope.error || "Live chat connection error");
+        appendNotice(
+          chatNoticeFromGatewayEnvelope(envelope) ?? {
+            id: `error-${Date.now()}`,
+            tone: "error",
+            label: "Chat error",
+            message: envelope.error || "Live chat connection error",
+            occurredAt: new Date().toISOString(),
+            occurredAtTs: Date.now(),
+          }
+        );
         return;
       }
       const chatMessage = chatMessageFromGatewayEnvelope(envelope, user);
       if (chatMessage) {
         applyMessages(chatMessage);
         setAuthRequired(false);
+        return;
+      }
+      const notice = chatNoticeFromGatewayEnvelope(envelope);
+      if (notice) {
+        appendNotice(notice);
       }
     };
 
@@ -239,6 +363,19 @@ export function ChatPanel({
     };
   }, [channelId, user]);
 
+  const participantPreview = useMemo(() => {
+    const participants = new Map<string, NonNullable<ChatMessage["user"]>>();
+    if (user) {
+      participants.set(user.id, { id: user.id, displayName: user.displayName, role: "you" });
+    }
+    messageEntries.forEach(({ message }) => {
+      if (message.user?.id && !participants.has(message.user.id)) {
+        participants.set(message.user.id, message.user);
+      }
+    });
+    return Array.from(participants.values()).slice(0, 5);
+  }, [messageEntries, user]);
+
   const groupedMessages = useMemo(() => {
     const groups: {
       id: string;
@@ -275,6 +412,39 @@ export function ChatPanel({
     });
     return groups;
   }, [messageEntries]);
+
+  const groupedMessagesByFirstId = useMemo(() => {
+    const groupsById = new Map<string, (typeof groupedMessages)[number]>();
+    groupedMessages.forEach((group) => {
+      groupsById.set(group.id, group);
+    });
+    return groupsById;
+  }, [groupedMessages]);
+
+  const transcriptEntries = useMemo<ChatTranscriptEntry[]>(() => {
+    const entries: ChatTranscriptEntry[] = [
+      ...messageEntries.map((entry) => ({ type: "message" as const, entry })),
+      ...noticeEntries.map((notice) => ({ type: "notice" as const, notice })),
+    ];
+    return entries.sort((left, right) => {
+      const leftTime = left.type === "message" ? left.entry.sentAtTs : left.notice.occurredAtTs;
+      const rightTime = right.type === "message" ? right.entry.sentAtTs : right.notice.occurredAtTs;
+      return leftTime - rightTime;
+    });
+  }, [messageEntries, noticeEntries]);
+
+  useLayoutEffect(() => {
+    const scrollElement = transcriptScrollRef.current;
+    if (!scrollElement || transcriptEntries.length === 0) {
+      return;
+    }
+    if (shouldFollowTranscriptRef.current) {
+      scrollElement.scrollTop = scrollElement.scrollHeight;
+      setNewMessagesWaiting(false);
+      return;
+    }
+    setNewMessagesWaiting(true);
+  }, [transcriptEntries.length]);
 
   useEffect(() => {
     if (pausedForAuth) {
@@ -573,12 +743,21 @@ export function ChatPanel({
     </ul>
   );
 
+  const roomTitle = roomName?.trim() || "Live chat";
+  const roomHeading = roomName?.trim() ? `${roomTitle} chat` : roomTitle;
+  const roomStatusLabel = live === false ? "Offline room" : "Live room";
+  const syncLabel = socketReady ? "Live sync" : user ? "Reconnecting" : "Sign in required";
+
   return (
     <section className="chat-panel">
       <header className="chat-panel__header">
         <div className="chat-panel__title">
-          <h3>Live chat</h3>
+          <span className="chat-panel__eyebrow">Live chat</span>
+          <h3>{roomHeading}</h3>
           <div className="chat-panel__counts">
+            <span className={`pill ${live === false ? "pill--ghost" : "pill--live"}`}>
+              {roomStatusLabel}
+            </span>
             {viewerCount !== undefined && (
               <span className="pill pill--ghost">
                 {viewerCount.toLocaleString()} viewers
@@ -599,7 +778,7 @@ export function ChatPanel({
             onClick={() => setOptionsOpen((open) => !open)}
             ref={optionsTriggerRef}
           >
-            Options
+            ...
           </button>
           <div
             id="chat-options-menu"
@@ -610,7 +789,7 @@ export function ChatPanel({
           >
             <div className="chat-panel__connection">
               <span className={`chat-panel__connection-dot${socketReady ? " chat-panel__connection-dot--live" : ""}`} aria-hidden="true" />
-              <span>{socketReady ? "Live sync" : "Refreshing chat"}</span>
+              <span>{syncLabel}</span>
             </div>
             <button type="button" className="chat-panel__menu-action" onClick={openPopoutWindow}>
               Open pop-out chat
@@ -654,8 +833,38 @@ export function ChatPanel({
         </div>
       )}
       {!loading && !error && (!shouldShowSignInPrompt || messageEntries.length > 0) && (
-        <div className="chat-panel__body">
-          {messageEntries.length === 0 ? (
+        <div
+          className="chat-panel__body"
+          ref={transcriptScrollRef}
+          onScroll={handleTranscriptScroll}
+          data-testid="chat-transcript-scroll"
+        >
+          <aside className="chat-panel__roster" aria-label="Room roster">
+            <div>
+              <span className="chat-panel__roster-label">Room</span>
+              <strong>
+                {viewerCount !== undefined
+                  ? `${viewerCount.toLocaleString()} watching`
+                  : `${participantPreview.length} present`}
+              </strong>
+            </div>
+            {participantPreview.length > 0 ? (
+              <ul className="chat-panel__roster-list" aria-label="Recent chatters">
+                {participantPreview.map((participant) => (
+                  <li key={participant.id}>
+                    <span className="chat-panel__roster-avatar" aria-hidden>
+                      {participant.displayName.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span>{participant.displayName}</span>
+                    {participant.role ? <span className="chat-panel__role-slot">{participant.role}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">Chatters will appear here as the room wakes up.</p>
+            )}
+          </aside>
+          {transcriptEntries.length === 0 ? (
             <div className="chat-panel__empty surface">
               <p className="muted">
                 No messages yet. Be the first to say hello!
@@ -671,81 +880,111 @@ export function ChatPanel({
               aria-relevant="additions text"
               aria-atomic="false"
             >
-              {groupedMessages.map((group) => (
-                <li key={group.id} className="chat-message chat-message--group">
-                  {showAvatars ? (
-                    group.avatar ? (
-                      <Image
-                        src={group.avatar}
-                        alt=""
-                        width={44}
-                        height={44}
-                        sizes="44px"
-                        className="chat-message__avatar"
-                      />
+              {transcriptEntries.map((transcriptEntry) => {
+                if (transcriptEntry.type === "notice") {
+                  const { notice } = transcriptEntry;
+                  return (
+                    <li key={notice.id} className={`chat-system-row chat-system-row--${notice.tone}`}>
+                      <span className="chat-system-row__label">{notice.label}</span>
+                      <p>{notice.message}</p>
+                      {showTimestamps ? (
+                        <time dateTime={notice.occurredAt}>
+                          {new Date(notice.occurredAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </time>
+                      ) : null}
+                    </li>
+                  );
+                }
+
+                const group = groupedMessagesByFirstId.get(transcriptEntry.entry.message.id);
+                if (!group) {
+                  return null;
+                }
+                return (
+                  <li key={group.id} className="chat-message chat-message--group">
+                    {showAvatars ? (
+                      group.avatar ? (
+                        <Image
+                          src={group.avatar}
+                          alt=""
+                          width={36}
+                          height={36}
+                          sizes="36px"
+                          className="chat-message__avatar"
+                        />
+                      ) : (
+                        <div
+                          className="chat-message__avatar chat-message__avatar--placeholder"
+                          aria-hidden
+                        >
+                          {group.userLabel.slice(0, 1).toUpperCase()}
+                        </div>
+                      )
                     ) : (
-                      <div
-                        className="chat-message__avatar chat-message__avatar--placeholder"
-                        aria-hidden
-                      >
-                        {group.userLabel.slice(0, 1).toUpperCase()}
-                      </div>
-                    )
-                  ) : (
-                    <span className="sr-only">
-                      Messages from {group.userLabel}
-                    </span>
-                  )}
-                  <div className="chat-message__content">
-                    <div className="chat-message__meta">
-                      <div className="chat-message__author">
-                        <strong>{group.userLabel}</strong>
-                        {group.role && <span className="badge">{group.role}</span>}
-                      </div>
-                      <span className="muted">
-                        {group.messages.length} message
-                        {group.messages.length === 1 ? "" : "s"}
+                      <span className="sr-only">
+                        Messages from {group.userLabel}
                       </span>
-                    </div>
-                    <div className="chat-message__bubble">
-                      {group.messages.map(({ message }) => {
-                        const targetId = message.user?.id?.trim() ?? "";
-                        const canReportMessage = Boolean(user && targetId && targetId !== user.id);
-                        return (
-                          <div key={message.id} className="chat-message__line">
-                            <p>
-                              {showTimestamps && (
-                                <time
-                                  dateTime={message.sentAt}
-                                  className="chat-message__time"
+                    )}
+                    <div className="chat-message__content">
+                      <div className="chat-message__meta">
+                        <div className="chat-message__author">
+                          <strong>{group.userLabel}</strong>
+                          <span className="chat-panel__badge-slot" aria-hidden />
+                          {group.role && <span className="badge">{group.role}</span>}
+                        </div>
+                        <span className="muted">
+                          {group.messages.length} message
+                          {group.messages.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <div className="chat-message__bubble">
+                        {group.messages.map(({ message }) => {
+                          const targetId = message.user?.id?.trim() ?? "";
+                          const canReportMessage = Boolean(user && targetId && targetId !== user.id);
+                          return (
+                            <div key={message.id} className="chat-message__line">
+                              <p>
+                                {showTimestamps && (
+                                  <time
+                                    dateTime={message.sentAt}
+                                    className="chat-message__time"
+                                  >
+                                    {new Date(message.sentAt).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    })}
+                                  </time>
+                                )}
+                                {message.message}
+                              </p>
+                              {canReportMessage ? (
+                                <button
+                                  type="button"
+                                  className="chat-message__report-button"
+                                  onClick={() => openReportForm(message)}
+                                  aria-label={`Report message from ${message.user?.displayName ?? message.user?.id ?? "chat participant"}`}
                                 >
-                                  {new Date(message.sentAt).toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                  })}
-                                </time>
-                              )}
-                              {message.message}
-                            </p>
-                            {canReportMessage ? (
-                              <button
-                                type="button"
-                                className="chat-message__report-button"
-                                onClick={() => openReportForm(message)}
-                                aria-label={`Report message from ${message.user?.displayName ?? message.user?.id ?? "chat participant"}`}
-                              >
-                                Report
-                              </button>
-                            ) : null}
-                          </div>
-                        );
-                      })}
+                                  Report
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
+          {newMessagesWaiting ? (
+            <button type="button" className="chat-panel__jump" onClick={scrollTranscriptToBottom}>
+              Jump to latest
+            </button>
+          ) : null}
         </div>
       )}
       {user ? (

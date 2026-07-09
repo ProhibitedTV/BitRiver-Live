@@ -395,7 +395,13 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
             </div>
             <aside className="channel-page__chat" id="channel-chat">
               <div className="channel-page__chat-inner">
-                <ChatPanel channelId={id} roomId={data.chat?.roomId} viewerCount={data.viewerCount} />
+                <ChatPanel
+                  channelId={id}
+                  roomId={data.chat?.roomId}
+                  roomName={data.channel.title}
+                  live={data.live}
+                  viewerCount={data.viewerCount}
+                />
               </div>
             </aside>
           </div>

@@ -1,27 +1,25 @@
 ## Scope (current change)
-- Address GitHub issue #1268 with a pragmatic post-deploy canary, observability, and rollback gate.
-- Add `go run ./cmd/bitriver release canary` for release-candidate/staging stacks that are already running.
-- Check deployed HTTP health surfaces from a base URL, save redacted response artifacts, and fail on high-confidence unhealthy responses.
-- Scan supplied logs for conservative fatal/error patterns and write canary evidence artifacts.
-- Validate rollback-note readiness when requested, without changing deployment contract files.
-- Document how Gate 6 should be run after a release-candidate deploy.
+- Address GitHub issue #1273 by upgrading the existing Next.js `ChatPanel` into a compact live-room chat surface.
+- Keep the channel video stage primary while making the chat dock feel like a live room: room identity, live/sync state, compact roster affordance, dense transcript, pinned composer.
+- Reuse the existing REST history, `/api/chat/ws` WebSocket join/send path, auth handling, reports, and tests.
+- Add scroll-follow behavior: auto-follow when the user is already near the bottom, preserve position when reading older messages, and expose a jump-to-latest control.
+- Reserve visible row treatments for system/moderation events without implementing the full moderation console from #1275.
+- Keep the implementation inside `web/viewer` and avoid deployment contract changes.
 
 ## Assumptions
-- The first version should run against an already-started stack; it should not start, stop, or mutate Compose services.
-- The command should be useful without Docker by checking HTTP endpoints from `--base-url`.
-- Log scanning should work from a supplied log file first; Compose log collection can remain a documented operator step.
-- Rollback notes should be optional by default for local canaries but enforceable with `--require-rollback-notes`.
-- No deployment contract changes are required for this pass.
+- The existing `ChatPanel` already satisfies core connection/send/report behavior; this pass should refine the live-room UX rather than introduce a second chat client.
+- Backend role/presence metadata is not complete yet, so roster/badge UI should use available user/viewer count data and reserve slots for #1274.
+- System/moderation rows can render from gateway event types and local connection notices, even if all backend event variants are not yet available.
+- Viewer docs only need a short update if the chat contract changes visibly.
 
 ## Risks
-- Endpoint response shapes may vary; only fail on transport/HTTP failures and clear unhealthy/degraded status fields.
-- Log scanning can become noisy; keep patterns conservative and attach matching lines to the report.
-- A canary command can imply production automation that does not exist; docs must keep it scoped to the single-host operator path.
-- Local verification may not hit a live stack on this host, so tests should cover the command behavior with controlled HTTP/log fixtures.
+- Chat UI can become bulky; keep controls compact and put secondary actions behind the existing options menu.
+- Auto-scroll can annoy users reading older chat; only follow when already near the bottom and provide an explicit latest button otherwise.
+- WebSocket event shapes may evolve; parse defensively and keep user content rendered as text, never HTML.
+- Viewer test/build may be constrained by the host environment; use focused Jest tests first, then viewer lint/test if available.
 
 ## Test plan
-- `gofmt -w cmd/bitriver/release_contract.go cmd/bitriver/release_canary.go cmd/bitriver/release_canary_test.go`
-- `go test ./cmd/bitriver -run "TestRunRelease|TestReleaseCanary" -count=1 -timeout=120s`
-- `go run ./cmd/bitriver release canary --base-url <test server> --logs-file <temp clean logs> --rollback-notes <temp rollback notes> --require-rollback-notes --artifact-dir <temp artifacts>`
-- `bash -n scripts/release-canary.sh`
+- `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
 - `git diff --check`

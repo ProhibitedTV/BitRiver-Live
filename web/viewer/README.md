@@ -98,7 +98,15 @@ and mobile navigation stay consistent.
 
 ## Chat Control Contract
 
-- Keep the live chat header focused on the title and viewer-facing counts.
+- Keep the live chat header focused on room identity, live/offline state,
+  viewer-facing counts, message count, and compact sync state.
+- Keep the channel watch page video-first: desktop uses chat as a right-side
+  dock, while smaller screens stack chat below the player.
+- Preserve transcript position while viewers read older messages; auto-follow
+  only when they are already near the bottom and offer a jump-to-latest control
+  for background arrivals.
+- Render system and moderation chat events as distinct transcript rows, not as
+  ordinary user messages.
 - Put secondary actions such as pop-out, sync detail, and display toggles behind
   the compact chat options control.
 - Reports should open a separate review dialog/sheet instead of expanding the
