@@ -344,7 +344,7 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
       </div>
       {data.playback?.renditions && data.playback.renditions.length > 0 && (
         <div className="channel-about__renditions stack">
-          <h4>Renditions</h4>
+          <h4>Available renditions</h4>
           <ul>
             {data.playback.renditions.map((rendition) => (
               <li key={rendition.name}>

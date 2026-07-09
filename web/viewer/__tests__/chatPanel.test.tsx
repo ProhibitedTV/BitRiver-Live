@@ -1,6 +1,6 @@
 import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
 import { viewerApiMocks } from "../test/test-utils";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
 import type { ChatMessage } from "../lib/viewer-api";
@@ -114,9 +114,49 @@ test("renders chat history and sorts by time", async () => {
     expect(screen.getByText("Later message")).toBeInTheDocument();
   });
 
-  const renderedMessages = screen.getAllByRole("listitem");
+  const renderedMessages = within(screen.getByRole("log")).getAllByRole("listitem");
   expect(renderedMessages[0]).toHaveTextContent("Rhea");
   expect(renderedMessages[1]).toHaveTextContent("Jax");
+});
+
+test("renders compact live-room identity, counts, and roster", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-room-1",
+      message: "Welcome to the room",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "owner-42", displayName: "DJ Nova", role: "host" },
+    },
+    {
+      id: "m-room-2",
+      message: "Great set",
+      sentAt: new Date("2026-05-07T18:01:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" },
+    },
+  ]);
+
+  render(
+    <ChatPanel
+      channelId="chan-room"
+      roomId="room-1"
+      roomName="Deep Space Beats"
+      live
+      viewerCount={42}
+    />
+  );
+
+  expect(await screen.findByRole("heading", { name: "Live chat" })).toBeInTheDocument();
+  expect(screen.getByText("Deep Space Beats")).toBeInTheDocument();
+  expect(await screen.findByText("Welcome to the room")).toBeInTheDocument();
+  expect(screen.getByText("Live room")).toBeInTheDocument();
+  expect(screen.getByText("42 viewers")).toBeInTheDocument();
+  expect(screen.getByText("2 messages")).toBeInTheDocument();
+
+  const roster = screen.getByLabelText("Room roster");
+  expect(within(roster).getByText("42 watching")).toBeInTheDocument();
+  expect(within(roster).getByText("Viewer")).toBeInTheDocument();
+  expect(within(roster).getByText("DJ Nova")).toBeInTheDocument();
+  expect(within(roster).getByText("host")).toBeInTheDocument();
 });
 
 
@@ -302,6 +342,90 @@ test("joins live chat over websocket and renders inbound events without waiting 
   });
 
   expect(screen.getAllByText("A live hello")).toHaveLength(1);
+});
+
+test("renders moderation events as system rows", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  fetchChatMock.mockResolvedValue([]);
+
+  render(<ChatPanel channelId="chan-mod" roomId="room-1" />);
+
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+  const socket = MockChatWebSocket.instances[0];
+
+  await act(async () => {
+    socket.open();
+    socket.receive({
+      type: "event",
+      event: {
+        type: "automod",
+        occurredAt: "2026-05-07T18:00:00Z",
+        targetId: "viewer-2",
+        reason: "link spam",
+        filter: {
+          name: "Blocked links",
+          action: "hold",
+        },
+      },
+    });
+  });
+
+  const log = await screen.findByRole("log");
+  const notice = within(log).getByText("Automod").closest("li");
+  expect(notice).toHaveClass("chat-system-row--moderation");
+  expect(notice).toHaveTextContent("Filter: Blocked links");
+  expect(notice).toHaveTextContent("Action: hold");
+  expect(notice).toHaveTextContent("Target: viewer-2");
+  expect(notice).toHaveTextContent("Reason: link spam");
+});
+
+test("preserves scroll position and offers jump to latest for background messages", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  fetchChatMock.mockResolvedValue([]);
+
+  render(<ChatPanel channelId="chan-scroll" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+  const transcript = screen.getByTestId("chat-transcript-scroll");
+  Object.defineProperty(transcript, "scrollHeight", { configurable: true, value: 1000 });
+  Object.defineProperty(transcript, "clientHeight", { configurable: true, value: 200 });
+  Object.defineProperty(transcript, "scrollTop", {
+    configurable: true,
+    writable: true,
+    value: 100,
+  });
+
+  fireEvent.scroll(transcript);
+  const socket = MockChatWebSocket.instances[0];
+
+  await act(async () => {
+    socket.open();
+    socket.receive({
+      type: "event",
+      event: {
+        type: "message",
+        message: {
+          id: "m-scroll-1",
+          channelId: "chan-scroll",
+          userId: "viewer-2",
+          content: "Message below the fold",
+          createdAt: "2026-05-07T18:00:00Z",
+        },
+        occurredAt: "2026-05-07T18:00:00Z",
+      },
+    });
+  });
+
+  expect(await screen.findByRole("button", { name: /jump to latest/i })).toBeInTheDocument();
+  expect(transcript.scrollTop).toBe(100);
+
+  fireEvent.click(screen.getByRole("button", { name: /jump to latest/i }));
+
+  expect(transcript.scrollTop).toBe(1000);
+  await waitFor(() => {
+    expect(screen.queryByRole("button", { name: /jump to latest/i })).not.toBeInTheDocument();
+  });
 });
 
 test("sends messages through the websocket when live chat is connected", async () => {
