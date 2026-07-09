@@ -122,8 +122,8 @@ func TestGatewayModerationFlow(t *testing.T) {
 		"targetId":   viewer.ID,
 		"durationMs": 5000,
 	})
-	waitForType(t, ownerConn, "event")
-	waitForType(t, viewerConn, "event")
+	waitForEventType(t, ownerConn, "moderation")
+	waitForEventType(t, viewerConn, "moderation")
 
 	// Attempt to speak while timed out
 	sendJSON(t, viewerConn, map[string]string{
