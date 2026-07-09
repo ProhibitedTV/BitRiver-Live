@@ -743,8 +743,7 @@ export function ChatPanel({
     </ul>
   );
 
-  const roomTitle = roomName?.trim() || "Live chat";
-  const roomHeading = roomName?.trim() ? `${roomTitle} chat` : roomTitle;
+  const roomTitle = roomName?.trim();
   const roomStatusLabel = live === false ? "Offline room" : "Live room";
   const syncLabel = socketReady ? "Live sync" : user ? "Reconnecting" : "Sign in required";
 
@@ -753,7 +752,8 @@ export function ChatPanel({
       <header className="chat-panel__header">
         <div className="chat-panel__title">
           <span className="chat-panel__eyebrow">Live chat</span>
-          <h3>{roomHeading}</h3>
+          <h3>Live chat</h3>
+          {roomTitle ? <p className="chat-panel__room-name">{roomTitle}</p> : null}
           <div className="chat-panel__counts">
             <span className={`pill ${live === false ? "pill--ghost" : "pill--live"}`}>
               {roomStatusLabel}

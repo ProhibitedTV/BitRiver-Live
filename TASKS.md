@@ -75,3 +75,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
   - Check: `NODE_OPTIONS=--max-old-space-size=4096 npm.cmd --prefix web/viewer run build` passed.
   - Local blocker: `go test ./cmd/transcoder -run TestJobProducesSegmentsAndCanBeStopped -count=1` and the low-parallel rerun with a workspace `GOCACHE` both failed during Windows compilation with out-of-memory errors before the focused test could execute. CI rerun is required for the Ubuntu transcoder proof.
+  - PR #1289 rerun passed Ubuntu test-all, image vulnerability scan, macOS Go, and Windows Go, then Viewer CI failed two Playwright expectations: `Live chat` remained the expected accessible heading, and `Available renditions` remained the expected recovery heading.
+  - Restored `Live chat` as the chat panel heading while keeping channel identity as supporting room text.
+  - Renamed the channel hero rendition heading to `Available renditions`.
+  - Check: `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx --silent` passed.
+  - Check: `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx --silent` passed.
+  - Check: `NODE_OPTIONS=--max-old-space-size=4096 npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/mobile-layout.spec.ts` completed `next build` but timed out locally while running browser tests; CI rerun is required for Playwright proof.

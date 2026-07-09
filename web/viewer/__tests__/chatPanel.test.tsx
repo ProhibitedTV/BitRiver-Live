@@ -145,7 +145,8 @@ test("renders compact live-room identity, counts, and roster", async () => {
     />
   );
 
-  expect(await screen.findByRole("heading", { name: "Deep Space Beats chat" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Live chat" })).toBeInTheDocument();
+  expect(screen.getByText("Deep Space Beats")).toBeInTheDocument();
   expect(await screen.findByText("Welcome to the room")).toBeInTheDocument();
   expect(screen.getByText("Live room")).toBeInTheDocument();
   expect(screen.getByText("42 viewers")).toBeInTheDocument();

@@ -30,3 +30,4 @@
 - `git diff --check`
 - `npm.cmd --prefix web/viewer run build`
 - `go test ./cmd/transcoder -run TestJobProducesSegmentsAndCanBeStopped -count=1`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/mobile-layout.spec.ts`

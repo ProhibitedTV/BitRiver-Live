@@ -30,6 +30,13 @@
   font-size: var(--font-size-lg);
 }
 
+.chat-panel__room-name {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+}
+
 .chat-panel__title {
   display: grid;
   gap: 0.25rem;
