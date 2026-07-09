@@ -11,7 +11,7 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Blocking | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, `Go unit tests`, viewer jobs when paths match | Test logs, verifier phase output, viewer lint/test output |
 | 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
-| 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory until automated; reviewer-blocking by policy when risk is unresolved | PR template plus reviewer checklist; planned scorecard automation | PR summary, changed-area classification, verification commands, docs/release note decisions |
+| 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
 | 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh` | Release workflow artifacts, release notes, image digest list, env validation logs, pgx guard output |
 | 6. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; mostly manual today | `docs/operations.md`, `docs/upgrades.md`, `/readyz`, `/healthz`, `/api/status`, monitoring dashboards and backup/restore runbooks | Canary notes, health snapshots, alert dashboard links, backup/restore evidence, rollback decision record |
 
@@ -114,13 +114,21 @@ The `--target` flag produces an upgrade-plan artifact in both tiers so release r
 
 ### 4. AI-authored PR risk scorecard
 
-AI-authored changes should make risk legible to human reviewers. Until automation exists, include these points in the PR body or review summary:
+AI-authored changes should make risk legible to human reviewers. Fill in the release scorecard in the PR template and keep it current when the diff changes.
 
 - changed areas and deployment/runtime impact
 - commands run and any skipped checks
 - whether docs, release notes, or upgrade notes changed
 - whether contract drift is intentional
 - rollback or mitigation notes for high-risk runtime changes
+
+Run the advisory validator locally against a PR body draft:
+
+```bash
+./scripts/check-pr-release-scorecard.sh --body pr-body.md
+```
+
+Pass `--changed-files` to catch obvious mismatches between the diff and selected scorecard fields, and use `--strict` when release management or a future workflow should fail on warnings. See `docs/pr-release-scorecard.md` for examples and Codex-authored PR expectations.
 
 Treat missing evidence as advisory for small docs-only changes and blocking for runtime, deployment, auth, data, migration, or release workflow changes.
 

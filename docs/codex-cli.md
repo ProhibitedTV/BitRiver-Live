@@ -74,6 +74,18 @@ export COMPOSE_FILE=deploy/docker-compose.yml
 docker compose up -d              # reloads containers with the latest code
 ```
 
+### Prepare Codex-authored PRs
+
+Before opening a PR for Codex-authored changes, fill in the release scorecard in `.github/pull_request_template.md`. Include the risk level, changed areas, exact verification commands, blocked or skipped checks, and operator/release impact.
+
+Validate the PR body draft locally:
+
+```bash
+./scripts/check-pr-release-scorecard.sh --body pr-body.md
+```
+
+For medium/high-risk changes, include concrete evidence or an explicit blocked-check explanation. See `docs/pr-release-scorecard.md` for the Gate 4 expectations.
+
 ### Keep the CLI up to date
 
 Upgrade periodically to pick up the latest prompts and workflow helpers:

@@ -1,28 +1,26 @@
 ## Scope (current change)
-- Address GitHub issue #1266 with a named golden-path release gate.
-- Add `go run ./cmd/bitriver release smoke-gate` as the evidence-producing gate command.
-- Add `./scripts/release-gate-smoke.sh` as the operator/CI wrapper for the command.
-- Wire the fast tier into the existing `scripts/test-all.sh` quickstart path so PR CI runs it when quickstart/deploy/runtime paths change.
-- Document how fast, full, packaged, and upgrade-path evidence map to Gate 3 without changing deployment contract files.
+- Address GitHub issue #1267 with an advisory PR release scorecard and risk gate.
+- Update `.github/pull_request_template.md` with a concise release scorecard that Codex/humans can fill in.
+- Add `./scripts/check-pr-release-scorecard.sh` to validate obvious scorecard omissions from a PR body and optional changed-file list.
+- Document how Codex-authored PRs should disclose risk, evidence, blocked checks, and operator/release impact.
+- Map the scorecard to Gate 4 in `docs/release-gates.md`.
 
 ## Assumptions
-- The first pass should compose existing checks instead of duplicating quickstart, smoke, contract snapshot, or upgrade-plan logic.
-- Fast PR tier should stay bounded: version evidence, env redaction summary, contract snapshot, and Compose config output.
-- Full release-candidate tier can run the source quickstart plus smoke and collect Compose state/log artifacts.
-- Packaged launcher and real baseline-to-target upgrade execution are slower release/nightly concerns; this pass should document staged follow-up evidence and provide an upgrade-plan artifact hook.
-- Existing CI path filters already enable quickstart-focused validation through `BITRIVER_TEST_QUICKSTART=1`; `scripts/test-all.sh` is the right centralized entrypoint for the new fast tier.
+- The first version should be advisory by default to avoid noisy false positives; `--strict` can make warnings fail.
+- The validator should work from plain files so it can be used locally, in PR tooling, or by future workflow wiring.
+- Medium/high-risk PRs should list concrete evidence or explicitly disclose blocked checks.
+- Changed-file heuristics should catch obvious mismatches only: deploy/env, migrations, CI/build, security/auth, release artifacts, docs.
+- No workflow YAML changes are required in this pass because the issue accepts a script-based validator.
 
 ## Risks
-- Running the full Compose quickstart on every PR would be too slow; keep full mode opt-in.
-- Artifact files must avoid leaking secrets; env evidence should report redaction coverage, not values.
-- Failure output must name the failed phase and artifact path so operators can debug without guessing.
-- CI script wiring changes required checks for quickstart-path PRs, so local verification must include the new wrapper and relevant Go tests.
+- Overly broad parsing could produce review noise; keep checks explicit and explain remediation.
+- A scorecard can become wall-of-text; keep the PR template short and checkbox-driven.
+- The script must not require GitHub API access or hidden CI context to be useful.
+- Advisory output must still be clear enough that reviewers can decide when to block manually.
 
 ## Test plan
-- `gofmt -w cmd/bitriver/release_contract.go cmd/bitriver/release_contract_test.go`
-- `go test ./cmd/bitriver -run "TestRunRelease|TestReleaseSmokeGate" -count=1 -timeout=120s`
-- `go run ./cmd/bitriver release smoke-gate --tier fast --artifact-dir .tmp/release-gate-smoke --target v0.0.0-test`
-- `./scripts/release-gate-smoke.sh --tier fast --artifact-dir .tmp/release-gate-wrapper --target v0.0.0-test`
-- `BITRIVER_VERIFY_SOURCE_ONLY=1 ./scripts/verify.sh`
-- `bash -n scripts/release-gate-smoke.sh scripts/test-all.sh`
+- `bash -n scripts/check-pr-release-scorecard.sh`
+- `./scripts/check-pr-release-scorecard.sh --body .github/pull_request_template.md --advisory`
+- `./scripts/check-pr-release-scorecard.sh --body <temp complete body> --changed-files <temp changed files> --strict`
+- `./scripts/check-pr-release-scorecard.sh --body <temp incomplete body> --changed-files <temp changed files> --strict` should fail
 - `git diff --check`
