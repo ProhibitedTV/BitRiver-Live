@@ -1,87 +1,101 @@
-## Scoped change: BitRiver network-console viewer identity
+# TASKS
+
+## Scoped change: secret-safe production release evidence (#1294)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish visual and UX scope
+- [x] Task 1 - Establish the release secret boundary
   - Acceptance criteria:
-    - `PLAN.md` records the visual direction, boundaries, risks, and test plan.
-    - Current viewer behavior, UI contracts, screenshots, responsive surface, and production roadmap are reviewed before source edits.
+    - `PLAN.md` records scope, assumptions, risks, tests, and contract boundaries.
+    - `SPEC.md` identifies secret-safe release evidence as the current success target.
+    - The current release, quickstart, canary, diagnostics, and packaging artifact flows are reviewed before implementation.
   - Check:
-    - Read-only source review and local desktop screenshot completed.
+    - Read-only workflow, validation-script, release-gate, canary, artifact, and documentation review completed.
+    - `git diff --check -- PLAN.md TASKS.md SPEC.md` passed.
 
-- [x] Task 2 - Build the shared network-console visual system
+- [x] Task 2 - Add a release evidence scanner
   - Acceptance criteria:
-    - Dark and light tokens use the BitRiver gold/cyan/red status palette with high contrast.
-    - Navigation, buttons, inputs, surfaces, chips, and state panels use restrained square geometry and visible focus treatment.
-    - Existing navigation/auth behavior remains unchanged.
+    - A reusable scanner rejects forbidden secret files, known sentinel values, private keys, credential-bearing URLs, and secret-shaped assignments.
+    - Supported archives are inspected recursively.
+    - Findings identify the file and rule without printing the secret value.
+    - Automated tests cover safe and unsafe fixtures.
   - Check:
-    - `npm.cmd --prefix web/viewer run test -- navbar viewerShell` passed (37 tests).
+    - `bash -n scripts/scan-release-evidence.sh` passed.
+    - `go test ./scripts -run ReleaseEvidence -count=1 -timeout=120s` passed (workspace-local Go cache used because the host default cache is damaged).
 
-- [x] Task 3 - Recompose homepage discovery and empty-install states
+- [x] Task 3 - Keep production secret validation job-local
   - Acceptance criteria:
-    - Homepage hierarchy reads as a live network surface rather than a marketing hero.
-    - Fresh installs show clear network-ready status, useful next actions, and compact discovery sections.
-    - Live, loading, empty, search, and error behavior remains represented.
+    - The release workflow no longer uploads or downloads a populated `.env`.
+    - Missing, malformed, digest, and `_FILE`-compatible secret inputs still fail in the owning job.
+    - Validation output is scanned and only redacted status evidence is retained.
+    - Temporary secret files are removed in an always-running cleanup step.
   - Check:
-    - `npm.cmd --prefix web/viewer run test -- directoryPage` passed (14 tests; existing search interaction `act()` warnings remain).
+    - No `release-env`, `.env` artifact path, or verified-environment download remains in `.github/workflows/release.yml`.
+    - `go test ./cmd/bitriver -run 'TestValidateEnv.*File|TestResolveEnv.*File' -count=1 -timeout=120s` passed, covering direct and `_FILE` secret resolution behavior.
+    - `git diff --check -- .github/workflows/release.yml scripts/scan-release-evidence.sh scripts/release_evidence_test.go PLAN.md SPEC.md TASKS.md` passed.
 
-- [x] Task 4 - Document the viewer identity contract
+- [x] Task 4 - Gate release artifacts and retained evidence
   - Acceptance criteria:
-    - Viewer docs describe the shared ecosystem visual language and the public-viewer restraint rules.
-    - No deployment contract docs change.
+    - OME freshness uses non-secret fixture inputs and a temporary output.
+    - Release artifacts are inventoried and scanned before publication.
+    - Temporary build and evidence artifacts have explicit short retention periods.
+    - Static tests prevent reintroducing `release-env` transfer or unscanned release evidence.
   - Check:
-    - `git diff --check` passed after removing one trailing blank line from `PLAN.md`.
-
-- [x] Task 5 - Verify responsive behavior and release readiness
-  - Acceptance criteria:
-    - Focused tests, lint, and production build pass or blockers are recorded.
-    - Desktop and mobile browser checks show no horizontal overflow or clipped critical actions.
-    - The canonical viewer verify gate is attempted and any host blocker is recorded.
-  - Check:
-    - `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell` passed (51 tests).
-    - `npm.cmd --prefix web/viewer run lint` passed with one pre-existing `UploadManager` hook dependency warning.
-    - `npm.cmd --prefix web/viewer run build` passed with the same hook warning and existing client-rendering notices.
-    - Desktop 1440x1000, mobile 390x844, and mobile light-theme browser checks passed with no horizontal overflow.
+    - `go test ./scripts -run 'Release(Evidence|Workflow)' -count=1 -timeout=120s` passed.
+    - `js-yaml` parsed `.github/workflows/release.yml` with all 11 jobs present.
+    - All 10 `upload-artifact` steps have explicit retention; temporary build artifacts retain 7 days and evidence retains 3 days.
+    - A temporary OME render from `deploy/.env.example` byte-matches the refreshed tracked generated XML.
     - `git diff --check` passed.
-    - Git Bash reached `./scripts/verify.sh --viewer`, passed go.sum and CI contract checks, then stopped because no Python 3 interpreter is installed on this host.
 
-- [-] Task 6 - Correct light-theme active-chip contrast and merge
+- [x] Task 5 - Document the release threat model
   - Acceptance criteria:
-    - Active chips use a deterministic background/text pair that meets WCAG AA in dark and light themes.
-    - `tests/accessibility.spec.ts` passes locally.
-    - PR #1308 Viewer CI and all required merge gates pass.
-    - PR #1308 is squash-merged into `main` only after green CI.
+    - Security and production release docs prohibit secret-bearing CI artifacts and logs.
+    - Docs define allowed redacted evidence, cleanup expectations, sentinel scanning, and `_FILE` compatibility.
+    - Release-gate documentation names the retained artifact inventory and scan result.
   - Check:
-    - Viewer CI failure confirmed at 1.18:1 contrast for active browse chips; focused fix approved by the user.
-    - First local accessibility rerun cleared the chip violation and exposed light-theme hovered primary actions at 2.69:1; correction remains in Task 6 scope.
-    - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts` passed (2 tests) after both contrast pairs were corrected.
-    - `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell` passed (51 tests; existing search `act()` warnings and build-output haste warning remain).
-    - `git diff --check` passed.
+    - Stale guidance to persist or reuse a verified release `.env` was removed from source-of-truth docs.
+    - `git diff --check -- docs/contract.md docs/production-release.md docs/release-gates.md docs/secrets-hardening.md docs/security.md PLAN.md TASKS.md` passed.
+    - Contract docs now require tracked and packaged OME XML to remain placeholder-only and deployment-time renders to remain local.
+
+- [-] Task 6 - Verify, publish, and close #1294
+  - Acceptance criteria:
+    - Focused tests, repository verification, and diff hygiene pass or blockers are recorded.
+    - Pull request checks pass before squash merge.
+    - The issue is closed by the merged pull request and local `main` is synchronized.
+  - Check:
+    - `go test ./... -count=1 -timeout=120s` passed with a workspace-local Go cache.
+    - Focused scanner/workflow and `_FILE` validation suites passed.
+    - `js-yaml` parsed the 11-job release workflow and `git diff --check` passed.
+    - `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed.
+    - `./scripts/test-quickstart.sh` passed after release-mode images built, migrations completed, all services became healthy, and API/viewer probes succeeded.
+    - `./scripts/verify.sh` passed the go.sum and CI contract phases, then stopped at env placeholder hygiene because this host has no Python 3 interpreter; equivalent available gates were run separately and CI remains required before merge.
 
 ### Execution log
-- Task 1 review:
-  - Compared the supplied BitRiver Radio and Visual Archive screenshots against the running viewer homepage.
-  - Confirmed the viewer currently uses large rounded panels, gradient CTAs, and generic SaaS spacing that does not match the ecosystem identity.
-  - Reviewed `docs/ui-ux-model.md`, `web/viewer/README.md`, the public shell/navigation components, homepage composition, CSS tokens, and open production roadmap issues.
-  - Kept production epic #1293 and compatibility issue #1307 as release context; this user-directed visual pass does not claim to close either issue.
+- Task 1 analysis:
+  - Confirmed `.github/workflows/release.yml` creates a fully populated production `.env`, uploads it as `release-env`, and downloads it in `go-tests` for OME freshness validation.
+  - Confirmed downstream release jobs only require the validation gate; they do not need production credential values.
+  - Confirmed existing security guidance permits a generated CI `.env` artifact and must be corrected.
+  - Kept the canonical Compose, root environment, and generated OME deployment contract out of scope.
 - Task 2 implementation:
-  - Added a late-loaded `network-console.css` identity layer so existing component behavior and older route-specific styles remain intact.
-  - Replaced generic gradients and rounded chrome with gold structural lines, cyan live/focus states, red error states, compact square controls, and monospace operational metadata.
-  - Preserved the light theme with an adapted high-contrast paper-console palette.
+  - Added a reusable release evidence scanner with exact known-value detection, forbidden filename checks, private-key and secret-shape rules, and recursive archive inspection.
+  - Added a deterministic SHA-256 inventory mode and diagnostics that report only rule identifiers and relative paths.
+  - Added Go fixtures for safe redacted evidence, direct leak classes, output non-disclosure, and an archived sentinel leak.
 - Task 3 implementation:
-  - Added a real-data network status rail for node identity, live-signal count, directory count, and relay state.
-  - Reworked the homepage hierarchy into a public relay surface with a stronger first-stream state and a compact featured-signal panel.
-  - Added a regression test proving an empty installation presents itself as ready and actionable rather than broken.
-- Task 4 documentation:
-  - Added the network-console visual identity contract and public-viewer restraint rules to `web/viewer/README.md`.
-  - Added ecosystem identity and truthful visual status cues to the cross-role UX principles in `docs/ui-ux-model.md`.
-- Task 5 verification:
-  - Confirmed desktop and mobile layouts keep critical status, setup, search, and featured-relay actions visible without horizontal overflow.
-  - Confirmed the retained light theme applies the documented paper-console palette and remains overflow-free.
-  - Focused tests, lint, production build, and diff hygiene passed; canonical verification remains host-blocked at its Python prerequisite.
-- Task 6 CI diagnosis:
-  - Viewer CI ran 36 Playwright integration tests; 35 passed and the directory accessibility test failed.
-  - Axe identified active `Live` and `All` browse chips using `#f7ffff` text over a translucent `#daefe5` light-theme composite at 1.18:1 contrast.
-  - The first local rerun confirmed the chip fix and then identified `#080601` text on hovered `#6f4f08` primary actions at 2.69:1.
-  - Active chips now use an opaque accent/contrast pair, and light-theme primary actions use a light foreground across normal, hover, and focus states.
-  - The exact accessibility spec and focused Jest regression set pass locally.
+  - Replaced the cross-job `.env` artifact with a runner-temporary validation input and exact-value sentinel list.
+  - Captured validation output privately, scanned it before display, retained only fixed-schema status evidence, and added an always-running cleanup step.
+  - Removed the downstream environment artifact download while preserving production validation, digest enforcement, and existing `_FILE` resolution behavior.
+- Task 4 analysis:
+  - Placeholder OME rendering exposed a credential-shaped access token in the tracked generated XML, which is copied into release packages.
+  - Expanded the scoped contract work only enough to refresh that generated file from `deploy/.env.example`; Compose and root `.env` remain untouched.
+- Task 4 implementation:
+  - Added non-mutating OME freshness validation against `deploy/.env.example` and sanitized the tracked generated XML to that canonical placeholder render.
+  - Added final downloaded-artifact and publication-payload scans plus a SHA-256 artifact inventory before GitHub Release publication.
+  - Added explicit short retention to every workflow artifact and static tests that prevent plaintext env transfer, missing scans, or retention drift.
+- Task 5 documentation:
+  - Replaced unsafe guidance to upload a generated CI environment file with a job-local validation and cleanup model.
+  - Added release CI threat boundaries, sentinel and artifact scanning, evidence retention, rotation response, and `_FILE` compatibility guidance.
+  - Updated release-gate and deployment contract docs for redacted evidence, inventory review, and placeholder-only packaged OME config.
+- Task 6 verification:
+  - Hardened scanner review added mixed-line bypass fixtures, XML credential detection, and a credential-only sentinel allowlist to avoid false positives from ordinary release values.
+  - The first quickstart attempt inherited local offline Go settings and failed while downloading real pgx; rerunning the canonical command without those overrides passed end to end.
+  - Smoke cleanup restored the tracked generated XML from `HEAD`, so the canonical placeholder render was reapplied and rescanned afterward.

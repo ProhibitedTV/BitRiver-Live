@@ -19,6 +19,23 @@ Production also refuses to start without a non-zero login throttle
 (`BITRIVER_LIVE_RATE_LOGIN_LIMIT`/`BITRIVER_LIVE_RATE_LOGIN_WINDOW`) so
 password spray protection is always enabled in release builds.
 
+## Release credential threat model
+
+Release credentials are exposed if a workflow uploads a populated environment file, prints a secret-bearing validator error, packages a deployment-time generated config, or passes credentials to a downstream build job. GitHub Actions masking is a secondary safeguard, not permission to retain secret material.
+
+The tag workflow enforces these boundaries:
+
+- Production values are materialized only in the `verify-env` job under `$RUNNER_TEMP` and are deleted with an `always()` cleanup step.
+- Missing, malformed, placeholder, and digest inputs remain validation failures, while validation stays compatible with supported `_FILE` secret sources.
+- Validator logs and fixed-schema contract evidence are scanned against exact injected values; only `release-contract-evidence` is retained for 3 days.
+- OME freshness renders from `deploy/.env.example` into a temporary output. The tracked generated XML and release packages contain placeholders, never deployment credentials.
+- Every downloaded build artifact and the final `dist/` payload are scanned before publication. `release-publication-evidence` retains the SHA-256 artifact inventory and scan status for 3 days.
+- Intermediate build artifacts have an explicit 7-day retention and are not a credential transport.
+
+The evidence scanner rejects forbidden secret files, private-key material, credential-bearing URLs, secret-shaped assignments, and exact sentinels. A scan failure blocks publication and reports only a rule identifier and file path, not the matched value.
+
+Before promoting a release, review the artifact inventory and both redacted evidence artifacts. If any credential was previously committed or uploaded, rotate it before rollout; deleting an artifact or replacing the tracked value does not revoke it.
+
 For production runtime safety, prefer enabling the resource limits overlay
 (`deploy/docker-compose.limits.yml`) with the canonical stack:
 
@@ -181,9 +198,11 @@ storage builds.
 
 ### Repository secrets for the release workflow
 
-The `verify-env` job in the release workflow renders a production-ready `.env`
-file, validates it with `deploy/check-env.sh`, and then enforces third-party
-image digest pins via `scripts/require-image-digests.sh`. Configure the
+The `verify-env` job in the release workflow materializes a production-ready
+validation input under the runner temporary directory, validates it with
+`deploy/check-env.sh`, and then enforces third-party image digest pins via
+`scripts/require-image-digests.sh`. The input is deleted in the same job and is
+never uploaded. Configure the
 following
 repository secrets (mirroring [`deploy/.env.example`](../deploy/.env.example))
 so the job can populate every required variable and image tag:
@@ -231,11 +250,11 @@ digest enforcement always runs under production conditions for release tags.
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_VIEWER_URL`
 
-The release workflow persists the verified `.env` from this job and reuses it
-to render the production OvenMediaEngine config. The `build` matrix now fails
-if `deploy/ome/Server.generated.xml` would change when rendered for the
-tagged release, preventing stale placeholders from landing in the packaged
-artefacts.
+The workflow retains only redacted status evidence from this validation. OME
+freshness is checked separately by rendering `deploy/.env.example` to a
+temporary output and comparing it with `deploy/ome/Server.generated.xml`.
+Production credentials are rendered only on the deployment host; they are not
+needed by build or test jobs and never enter release packages.
 
 ### Record image digests for production
 
@@ -278,9 +297,9 @@ build out:
    deploy/check-env.sh
    ./scripts/require-image-digests.sh
    ```
-   The release workflow surfaces this output in the deploy logs and fails when
-   any OvenMediaEngine URLs, bind addresses, or ports point at loopback
-   addresses, placeholders, or are missing.
+   The release workflow captures and scans this output before displaying a
+   failure, and blocks when any OvenMediaEngine URLs, bind addresses, or ports
+   point at loopback addresses, placeholders, or are missing.
    The same preflight now errors when `/metrics` lacks
    `BITRIVER_LIVE_METRICS_TOKEN`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` or the
    login throttling floor (`BITRIVER_LIVE_RATE_LOGIN_LIMIT`) is missing, so

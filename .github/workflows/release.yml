@@ -19,7 +19,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Create production env file
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Prepare job-local production validation input
         env:
           BITRIVER_LIVE_MODE: production
           BITRIVER_DEPLOY_IMAGE_SOURCE: pull
@@ -64,8 +70,15 @@ jobs:
           NEXT_PUBLIC_VIEWER_URL: ${{ secrets.NEXT_PUBLIC_VIEWER_URL }}
         run: |
           set -euo pipefail
-          env_file=".env"
+          env_file="$RUNNER_TEMP/release-validation-input"
+          sentinel_file="$RUNNER_TEMP/release-secret-values"
+          validation_dir="$RUNNER_TEMP/release-validation-output"
+          evidence_dir="$RUNNER_TEMP/release-contract-evidence"
+          rm -rf "$validation_dir" "$evidence_dir"
+          mkdir -p "$validation_dir" "$evidence_dir"
           : >"$env_file"
+          : >"$sentinel_file"
+          chmod 600 "$env_file" "$sentinel_file"
           vars=(
             BITRIVER_LIVE_MODE
             BITRIVER_DEPLOY_IMAGE_SOURCE
@@ -109,31 +122,102 @@ jobs:
             NEXT_PUBLIC_API_BASE_URL
             NEXT_PUBLIC_VIEWER_URL
           )
+          secret_vars=(
+            BITRIVER_POSTGRES_PASSWORD
+            BITRIVER_REDIS_PASSWORD
+            BITRIVER_LIVE_ADMIN_PASSWORD
+            BITRIVER_LIVE_METRICS_TOKEN
+            BITRIVER_SRS_TOKEN
+            BITRIVER_OME_PASSWORD
+            BITRIVER_OME_API_TOKEN
+            BITRIVER_OME_ACCESS_TOKEN
+            BITRIVER_TRANSCODER_TOKEN
+            BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
+          )
           for var in "${vars[@]}"; do
             value="${!var-}"
-            if [[ -z "$value" ]]; then
-              echo "Secret $var is not configured or empty." >&2
-              exit 1
-            fi
             printf '%s=%q\n' "$var" "$value" >>"$env_file"
           done
+          for var in "${secret_vars[@]}"; do
+            value="${!var-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" >>"$sentinel_file"
+            fi
+          done
+          printf 'BITRIVER_RELEASE_SENTINEL_%s_%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >>"$sentinel_file"
+          {
+            echo "BITRIVER_RELEASE_ENV_FILE=$env_file"
+            echo "BITRIVER_RELEASE_SENTINEL_FILE=$sentinel_file"
+            echo "BITRIVER_RELEASE_VALIDATION_DIR=$validation_dir"
+            echo "BITRIVER_RELEASE_EVIDENCE_DIR=$evidence_dir"
+          } >>"$GITHUB_ENV"
 
-      - name: Validate production environment configuration
+      - name: Validate production inputs and create redacted evidence
         run: |
           set -euo pipefail
-          ./deploy/check-env.sh .env | tee env-validation.log
+          env_log="$BITRIVER_RELEASE_VALIDATION_DIR/environment-validation.log"
+          digest_log="$BITRIVER_RELEASE_VALIDATION_DIR/image-digest-validation.log"
 
-      - name: Require production image digests
+          set +e
+          ./deploy/check-env.sh "$BITRIVER_RELEASE_ENV_FILE" >"$env_log" 2>&1
+          env_status=$?
+          ./scripts/require-image-digests.sh --env-file "$BITRIVER_RELEASE_ENV_FILE" >"$digest_log" 2>&1
+          digest_status=$?
+          set -e
+
+          scan_status=0
+          ./scripts/scan-release-evidence.sh \
+            --root "$BITRIVER_RELEASE_VALIDATION_DIR" \
+            --sentinel-file "$BITRIVER_RELEASE_SENTINEL_FILE" || scan_status=$?
+
+          env_result="failed"
+          digest_result="failed"
+          [[ $env_status -eq 0 ]] && env_result="passed"
+          [[ $digest_status -eq 0 ]] && digest_result="passed"
+
+          cat >"$BITRIVER_RELEASE_EVIDENCE_DIR/release-contract-evidence.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "releaseTag": "$GITHUB_REF_NAME",
+            "commit": "$GITHUB_SHA",
+            "environmentValidation": "$env_result",
+            "imageDigestValidation": "$digest_result",
+            "credentialFlow": "job-local-ephemeral",
+            "retainedValues": "none"
+          }
+          EOF
+
+          ./scripts/scan-release-evidence.sh \
+            --root "$BITRIVER_RELEASE_EVIDENCE_DIR" \
+            --sentinel-file "$BITRIVER_RELEASE_SENTINEL_FILE" || scan_status=$?
+
+          if [[ $scan_status -ne 0 ]]; then
+            rm -rf "$BITRIVER_RELEASE_EVIDENCE_DIR"
+            echo "Release validation output failed the secret-safety scan; unsafe details were suppressed." >&2
+            exit 1
+          fi
+          if [[ $env_status -ne 0 || $digest_status -ne 0 ]]; then
+            cat "$env_log" >&2
+            cat "$digest_log" >&2
+            exit 1
+          fi
+
+      - name: Remove job-local production inputs
+        if: always()
         run: |
-          set -euo pipefail
-          ./scripts/require-image-digests.sh --env-file .env
+          for file in "${BITRIVER_RELEASE_ENV_FILE:-}" "${BITRIVER_RELEASE_SENTINEL_FILE:-}"; do
+            [[ -n "$file" ]] && rm -f "$file"
+          done
+          [[ -n "${BITRIVER_RELEASE_VALIDATION_DIR:-}" ]] && rm -rf "$BITRIVER_RELEASE_VALIDATION_DIR"
 
-      - name: Upload verified environment file
+      - name: Upload redacted contract evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-env
-          path: .env
-          if-no-files-found: error
+          name: release-contract-evidence
+          path: ${{ env.BITRIVER_RELEASE_EVIDENCE_DIR }}
+          if-no-files-found: ignore
+          retention-days: 3
 
   go-tests:
     name: Go unit tests
@@ -148,51 +232,25 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Download verified environment file
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-env
-          path: .
-
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Verify OvenMediaEngine config freshness
+      - name: Verify placeholder OME config freshness
         run: |
           set -euo pipefail
-          if [[ ! -f .env ]]; then
-            echo "Verified .env not found; ensure verify-env uploaded the file." >&2
+          rendered="$RUNNER_TEMP/Server.generated.xml"
+          go run ./cmd/bitriver ome render \
+            --env-file deploy/.env.example \
+            --output "$rendered" \
+            --force \
+            --quiet
+          if ! cmp -s deploy/ome/Server.generated.xml "$rendered"; then
+            echo "deploy/ome/Server.generated.xml is stale for deploy/.env.example; render and commit it before releasing." >&2
             exit 1
           fi
-
-          original_checksum="missing"
-          placeholder_config=0
-          if [[ -f deploy/ome/Server.generated.xml ]]; then
-            original_checksum="$(sha256sum deploy/ome/Server.generated.xml | awk '{print $1}')"
-            if grep -Eq 'OME-Example-Access-Token|OME-Example-Pass!|ome-operator|0\.0\.0\.0' deploy/ome/Server.generated.xml; then
-              placeholder_config=1
-            fi
-          fi
-
-          ./scripts/render-ome-config.sh --env-file .env --force --quiet
-
-          if [[ ! -f deploy/ome/Server.generated.xml ]]; then
-            echo "deploy/ome/Server.generated.xml was not produced by the renderer." >&2
-            exit 1
-          fi
-
-          updated_checksum="$(sha256sum deploy/ome/Server.generated.xml | awk '{print $1}')"
-          if [[ "$original_checksum" != "missing" && "$original_checksum" != "$updated_checksum" ]]; then
-            echo "deploy/ome/Server.generated.xml was re-rendered for this tag using the verified .env." >&2
-            if [[ $placeholder_config -eq 1 ]]; then
-              echo "The previously checked-in config used placeholder OvenMediaEngine credentials or bind addresses; commit the refreshed file before publishing a release." >&2
-              exit 1
-            fi
-          fi
-
 
       - name: Run verification gate
         run: ./scripts/verify.sh
@@ -392,6 +450,7 @@ jobs:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-live-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
+          retention-days: 7
 
   build-bitriver:
     name: Build bitriver CLI binaries
@@ -470,6 +529,7 @@ jobs:
           name: bitriver-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
+          retention-days: 7
 
   build-launcher:
     name: Build launcher bundles and signatures
@@ -573,6 +633,7 @@ jobs:
           name: launcher-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-launcher-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload Linux installer packages
         if: matrix.goos == 'linux'
@@ -583,6 +644,7 @@ jobs:
             dist/bitriver-live_${{ github.ref_name }}_${{ matrix.goarch }}.deb
             dist/bitriver-live_${{ github.ref_name }}_${{ matrix.goarch }}.rpm
           if-no-files-found: error
+          retention-days: 7
 
   build-viewer:
     name: Build viewer bundle
@@ -659,6 +721,7 @@ jobs:
           name: viewer-bundle
           path: dist/bitriver-viewer-${{ github.ref_name }}.tar.gz
           if-no-files-found: error
+          retention-days: 7
 
   publish-images:
     name: Publish container images
@@ -736,6 +799,7 @@ jobs:
           name: container-sbom-${{ matrix.component }}
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
           if-no-files-found: error
+          retention-days: 7
 
   brew-formula:
     name: Generate Homebrew formula
@@ -774,6 +838,7 @@ jobs:
           name: homebrew-formula
           path: dist/formula/bitriver-live.rb
           if-no-files-found: error
+          retention-days: 7
 
   windows-msi:
     name: Build Windows MSI installer
@@ -829,6 +894,7 @@ jobs:
           name: windows-installer
           path: dist/bitriver-live-${{ github.ref_name }}.msi
           if-no-files-found: error
+          retention-days: 7
 
   release:
     name: Create GitHub release
@@ -845,6 +911,9 @@ jobs:
       - windows-msi
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -867,6 +936,38 @@ jobs:
           set -euo pipefail
           cd dist
           sha256sum * > CHECKSUMS.txt
+
+      - name: Scan and inventory release payload
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/release-publication-evidence"
+          rm -rf "$evidence_dir"
+          mkdir -p "$evidence_dir"
+
+          ./scripts/scan-release-evidence.sh \
+            --root release \
+            --inventory "$evidence_dir/artifact-inventory.tsv"
+          ./scripts/scan-release-evidence.sh --root dist
+
+          cat >"$evidence_dir/release-scan-status.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "releaseTag": "$GITHUB_REF_NAME",
+            "commit": "$GITHUB_SHA",
+            "downloadedArtifactScan": "passed",
+            "publicationPayloadScan": "passed"
+          }
+          EOF
+          ./scripts/scan-release-evidence.sh --root "$evidence_dir"
+          echo "BITRIVER_RELEASE_PUBLICATION_EVIDENCE=$evidence_dir" >>"$GITHUB_ENV"
+
+      - name: Upload release publication evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-publication-evidence
+          path: ${{ env.BITRIVER_RELEASE_PUBLICATION_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Generate release notes
         id: notes

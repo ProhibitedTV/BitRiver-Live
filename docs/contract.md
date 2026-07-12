@@ -26,6 +26,7 @@ BitRiver Live has one canonical deployment path: the root `.env` rendered/valida
   - `deploy/ome/Server.generated.xml`
     - Generated/validated by `cmd/bitriver ome render` and used by the `ome` container mount.
     - Also checked by `ome verify-health-token` during quickstart preflight.
+    - The tracked file and release packages are rendered from `deploy/.env.example` and must contain placeholder credentials only. Deployment-time renders use the operator's root `.env`, are sensitive, and must never be uploaded as CI or release evidence.
   - `deploy/srs/conf/srs.generated.conf`
     - Referenced by `deploy/docker-compose.yml` and rendered by `scripts/render-srs-config.sh` via the `srs-config` service.
     - This file is not committed in this repository and is generated from `deploy/srs/conf/srs.conf` + `.env` by `scripts/render-srs-config.sh`. In Compose-first flows, `srs-config` always runs with `--force` before `srs` starts; in packaged systemd flow, `srs.service` also runs the same render script with `--force` in `ExecStartPre`.

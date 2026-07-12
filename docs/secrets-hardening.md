@@ -23,24 +23,22 @@ The rest of this document keeps the `.env` contract intact while reducing those 
 
 ## 2) Hardening patterns compatible with this repo
 
-### A. CI-injected environment files
+### A. CI-injected job-local environment files
 
-Use CI to generate deployment-specific `.env` files at deploy time instead of storing production secrets in Git.
+CI may materialize a deployment-specific environment file for validation, but that file is a job-local secret, not an artifact.
 
-Recommended approach:
+Required approach:
 
-1. Keep a non-secret template source in Git (`deploy/.env.example`).
-2. In CI, inject secrets from the CI secret store into a generated `.env` artifact.
-3. Run repo validators against that generated file before deployment:
-   - `deploy/check-env.sh`
-   - `go run ./cmd/bitriver env validate --env-file ./.env`
-4. Use the generated `.env` for `docker compose` / quickstart and for OME render checks.
-5. Avoid persisting CI artifacts longer than needed.
+1. Keep only the non-secret template in Git (`deploy/.env.example`).
+2. Materialize production values under the runner's temporary directory with mode `0600`.
+3. Run `deploy/check-env.sh` and image-digest validation in that same job.
+4. Scan captured output against the exact injected values and secret-shaped content before displaying or retaining anything.
+5. Retain only fixed-schema status evidence with no values, DSNs, rendered credential config, or raw validator logs.
+6. Delete the environment input, sentinel list, and raw logs in an always-running cleanup step.
 
-Notes:
+Never upload or download a populated `.env`, secret mount, private key, credential-bearing DSN, or generated OME config. A deployment job must acquire its own credentials from the approved CI or host secret source instead of consuming credentials from a build artifact.
 
-- This repo already assumes `.env`-driven deploys; CI injection changes *where values come from*, not runtime behavior.
-- Keep environment-specific files isolated (for example, separate CI projects/contexts per environment).
+This preserves the repository's `.env` runtime contract while preventing CI artifact storage from becoming a secret distribution system. Keep environment-specific CI contexts isolated and grant production secret access only to jobs that validate or deploy production.
 
 ### B. Mounted env files with strict filesystem permissions
 
@@ -53,7 +51,7 @@ Recommended host controls:
   - owner: deployment service user (or root-managed with least privilege)
   - mode: `0600` (or stricter where supported)
 - Prevent accidental world/group reads from backup tooling, sync jobs, and support bundles.
-- Treat rendered/generated config containing credentials (such as OME output) as sensitive data in backup and access policies.
+- Treat deployment-time rendered config containing credentials (such as OME output) as sensitive data in backup and access policies. The tracked OME generated file and release packages must contain example placeholders only.
 
 This pattern remains compatible because services still read plain environment variables; only file placement and host ACLs change.
 
@@ -108,7 +106,7 @@ Use this short checklist for every environment:
 
 This keeps operations aligned with repository behavior while materially improving secret hygiene.
 
-## 5) Using *_FILE secrets with Docker Compose mounts
+## 6) Using *_FILE secrets with Docker Compose mounts
 
 `go run ./cmd/bitriver env validate --env-file ./.env` supports file-backed secret values for required secret keys using the `<KEY>_FILE` convention.
 
