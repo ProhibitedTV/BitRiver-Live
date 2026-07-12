@@ -90,8 +90,9 @@ test.describe("channel playback and chat integration", () => {
 
     await page.goto(`/channels/${channelId}`);
 
-    const alert = page.getByRole("alert").filter({ hasText: /couldn't load this channel/i });
+    const alert = page.getByTestId("channel-load-error");
     await expect(alert).toBeVisible();
+    await expect(alert).toContainText("We couldn't load this channel.");
     allowPlaybackRecovery = true;
     await alert.getByRole("button", { name: "Try again" }).click();
 

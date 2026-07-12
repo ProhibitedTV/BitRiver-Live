@@ -122,8 +122,8 @@ func TestGatewayModerationFlow(t *testing.T) {
 		"targetId":   viewer.ID,
 		"durationMs": 5000,
 	})
-	waitForType(t, ownerConn, "event")
-	waitForType(t, viewerConn, "event")
+	waitForEventType(t, ownerConn, "moderation")
+	waitForEventType(t, viewerConn, "moderation")
 
 	// Attempt to speak while timed out
 	sendJSON(t, viewerConn, map[string]string{
@@ -137,6 +137,151 @@ func TestGatewayModerationFlow(t *testing.T) {
 		_, ok := store.ChatTimeout(channel.ID, viewer.ID)
 		return ok
 	})
+}
+
+func TestGatewayPresenceSnapshotAndConnectionDeduping(t *testing.T) {
+	store := newTestStorage(t)
+	owner := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	viewer := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	channel := mustCreateChannel(t, store, owner.ID, "Main")
+
+	gateway := chat.NewGateway(chat.GatewayConfig{Store: store})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("user")
+		user, ok := store.GetUser(userID)
+		if !ok {
+			http.Error(w, "unknown user", http.StatusUnauthorized)
+			return
+		}
+		gateway.HandleConnection(w, r, user)
+	}))
+	defer server.Close()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1)
+	viewerConnOne := mustDial(t, wsURL+"?user="+viewer.ID)
+	defer func() {
+		_ = viewerConnOne.Close()
+	}()
+	viewerConnTwo := mustDial(t, wsURL+"?user="+viewer.ID)
+	defer func() {
+		_ = viewerConnTwo.Close()
+	}()
+	ownerConn := mustDial(t, wsURL+"?user="+owner.ID)
+	defer func() {
+		_ = ownerConn.Close()
+	}()
+
+	joinPayload := map[string]string{"type": "join", "channelId": channel.ID}
+	sendJSON(t, viewerConnOne, joinPayload)
+	waitForType(t, viewerConnOne, "ack")
+	snapshotOne := waitForEventType(t, viewerConnOne, "presence_snapshot")
+	assertPresenceCounts(t, snapshotOne, 1, 1)
+	assertPresenceUsers(t, snapshotOne, []string{viewer.ID})
+
+	sendJSON(t, viewerConnTwo, joinPayload)
+	waitForType(t, viewerConnTwo, "ack")
+	snapshotTwo := waitForEventType(t, viewerConnTwo, "presence_snapshot")
+	assertPresenceCounts(t, snapshotTwo, 2, 1)
+	assertPresenceUsers(t, snapshotTwo, []string{viewer.ID})
+
+	sendJSON(t, ownerConn, joinPayload)
+	waitForType(t, ownerConn, "ack")
+	ownerJoin := waitForEventType(t, viewerConnOne, "presence_join")
+	assertPresenceCounts(t, ownerJoin, 3, 2)
+	assertPresenceUser(t, ownerJoin, owner.ID, "owner")
+
+	sendJSON(t, viewerConnTwo, map[string]string{"type": "leave", "channelId": channel.ID})
+	sendJSON(t, viewerConnOne, map[string]string{"type": "leave", "channelId": channel.ID})
+	viewerLeave := waitForEventType(t, ownerConn, "presence_leave")
+	assertPresenceCounts(t, viewerLeave, 1, 1)
+	assertPresenceUser(t, viewerLeave, viewer.ID, "viewer")
+}
+
+func TestGatewayMessageMetadataIncludesRoleAndBadges(t *testing.T) {
+	store := newTestStorage(t)
+	owner := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	channel := mustCreateChannel(t, store, owner.ID, "Main")
+
+	gateway := chat.NewGateway(chat.GatewayConfig{Store: store})
+	message, err := gateway.CreateMessage(context.Background(), owner, channel.ID, "hello room")
+	if err != nil {
+		t.Fatalf("CreateMessage: %v", err)
+	}
+	if message.User == nil {
+		t.Fatalf("expected message user metadata")
+	}
+	if message.User.ID != owner.ID {
+		t.Fatalf("expected metadata user %q, got %q", owner.ID, message.User.ID)
+	}
+	if message.User.DisplayName != "Owner" {
+		t.Fatalf("expected display name Owner, got %q", message.User.DisplayName)
+	}
+	if message.User.Role != "owner" {
+		t.Fatalf("expected owner role, got %q", message.User.Role)
+	}
+	if !hasBadge(message.User.Badges, "owner") || !hasBadge(message.User.Badges, "broadcaster") {
+		t.Fatalf("expected owner and broadcaster badges, got %#v", message.User.Badges)
+	}
+}
+
+func TestGatewaySystemEventBroadcastIncludesDisplayMetadata(t *testing.T) {
+	store := newTestStorage(t)
+	owner := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	viewer := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	channel := mustCreateChannel(t, store, owner.ID, "Main")
+
+	gateway := chat.NewGateway(chat.GatewayConfig{Store: store})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("user")
+		user, ok := store.GetUser(userID)
+		if !ok {
+			http.Error(w, "unknown user", http.StatusUnauthorized)
+			return
+		}
+		gateway.HandleConnection(w, r, user)
+	}))
+	defer server.Close()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1)
+	viewerConn := mustDial(t, wsURL+"?user="+viewer.ID)
+	defer func() {
+		_ = viewerConn.Close()
+	}()
+	sendJSON(t, viewerConn, map[string]string{"type": "join", "channelId": channel.ID})
+	waitForType(t, viewerConn, "ack")
+	waitForEventType(t, viewerConn, "presence_snapshot")
+
+	systemEvent, err := gateway.BroadcastSystemEvent(chat.SystemEvent{
+		ChannelID: channel.ID,
+		Kind:      "stream_live",
+		Message:   "Stream went live.",
+		ActorID:   owner.ID,
+		TargetID:  viewer.ID,
+		Metadata:  map[string]string{"state": "live"},
+	})
+	if err != nil {
+		t.Fatalf("BroadcastSystemEvent: %v", err)
+	}
+	if systemEvent.ID == "" {
+		t.Fatalf("expected generated system event id")
+	}
+
+	envelope := waitForEventType(t, viewerConn, "system")
+	system := eventSection(t, envelope, "system")
+	if system["kind"] != "stream_live" {
+		t.Fatalf("expected stream_live system kind, got %#v", system["kind"])
+	}
+	if system["message"] != "Stream went live." {
+		t.Fatalf("expected system message, got %#v", system["message"])
+	}
+	actor := sectionMap(t, system, "actor")
+	if actor["id"] != owner.ID || actor["role"] != "owner" {
+		t.Fatalf("expected owner actor metadata, got %#v", actor)
+	}
+	target := sectionMap(t, system, "target")
+	if target["id"] != viewer.ID || target["role"] != "viewer" {
+		t.Fatalf("expected viewer target metadata, got %#v", target)
+	}
 }
 
 func TestGatewayAutoModBlocksMessage(t *testing.T) {
@@ -298,4 +443,96 @@ func waitForType(t *testing.T, conn *chat.Conn, expected string) map[string]inte
 	}
 	t.Fatalf("expected %s message", expected)
 	return nil
+}
+
+func waitForEventType(t *testing.T, conn *chat.Conn, expected string) map[string]interface{} {
+	t.Helper()
+	for i := 0; i < 16; i++ {
+		message := readJSON(t, conn)
+		event, ok := message["event"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if event["type"] == expected {
+			return event
+		}
+	}
+	t.Fatalf("expected event %s", expected)
+	return nil
+}
+
+func assertPresenceCounts(t *testing.T, event map[string]interface{}, viewerCount, chatterCount int) {
+	t.Helper()
+	presence := eventSection(t, event, "presence")
+	if got := intValue(t, presence["viewerCount"]); got != viewerCount {
+		t.Fatalf("expected viewerCount %d, got %d", viewerCount, got)
+	}
+	if got := intValue(t, presence["chatterCount"]); got != chatterCount {
+		t.Fatalf("expected chatterCount %d, got %d", chatterCount, got)
+	}
+}
+
+func assertPresenceUsers(t *testing.T, event map[string]interface{}, want []string) {
+	t.Helper()
+	presence := eventSection(t, event, "presence")
+	rawUsers, ok := presence["users"].([]interface{})
+	if !ok {
+		t.Fatalf("expected presence users, got %#v", presence["users"])
+	}
+	if len(rawUsers) != len(want) {
+		t.Fatalf("expected %d users, got %d", len(want), len(rawUsers))
+	}
+	for index, rawUser := range rawUsers {
+		user, ok := rawUser.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected user object, got %#v", rawUser)
+		}
+		if user["id"] != want[index] {
+			t.Fatalf("expected user %q at index %d, got %#v", want[index], index, user["id"])
+		}
+	}
+}
+
+func assertPresenceUser(t *testing.T, event map[string]interface{}, userID, role string) {
+	t.Helper()
+	presence := eventSection(t, event, "presence")
+	user := sectionMap(t, presence, "user")
+	if user["id"] != userID {
+		t.Fatalf("expected presence user %q, got %#v", userID, user["id"])
+	}
+	if user["role"] != role {
+		t.Fatalf("expected presence role %q, got %#v", role, user["role"])
+	}
+}
+
+func eventSection(t *testing.T, event map[string]interface{}, key string) map[string]interface{} {
+	t.Helper()
+	return sectionMap(t, event, key)
+}
+
+func sectionMap(t *testing.T, parent map[string]interface{}, key string) map[string]interface{} {
+	t.Helper()
+	section, ok := parent[key].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected %s object, got %#v", key, parent[key])
+	}
+	return section
+}
+
+func intValue(t *testing.T, value interface{}) int {
+	t.Helper()
+	number, ok := value.(float64)
+	if !ok {
+		t.Fatalf("expected number, got %#v", value)
+	}
+	return int(number)
+}
+
+func hasBadge(badges []chat.UserBadge, id string) bool {
+	for _, badge := range badges {
+		if badge.ID == id {
+			return true
+		}
+	}
+	return false
 }

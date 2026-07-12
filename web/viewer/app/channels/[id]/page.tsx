@@ -342,7 +342,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       {loading ? <Card className="workspace-card">Loading channel...</Card> : null}
 
       {error ? (
-        <Card className="workspace-card" role="alert">
+        <Card className="workspace-card" role="alert" data-testid="channel-load-error">
           <CardHeader className="workspace-card__header">
             <h2>We couldn&apos;t load this channel.</h2>
             <p className="muted">Something went wrong while fetching playback details. Please try again or return to the channel list.</p>

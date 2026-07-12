@@ -199,6 +199,7 @@ export type ChatUser = {
   displayName: string;
   role?: string;
   avatarUrl?: string;
+  badges?: { id: string; label?: string }[];
 };
 
 export type ChatMessage = {

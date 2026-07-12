@@ -44,6 +44,12 @@ type ChatGatewayEnvelope = {
       id?: string;
       channelId?: string;
       userId?: string;
+      user?: {
+        id?: string;
+        displayName?: string;
+        role?: string;
+        badges?: { id?: string; label?: string }[];
+      };
       content?: string;
       createdAt?: string;
     };
@@ -67,6 +73,17 @@ function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUs
   }
 
   const userId = message.userId?.trim() ?? "";
+  const displayName = message.user?.displayName?.trim();
+  const role = message.user?.role?.trim();
+  const badges = message.user?.badges?.reduce<{ id: string; label?: string }[]>((items, badge) => {
+    const id = badge.id?.trim();
+    if (!id) {
+      return items;
+    }
+    const label = badge.label?.trim();
+    items.push(label ? { id, label } : { id });
+    return items;
+  }, []);
   return {
     id: message.id,
     message: message.content,
@@ -74,7 +91,9 @@ function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUs
     user: userId
       ? {
           id: userId,
-          displayName: currentUser?.id === userId ? currentUser.displayName : userId,
+          displayName: displayName || (currentUser?.id === userId ? currentUser.displayName : userId),
+          role: role || undefined,
+          badges: badges && badges.length > 0 ? badges : undefined,
         }
       : undefined,
   };
@@ -844,7 +863,7 @@ export function ChatPanel({
               <span className="chat-panel__roster-label">Room</span>
               <strong>
                 {viewerCount !== undefined
-                  ? `${viewerCount.toLocaleString()} watching`
+                  ? `${viewerCount.toLocaleString()} viewers total`
                   : `${participantPreview.length} present`}
               </strong>
             </div>
