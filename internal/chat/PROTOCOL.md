@@ -14,13 +14,36 @@ All messages are JSON encoded. The following commands are available:
 | `join`           | `channelId`                                  | Subscribe the connection to a channel room. Must be called before sending chat or moderation commands. |
 | `leave`          | `channelId`                                  | Unsubscribe this connection from the room. |
 | `message`        | `channelId`, `content`                       | Submit a chat message on behalf of the authenticated user. |
-| `timeout`        | `channelId`, `targetId`, `durationMs`        | Issue a timeout in milliseconds against another user. Only channel owners and admins are allowed to moderate. |
+| `timeout`        | `channelId`, `targetId`, `durationMs`        | Issue a timeout in milliseconds against another user. `reason` is optional. Only channel owners, admins, and moderators are allowed to moderate. |
 | `remove_timeout` | `channelId`, `targetId`                      | Clear an active timeout. |
-| `ban`            | `channelId`, `targetId`                      | Ban a user from joining chat. |
+| `ban`            | `channelId`, `targetId`                      | Ban a user from joining chat. `reason` is optional. |
 | `unban`          | `channelId`, `targetId`                      | Lift a previously issued ban. |
 | `report`         | `channelId`, `targetId`, `reason`            | Submit a moderation report. `messageId` and `evidenceUrl` are optional. |
 
 Unknown commands yield an `error` response without closing the connection.
+The server enforces moderation permissions; clients must not rely on hidden UI
+as authorization.
+
+## Viewer slash commands
+
+The Next.js viewer maps moderator slash commands onto the WebSocket commands
+above when the live chat socket is connected:
+
+| Command | Behavior |
+| ------- | -------- |
+| `/timeout <user> <duration> [reason]` | Sends `timeout`. Durations accept `ms`, `s`, `m`, `h`, and `d`; bare numbers are seconds. |
+| `/ban <user> [reason]` | Sends `ban`. |
+| `/unban <user>` | Sends `unban`. |
+| `/remove_timeout <user>` or `/untimeout <user>` | Sends `remove_timeout`. |
+| `/clear` | Clears the local viewer transcript only. It does not delete room history or emit a room event. |
+
+Slash command targets should use stable user IDs when possible. The viewer may
+resolve visible display names from the current transcript, but ambiguous or
+unknown names are sent as typed and rejected by the backend if invalid.
+
+`/me` action messages and message delete/remove commands are not supported by
+the current gateway contract. They require a future event shape and persistence
+decision before clients should expose them.
 
 ## Server envelopes
 
@@ -166,7 +189,8 @@ audit destination.
 
 `moderation`, `report`, and `automod` event payloads retain their existing
 shape. Moderation actions still use the existing commands: `timeout`,
-`remove_timeout`, `ban`, and `unban`.
+`remove_timeout`, `ban`, and `unban`. Moderation events may include `reason`
+when the client supplied one.
 
 ## Lightweight JS client
 

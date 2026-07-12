@@ -1,88 +1,81 @@
-## Scoped change: extend chat room protocol events (#1274)
+## Scoped change: viewer chat moderation controls and slash commands (#1275)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish protocol scope
+- [x] Task 1 - Establish moderation UX scope
   - Acceptance criteria:
-    - `PLAN.md` captures #1274 scope, assumptions, risks, and test plan.
+    - `PLAN.md` captures #1275 scope, assumptions, risks, and test plan.
     - `TASKS.md` lists ordered tasks before source edits for this pass.
-    - Existing chat gateway, event types, queue persistence, protocol docs, and viewer parsing are reviewed.
+    - Existing gateway moderation commands, viewer auth roles, chat row UI, report UI, and protocol docs are reviewed.
   - Check:
     - Read-only analysis only.
 
-- [x] Task 2 - Add protocol event shapes
+- [x] Task 2 - Tighten backend moderation command handling
   - Acceptance criteria:
-    - Chat events can carry optional display metadata without breaking message persistence.
-    - Presence and system events have typed payloads with channel IDs, counts, and timestamps.
-    - Event channel routing includes message, moderation, report, automod, presence, and system payloads.
+    - WebSocket moderation commands propagate `reason` into `ModerationEvent`.
+    - Users with `moderator` role can moderate through the same backend path as owners/admins.
+    - Unauthorized viewers still receive structured errors and cannot moderate by direct WebSocket command.
   - Check:
-    - `gofmt -w internal/chat/event.go internal/chat/gateway.go internal/chat/gateway_test.go` passed.
-    - `go test ./internal/chat -run "TestGateway(Presence|MessageMetadata|SystemEvent|MessageFlow|ModerationFlow)" -count=1` blocked by the default Go build cache error, then by zero free disk space in the Windows temp directory.
+    - `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1` passed with repo-local `GOCACHE`/`GOTMPDIR` after the default Go cache path failed to initialize.
 
-- [x] Task 3 - Track room presence in the gateway
+- [x] Task 3 - Add viewer slash command handling
   - Acceptance criteria:
-    - `join` sends `ack` and a `presence_snapshot` to the joining connection.
-    - First connection for a user broadcasts `presence_join`; final disconnect/leave broadcasts `presence_leave`.
-    - Multiple tabs for the same user do not inflate `chatterCount`.
-    - Existing `join`, `leave`, `message`, and moderation commands still behave.
+    - `/timeout`, `/ban`, `/unban`, `/remove_timeout`, and `/clear` are parsed locally.
+    - Valid moderation commands send the existing WebSocket payloads.
+    - Invalid commands, missing targets, invalid durations, disconnected sockets, and unauthorized users show useful local feedback.
+    - `/me` reports that action messages are not supported yet.
   - Check:
-    - Focused gateway test command attempted; blocked by local disk exhaustion before package compilation completed.
+    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed.
 
-- [x] Task 4 - Emit role/badge metadata and system events
+- [x] Task 4 - Add permission-gated message row controls
   - Acceptance criteria:
-    - Message events include safe author metadata for compact viewer rows.
-    - Owner/admin/creator/moderator/viewer role resolution is deterministic.
-    - Backend code can broadcast a room `system` event without writing it to chat history.
+    - Normal viewers only see existing report controls.
+    - Channel owners, admins, and moderators see compact timeout/ban/remove-timeout/unban actions for other users' messages.
+    - Destructive actions are explicit and errors surface in the chat panel.
   - Check:
-    - Focused gateway test command attempted; blocked by local disk exhaustion before package compilation completed.
+    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed.
 
-- [x] Task 5 - Update protocol docs
+- [x] Task 5 - Update protocol and viewer docs
   - Acceptance criteria:
-    - `internal/chat/PROTOCOL.md` documents presence snapshot/join/leave, user metadata, system events, and compatibility notes.
-    - Docs state that presence/system room notices are live events and not transcript persistence.
+    - `internal/chat/PROTOCOL.md` documents moderation permissions, command `reason`, and viewer slash command expectations.
+    - `web/viewer/README.md` documents local `/clear` behavior and unsupported message deletion/`/me` follow-ups.
   - Check:
     - `git diff --check` passed.
+    - Follow-up issue #1291 opened for unsupported message deletion and `/me` action events.
 
-- [-] Task 6 - Verify, publish, and merge
+- [ ] Task 6 - Verify, publish, and merge
   - Acceptance criteria:
-    - Focused chat tests pass.
-    - Relevant storage compatibility test passes.
+    - Focused backend and viewer tests pass or host blockers are recorded.
     - `git diff --check` passes.
     - `./scripts/verify.sh` runs or host blockers are recorded.
-    - PR is opened, CI is monitored, and #1274 is closed by merge.
+    - PR is opened, CI is monitored, and #1275 is closed by merge.
   - Check:
-    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed with 39 focused Jest tests.
-    - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/stream-playback.spec.ts` passed with 5 focused Playwright tests.
     - `git diff --check` passed.
-    - Full local `./scripts/verify.sh` is blocked because `bash` resolves to WSL and no WSL distro is installed.
+    - `bash ./scripts/verify.sh` blocked locally because Windows `bash.exe` requires a WSL distro and none is installed.
 
 ### Execution log
 - Task 1 read-only pass:
-  - Confirmed #1274 is open and scoped to backend/protocol support for room roster, presence events, role/badge metadata, and system events.
-  - Reviewed `internal/chat/event.go`, `internal/chat/gateway.go`, `internal/chat/gateway_test.go`, `internal/chat/websocket.go`, `internal/chat/queue.go`, `internal/chat/redis_queue.go`, `internal/storage/chat_events.go`, `internal/chat/PROTOCOL.md`, `web/viewer/components/ChatPanel.tsx`, and `web/viewer/lib/viewer-api-types.ts`.
-  - Chose ephemeral gateway presence: live `event` envelopes to room subscribers, no queue persistence for presence or system notices by default.
+  - Confirmed #1275 is open and scoped to viewer moderation controls, slash commands, backend permission enforcement, and docs.
+  - Reviewed `internal/chat/gateway.go`, `internal/chat/event.go`, `internal/chat/gateway_test.go`, `internal/chat/PROTOCOL.md`, `web/viewer/components/ChatPanel.tsx`, `web/viewer/hooks/useAuth.tsx`, `web/viewer/lib/viewer-api-chat.ts`, `web/viewer/lib/viewer-api-types.ts`, `web/viewer/__tests__/chatPanel.test.tsx`, and `web/viewer/README.md`.
+  - Found backend WebSocket commands already exist for `timeout`, `remove_timeout`, `ban`, `unban`, and `report`, but `reason` is not copied into moderation events and `moderator` role is not currently accepted by backend authorization.
 - Task 2 implementation:
-  - Added `presence_snapshot`, `presence_join`, `presence_leave`, and `system` event types.
-  - Added `UserMetadata`, `UserBadge`, `PresenceEvent`, and `SystemEvent` payloads.
-  - Added optional `message.user` metadata while leaving `message.userId` unchanged for existing clients and storage consumers.
+  - WebSocket moderation commands now copy trimmed `reason` into `ModerationEvent`.
+  - Backend moderation authorization now allows channel owners, admins, and moderators.
+  - Added regression coverage for unauthorized viewer rejection, moderator role success, and reason propagation.
 - Task 3 implementation:
-  - Added gateway presence tracking keyed by channel and user with per-user connection counts.
-  - `join` now sends `ack` plus a `presence_snapshot` to the joining connection.
-  - First user connection broadcasts `presence_join`; final user leave/disconnect broadcasts `presence_leave`.
+  - Added slash command parsing for `/timeout`, `/ban`, `/unban`, `/remove_timeout`, `/untimeout`, and local `/clear`.
+  - Added local errors for unknown commands, invalid durations, unsupported `/me`, disconnected moderation sockets, and unauthorized moderation attempts.
 - Task 4 implementation:
-  - Added deterministic role/badge metadata for owner, admin, moderator, broadcaster, and viewer users.
-  - Added `BroadcastSystemEvent` for live room notices that do not enter chat transcript persistence.
-  - Updated the viewer chat WebSocket parser to prefer live author display metadata when present.
+  - Passed `channelOwnerId` into `ChatPanel` and gated row controls to owners, admins, and moderators.
+  - Added compact timeout, remove-timeout, ban, and unban actions for other users' messages.
+  - Kept normal viewers on report-only controls.
 - Task 5 documentation:
-  - Updated `internal/chat/PROTOCOL.md` with message metadata, presence event, system event, and compatibility examples.
-- Local verification:
+  - Updated `internal/chat/PROTOCOL.md` with moderation permissions, optional reason, viewer slash commands, local `/clear`, and unsupported `/me`/message delete follow-ups.
+  - Updated `web/viewer/README.md` chat control contract with moderator actions and slash command behavior.
+  - Created follow-up #1291 for the missing message deletion and `/me` backend event contract.
+- Verification so far:
+  - `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1` passed with repo-local `GOCACHE`/`GOTMPDIR`.
+  - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed with 44 focused Jest tests.
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts` passed with 4 Playwright tests after a production build.
   - `git diff --check` passed.
-  - `go test ./internal/chat -run "TestGateway(Presence|MessageMetadata|SystemEvent|MessageFlow|ModerationFlow)" -count=1` failed before compilation because the default Go build cache could not create `AppData\Local\go-build\00`.
-  - Rerunning with repo-local `GOCACHE` reached compilation, then failed because `C:\Users\RHYTHM~1\AppData\Local\Temp` reported `There is not enough space on the disk`.
-  - `Get-PSDrive -Name C` reported zero free space, so local Go verification and full `./scripts/verify.sh` are blocked until disk space is recovered or CI runs.
-- Viewer CI follow-up:
-  - `gh api repos/ProhibitedTV/BitRiver-Live/actions/jobs/86186419768/logs` showed Viewer CI failed only in Playwright after unit tests and build passed.
-  - The `stream-playback` failure was caused by the chat roster reusing the hero's exact `128 watching` copy, making the assertion ambiguous.
-  - The `channel-chat-playback` recovery path now uses a stable `channel-load-error` test id for the channel error card.
-  - Focused local Jest and Playwright checks passed for the changed viewer paths.
-  - `bash ./scripts/verify.sh` could not run locally: only `C:\Windows\System32\bash.exe` is on PATH, and WSL reports `WSL_E_DEFAULT_DISTRO_NOT_FOUND`.
+  - `bash ./scripts/verify.sh` could not run locally: WSL reports `WSL_E_DEFAULT_DISTRO_NOT_FOUND`.

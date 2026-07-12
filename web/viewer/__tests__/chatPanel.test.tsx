@@ -1,4 +1,4 @@
-import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
+import { buildAuthUser, guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
 import { viewerApiMocks } from "../test/test-utils";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -449,6 +449,149 @@ test("sends messages through the websocket when live chat is connected", async (
   expect(sendChatMock).not.toHaveBeenCalled();
   expect(socket.sent).toContain(JSON.stringify({ type: "message", channelId: "chan-send", content: "Live from socket" }));
   expect(textarea).toHaveValue("");
+});
+
+test("sends slash moderation commands through the websocket", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  mockUseAuth.mockReturnValue(signedInAuthState(buildAuthUser({ roles: ["admin"] })));
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-slash-1",
+      message: "needs moderation",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" },
+    },
+  ]);
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-slash" roomId="room-1" />);
+
+  await screen.findByText("needs moderation");
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+  const socket = MockChatWebSocket.instances[0];
+  await act(async () => {
+    socket.open();
+  });
+
+  const textarea = screen.getByRole("textbox", { name: /chat message/i });
+  await user.type(textarea, "/timeout viewer-2 5m spam");
+  await user.click(screen.getByRole("button", { name: /send/i }));
+
+  const timeoutPayload = socket.sent.map((payload) => JSON.parse(payload)).find((payload) => payload.type === "timeout");
+  expect(timeoutPayload).toEqual({
+    type: "timeout",
+    targetId: "viewer-2",
+    durationMs: 300000,
+    reason: "spam",
+    channelId: "chan-slash",
+  });
+  expect(screen.getByRole("status")).toHaveTextContent("Timeout command sent for viewer-2.");
+  expect(textarea).toHaveValue("");
+});
+
+test("clears the local transcript with the slash clear command", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-clear-1",
+      message: "clear this locally",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" },
+    },
+  ]);
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-clear" roomId="room-1" />);
+
+  await screen.findByText("clear this locally");
+  await user.type(screen.getByRole("textbox", { name: /chat message/i }), "/clear");
+  await user.click(screen.getByRole("button", { name: /send/i }));
+
+  expect(screen.queryByText("clear this locally")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("Local chat view cleared.");
+});
+
+test("shows a local error when a viewer tries a moderation slash command", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  fetchChatMock.mockResolvedValue([]);
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-denied" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+  await act(async () => {
+    MockChatWebSocket.instances[0].open();
+  });
+
+  await user.type(screen.getByRole("textbox", { name: /chat message/i }), "/ban viewer-2");
+  await user.click(screen.getByRole("button", { name: /send/i }));
+
+  expect(screen.getByRole("alert")).toHaveTextContent("You do not have permission to moderate this room.");
+  expect(MockChatWebSocket.instances[0].sent.map((payload) => JSON.parse(payload))).not.toContainEqual(
+    expect.objectContaining({ type: "ban" })
+  );
+});
+
+test("does not expose moderation actions to normal viewers", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-viewer-actions-1",
+      message: "viewer sees report only",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" },
+    },
+  ]);
+
+  render(<ChatPanel channelId="chan-viewer-actions" channelOwnerId="owner-1" roomId="room-1" />);
+
+  await screen.findByText("viewer sees report only");
+  expect(screen.getByRole("button", { name: /report message from viewer two/i })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /timeout viewer two/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /ban viewer two/i })).not.toBeInTheDocument();
+});
+
+test("exposes moderator row controls and sends moderation payloads", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  mockUseAuth.mockReturnValue(signedInAuthState(buildAuthUser({ roles: ["moderator"] })));
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-mod-actions-1",
+      message: "moderate this",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" },
+    },
+  ]);
+  const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-mod-actions" roomId="room-1" />);
+
+  await screen.findByText("moderate this");
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+  const socket = MockChatWebSocket.instances[0];
+  await act(async () => {
+    socket.open();
+  });
+
+  await user.click(screen.getByRole("button", { name: /timeout viewer two for 5 minutes/i }));
+  await user.click(screen.getByRole("button", { name: "Ban Viewer Two" }));
+
+  const sentPayloads = socket.sent.map((payload) => JSON.parse(payload));
+  expect(sentPayloads).toContainEqual({
+    type: "timeout",
+    targetId: "viewer-2",
+    durationMs: 300000,
+    reason: "Moderated from viewer chat",
+    channelId: "chan-mod-actions",
+  });
+  expect(sentPayloads).toContainEqual({
+    type: "ban",
+    targetId: "viewer-2",
+    reason: "Moderated from viewer chat",
+    channelId: "chan-mod-actions",
+  });
+  expect(confirmSpy).toHaveBeenCalledWith("Ban Viewer Two from chat?");
+  confirmSpy.mockRestore();
 });
 
 test("uses channel chat even when no room id is provided", async () => {

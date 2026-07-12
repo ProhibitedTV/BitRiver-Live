@@ -397,6 +397,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
               <div className="channel-page__chat-inner">
                 <ChatPanel
                   channelId={id}
+                  channelOwnerId={data.channel.ownerId}
                   roomId={data.chat?.roomId}
                   roomName={data.channel.title}
                   live={data.live}

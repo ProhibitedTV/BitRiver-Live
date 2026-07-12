@@ -40,6 +40,33 @@ type ChatGatewayEnvelope = {
     targetId?: string;
     actorId?: string;
     reason?: string;
+    moderation?: {
+      action?: string;
+      actorId?: string;
+      targetId?: string;
+      reason?: string;
+      expiresAt?: string;
+    };
+    report?: {
+      reporterId?: string;
+      targetId?: string;
+      reason?: string;
+      status?: string;
+      messageId?: string;
+    };
+    automod?: {
+      userId?: string;
+      filterKind?: string;
+      filterPattern?: string;
+      action?: string;
+      message?: string;
+    };
+    system?: {
+      kind?: string;
+      message?: string;
+      actorId?: string;
+      targetId?: string;
+    };
     message?: {
       id?: string;
       channelId?: string;
@@ -64,6 +91,158 @@ type ChatAuthUser = {
   id: string;
   displayName: string;
 };
+
+type ChatPanelProps = {
+  channelId: string;
+  channelOwnerId?: string;
+  roomId?: string;
+  roomName?: string;
+  live?: boolean;
+  viewerCount?: number;
+};
+
+type ChatModerationCommand = {
+  type: "timeout" | "remove_timeout" | "ban" | "unban";
+  targetId: string;
+  durationMs?: number;
+  reason?: string;
+};
+
+type ChatCommandResult =
+  | { kind: "message"; content: string }
+  | { kind: "clear" }
+  | { kind: "moderation"; command: ChatModerationCommand; targetLabel: string }
+  | { kind: "error"; message: string };
+
+const MESSAGE_ROW_TIMEOUT_MS = 5 * 60 * 1000;
+const MODERATOR_ROLES = new Set(["admin", "moderator"]);
+
+function canModerateRoom(user: { id: string; roles?: string[] } | undefined, channelOwnerId?: string) {
+  if (!user) {
+    return false;
+  }
+  if (channelOwnerId && user.id === channelOwnerId) {
+    return true;
+  }
+  return (user.roles ?? []).some((role) => MODERATOR_ROLES.has(role));
+}
+
+function parseDurationMs(input: string): number | undefined {
+  const match = input.trim().match(/^(\d+)(ms|s|m|h|d)?$/i);
+  if (!match) {
+    return undefined;
+  }
+  const value = Number(match[1]);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    return undefined;
+  }
+  const unit = (match[2] ?? "s").toLowerCase();
+  const multiplier =
+    unit === "ms"
+      ? 1
+      : unit === "s"
+        ? 1000
+        : unit === "m"
+          ? 60 * 1000
+          : unit === "h"
+            ? 60 * 60 * 1000
+            : 24 * 60 * 60 * 1000;
+  const durationMs = value * multiplier;
+  return Number.isSafeInteger(durationMs) ? durationMs : undefined;
+}
+
+function normalizeTargetToken(input: string) {
+  return input.trim().replace(/^@/, "").toLowerCase();
+}
+
+function resolveCommandTarget(input: string, messages: ChatMessageEntry[]) {
+  const normalized = normalizeTargetToken(input);
+  if (!normalized) {
+    return "";
+  }
+  const users = messages
+    .map((entry) => entry.message.user)
+    .filter((candidate): candidate is NonNullable<ChatMessage["user"]> => Boolean(candidate?.id));
+  const byId = users.find((candidate) => candidate.id.toLowerCase() === normalized);
+  if (byId) {
+    return byId.id;
+  }
+  const byDisplayName = users.find((candidate) => candidate.displayName.toLowerCase() === normalized);
+  if (byDisplayName) {
+    return byDisplayName.id;
+  }
+  return input.trim().replace(/^@/, "");
+}
+
+function parseChatCommand(input: string, messages: ChatMessageEntry[]): ChatCommandResult {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("/")) {
+    return { kind: "message", content: trimmed };
+  }
+
+  const [rawCommand, ...args] = trimmed.slice(1).split(/\s+/);
+  const command = rawCommand.toLowerCase();
+
+  if (command === "clear") {
+    return { kind: "clear" };
+  }
+  if (command === "me") {
+    return { kind: "error", message: "Action messages are not supported yet." };
+  }
+  if (command === "timeout") {
+    const [target, duration, ...reasonParts] = args;
+    if (!target || !duration) {
+      return { kind: "error", message: "Usage: /timeout <user> <duration> [reason]" };
+    }
+    const durationMs = parseDurationMs(duration);
+    if (!durationMs) {
+      return { kind: "error", message: "Use a positive timeout duration such as 30s, 5m, or 1h." };
+    }
+    return {
+      kind: "moderation",
+      targetLabel: target,
+      command: {
+        type: "timeout",
+        targetId: resolveCommandTarget(target, messages),
+        durationMs,
+        reason: reasonParts.join(" ").trim() || undefined,
+      },
+    };
+  }
+  if (command === "ban") {
+    const [target, ...reasonParts] = args;
+    if (!target) {
+      return { kind: "error", message: "Usage: /ban <user> [reason]" };
+    }
+    return {
+      kind: "moderation",
+      targetLabel: target,
+      command: {
+        type: "ban",
+        targetId: resolveCommandTarget(target, messages),
+        reason: reasonParts.join(" ").trim() || undefined,
+      },
+    };
+  }
+  if (command === "unban" || command === "remove_timeout" || command === "untimeout") {
+    const [target] = args;
+    if (!target) {
+      return { kind: "error", message: `Usage: /${command} <user>` };
+    }
+    return {
+      kind: "moderation",
+      targetLabel: target,
+      command: {
+        type: command === "unban" ? "unban" : "remove_timeout",
+        targetId: resolveCommandTarget(target, messages),
+      },
+    };
+  }
+  return {
+    kind: "error",
+    message: "Unknown chat command. Try /timeout, /ban, /unban, /remove_timeout, or /clear.",
+  };
+}
 
 function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUser?: ChatAuthUser): ChatMessage | undefined {
   const event = envelope.event;
@@ -127,17 +306,36 @@ function chatNoticeFromGatewayEnvelope(envelope: ChatGatewayEnvelope): ChatRoomN
 
   const eventType = event.type;
   const occurredAt = event.occurredAt ?? new Date().toISOString();
-  const moderationTypes = new Set(["automod", "timeout", "ban", "unban", "remove_timeout"]);
-  const label = eventType === "automod" ? "Automod" : formatNoticeEventType(eventType);
+  const moderation = event.moderation;
+  const report = event.report;
+  const automod = event.automod;
+  const system = event.system;
+  const moderationTypes = new Set(["automod", "moderation", "timeout", "ban", "unban", "remove_timeout"]);
+  const label =
+    eventType === "automod"
+      ? "Automod"
+      : eventType === "moderation" && moderation?.action
+        ? formatNoticeEventType(moderation.action)
+        : system?.kind
+          ? formatNoticeEventType(system.kind)
+          : formatNoticeEventType(eventType);
+  const targetId = event.targetId ?? moderation?.targetId ?? report?.targetId ?? system?.targetId ?? automod?.userId;
+  const reason = event.reason ?? moderation?.reason ?? report?.reason;
+  const filterAction = event.filter?.action ?? automod?.action;
   const detailParts = [
+    system?.message,
     event.filter?.name ? `Filter: ${event.filter.name}` : undefined,
-    event.filter?.action ? `Action: ${event.filter.action}` : undefined,
-    event.targetId ? `Target: ${event.targetId}` : undefined,
-    event.reason ? `Reason: ${event.reason}` : undefined,
+    filterAction ? `Action: ${filterAction}` : undefined,
+    automod?.filterKind ? `Filter kind: ${automod.filterKind}` : undefined,
+    automod?.filterPattern ? `Filter: ${automod.filterPattern}` : undefined,
+    targetId ? `Target: ${targetId}` : undefined,
+    reason ? `Reason: ${reason}` : undefined,
+    report?.status ? `Status: ${report.status}` : undefined,
+    moderation?.expiresAt ? `Expires: ${new Date(moderation.expiresAt).toLocaleString()}` : undefined,
   ].filter(Boolean);
 
   return {
-    id: `${eventType}-${occurredAt}-${event.targetId ?? event.actorId ?? detailParts.join("-")}`,
+    id: `${eventType}-${occurredAt}-${targetId ?? event.actorId ?? moderation?.actorId ?? report?.reporterId ?? detailParts.join("-")}`,
     tone: moderationTypes.has(eventType) ? "moderation" : "system",
     label,
     message: detailParts.length > 0 ? detailParts.join(" - ") : `${label} event received.`,
@@ -148,17 +346,12 @@ function chatNoticeFromGatewayEnvelope(envelope: ChatGatewayEnvelope): ChatRoomN
 
 export function ChatPanel({
   channelId,
+  channelOwnerId,
   roomId,
   roomName,
   live,
   viewerCount
-}: {
-  channelId: string;
-  roomId?: string;
-  roomName?: string;
-  live?: boolean;
-  viewerCount?: number;
-}) {
+}: ChatPanelProps) {
   const { user, loading: authLoading, signIn } = useAuth();
   const [messageEntries, setMessageEntries] = useState<ChatMessageEntry[]>([]);
   const [noticeEntries, setNoticeEntries] = useState<ChatRoomNotice[]>([]);
@@ -176,6 +369,8 @@ export function ChatPanel({
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportError, setReportError] = useState<string | undefined>();
   const [reportNotice, setReportNotice] = useState<string | undefined>();
+  const [moderationError, setModerationError] = useState<string | undefined>();
+  const [moderationNotice, setModerationNotice] = useState<string | undefined>();
   const optionsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const optionsMenuRef = useRef<HTMLDivElement | null>(null);
   const reportDialogRef = useRef<HTMLElement | null>(null);
@@ -185,6 +380,7 @@ export function ChatPanel({
   const shouldFollowTranscriptRef = useRef(true);
   const [socketReady, setSocketReady] = useState(false);
   const [newMessagesWaiting, setNewMessagesWaiting] = useState(false);
+  const canModerate = canModerateRoom(user, channelOwnerId);
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -546,27 +742,85 @@ export function ChatPanel({
     };
   }, [channelId, roomId, user, pausedForAuth]);
 
+  const sendModerationCommand = (command: ChatModerationCommand, targetLabel: string) => {
+    if (!user) {
+      setModerationError("Sign in to moderate chat.");
+      setModerationNotice(undefined);
+      return false;
+    }
+    if (!canModerate) {
+      setModerationError("You do not have permission to moderate this room.");
+      setModerationNotice(undefined);
+      return false;
+    }
+    const socket = socketRef.current;
+    if (!socketReady || socket?.readyState !== 1) {
+      setModerationError("Moderation commands require the live chat connection.");
+      setModerationNotice(undefined);
+      return false;
+    }
+    socket.send(JSON.stringify({ ...command, channelId }));
+    setModerationError(undefined);
+    setModerationNotice(`${formatNoticeEventType(command.type)} command sent for ${targetLabel}.`);
+    return true;
+  };
+
+  const handleModerationAction = (command: ChatModerationCommand, targetLabel: string) => {
+    if (
+      command.type === "ban" &&
+      typeof window !== "undefined" &&
+      !window.confirm(`Ban ${targetLabel} from chat?`)
+    ) {
+      return;
+    }
+    sendModerationCommand(command, targetLabel);
+  };
+
   const handleSend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!content.trim()) {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
       return;
     }
     if (!user) {
       return;
     }
 
+    const parsedCommand = parseChatCommand(trimmedContent, messageEntries);
+    if (parsedCommand.kind === "error") {
+      setModerationError(parsedCommand.message);
+      setModerationNotice(undefined);
+      return;
+    }
+    if (parsedCommand.kind === "clear") {
+      setMessageEntries([]);
+      setNoticeEntries([]);
+      setNewMessagesWaiting(false);
+      setContent("");
+      setModerationError(undefined);
+      setModerationNotice("Local chat view cleared.");
+      return;
+    }
+    if (parsedCommand.kind === "moderation") {
+      if (sendModerationCommand(parsedCommand.command, parsedCommand.targetLabel)) {
+        setContent("");
+      }
+      return;
+    }
+
     try {
       setSending(true);
+      setModerationError(undefined);
       const socket = socketRef.current;
       if (socketReady && socket?.readyState === 1) {
-        socket.send(JSON.stringify({ type: "message", channelId, content: content.trim() }));
+        socket.send(JSON.stringify({ type: "message", channelId, content: parsedCommand.content }));
         setContent("");
         return;
       }
       const message = await sendChatMessage(
         channelId,
         user.id,
-        content.trim()
+        parsedCommand.content
       );
       applyMessages(message);
       setContent("");
@@ -851,6 +1105,16 @@ export function ChatPanel({
           {reportError}
         </div>
       )}
+      {moderationNotice && (
+        <div className="surface" role="status">
+          {moderationNotice}
+        </div>
+      )}
+      {moderationError && (
+        <div className="surface" role="alert">
+          {moderationError}
+        </div>
+      )}
       {!loading && !error && (!shouldShowSignInPrompt || messageEntries.length > 0) && (
         <div
           className="chat-panel__body"
@@ -962,7 +1226,9 @@ export function ChatPanel({
                       <div className="chat-message__bubble">
                         {group.messages.map(({ message }) => {
                           const targetId = message.user?.id?.trim() ?? "";
+                          const targetLabel = message.user?.displayName ?? message.user?.id ?? "chat participant";
                           const canReportMessage = Boolean(user && targetId && targetId !== user.id);
+                          const canModerateMessage = Boolean(canModerate && targetId && targetId !== user?.id);
                           return (
                             <div key={message.id} className="chat-message__line">
                               <p>
@@ -979,15 +1245,80 @@ export function ChatPanel({
                                 )}
                                 {message.message}
                               </p>
-                              {canReportMessage ? (
-                                <button
-                                  type="button"
-                                  className="chat-message__report-button"
-                                  onClick={() => openReportForm(message)}
-                                  aria-label={`Report message from ${message.user?.displayName ?? message.user?.id ?? "chat participant"}`}
-                                >
-                                  Report
-                                </button>
+                              {canReportMessage || canModerateMessage ? (
+                                <div className="chat-message__actions" aria-label={`Actions for ${targetLabel}`}>
+                                  {canReportMessage ? (
+                                    <button
+                                      type="button"
+                                      className="chat-message__report-button"
+                                      onClick={() => openReportForm(message)}
+                                      aria-label={`Report message from ${targetLabel}`}
+                                    >
+                                      Report
+                                    </button>
+                                  ) : null}
+                                  {canModerateMessage ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="chat-message__report-button"
+                                        onClick={() =>
+                                          handleModerationAction(
+                                            {
+                                              type: "timeout",
+                                              targetId,
+                                              durationMs: MESSAGE_ROW_TIMEOUT_MS,
+                                              reason: "Moderated from viewer chat",
+                                            },
+                                            targetLabel
+                                          )
+                                        }
+                                        aria-label={`Timeout ${targetLabel} for 5 minutes`}
+                                      >
+                                        Timeout 5m
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="chat-message__report-button"
+                                        onClick={() =>
+                                          handleModerationAction(
+                                            { type: "remove_timeout", targetId },
+                                            targetLabel
+                                          )
+                                        }
+                                        aria-label={`Remove timeout for ${targetLabel}`}
+                                      >
+                                        Remove timeout
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="chat-message__report-button"
+                                        onClick={() =>
+                                          handleModerationAction(
+                                            { type: "ban", targetId, reason: "Moderated from viewer chat" },
+                                            targetLabel
+                                          )
+                                        }
+                                        aria-label={`Ban ${targetLabel}`}
+                                      >
+                                        Ban
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="chat-message__report-button"
+                                        onClick={() =>
+                                          handleModerationAction(
+                                            { type: "unban", targetId },
+                                            targetLabel
+                                          )
+                                        }
+                                        aria-label={`Unban ${targetLabel}`}
+                                      >
+                                        Unban
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
                           );

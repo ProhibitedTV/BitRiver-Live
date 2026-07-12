@@ -311,6 +311,12 @@
   color: var(--accent);
 }
 
+.chat-message__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .chat-panel__report-form {
   display: grid;
   gap: 0.5rem;
