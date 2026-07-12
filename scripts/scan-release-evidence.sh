@@ -78,6 +78,10 @@ report_violation() {
   violations=$((violations + 1))
 }
 
+to_lower() {
+  printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'
+}
+
 display_path() {
   local file="$1"
   local prefix="$2"
@@ -93,7 +97,8 @@ display_path() {
 }
 
 is_allowed_example() {
-  local name="${1,,}"
+  local name
+  name="$(to_lower "$1")"
   [[ "$name" == ".env.example" || "$name" == *.example.env ]]
 }
 
@@ -101,7 +106,8 @@ scan_file() {
   local file="$1"
   local label="$2"
   local base="${file##*/}"
-  local lower_base="${base,,}"
+  local lower_base
+  lower_base="$(to_lower "$base")"
 
   if ! is_allowed_example "$base"; then
     case "$lower_base" in
@@ -126,7 +132,7 @@ scan_file() {
 
   local line lower value
   while IFS= read -r line || [[ -n "$line" ]]; do
-    lower="${line,,}"
+    lower="$(to_lower "$line")"
     if [[ "$lower" =~ ://[^[:space:]/:@]+:[^[:space:]@/]+@ ]]; then
       value="${BASH_REMATCH[0]}"
       if [[ "$value" != *"\${"* && "$value" != *"example"* && "$value" != *"sample"* && "$value" != *"placeholder"* && "$value" != *"redacted"* ]]; then
@@ -141,7 +147,7 @@ scan_file() {
   fi
 
   while IFS= read -r line || [[ -n "$line" ]]; do
-    lower="${line,,}"
+    lower="$(to_lower "$line")"
     if [[ "$lower" =~ [\"\']?[a-z0-9_]*(password|token|secret|private_key|dsn)[a-z0-9_]*[\"\']?[[:space:]]*[:=][[:space:]]*(.*)$ ]]; then
       value="${BASH_REMATCH[2]}"
       value="${value%%,*}"
@@ -158,7 +164,7 @@ scan_file() {
 
   local xml_credential_re='<(accesstoken|password|privatekey|secret|token)>([^<]+)</(accesstoken|password|privatekey|secret|token)>'
   while IFS= read -r line || [[ -n "$line" ]]; do
-    lower="${line,,}"
+    lower="$(to_lower "$line")"
     if [[ "$lower" =~ $xml_credential_re ]]; then
       value="${BASH_REMATCH[2]}"
       value="${value//[[:space:]]/}"
@@ -188,7 +194,8 @@ scan_tree() {
 }
 
 archive_kind() {
-  local lower="${1,,}"
+  local lower
+  lower="$(to_lower "$1")"
   case "$lower" in
     *.tar.gz|*.tgz) printf 'targz' ;;
     *.tar.xz|*.txz) printf 'tarxz' ;;

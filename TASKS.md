@@ -100,3 +100,4 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - The first quickstart attempt inherited local offline Go settings and failed while downloading real pgx; rerunning the canonical command without those overrides passed end to end.
   - Smoke cleanup restored the tracked generated XML from `HEAD`, so the canonical placeholder render was reapplied and rescanned afterward.
   - PR #1309 Shell lint found three `SC2016` info findings for intentionally literal `${` placeholder checks; replaced single-quoted literals with escaped double-quoted literals without changing scanner behavior.
+  - The next CI run passed Shell lint and Ubuntu, then macOS Go tests exposed Bash 3.2 incompatibility in `${value,,}` lowercasing; replaced it with portable `tr` lowercasing.
