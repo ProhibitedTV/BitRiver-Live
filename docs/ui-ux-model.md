@@ -79,3 +79,4 @@ This document defines the core UX model for BitRiver Live by clarifying who the 
 - **Fast recovery:** Error paths should guide the next best action, not only report failure.
 - **Operational transparency:** Operators and creators need enough context to debug without exposing unnecessary complexity to viewers.
 - **Consistency:** Core actions and states should behave the same across environments and sessions.
+- **Ecosystem identity:** Public surfaces use BitRiver's restrained network-console language, with gold structure, cyan live/focus state, and red failure state; visual status cues must always correspond to real state.

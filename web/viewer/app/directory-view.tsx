@@ -67,15 +67,40 @@ export function HomePageView({
       : { href: "/creator/getting-started", label: "Start streaming" };
   const directoryHeading = query ? "Search results" : "Channel directory";
   const directorySummary = query ? `Matching "${query}".` : "All public channels on this install.";
+  const networkState = homeLoading ? "Syncing" : hasLiveChannels ? "Signal live" : "Relay ready";
 
   return (
     <div className="home-page home-page--simple">
       <section className="home-hero home-hero--simple">
+        <div className="home-network-status" role="status" aria-label="BitRiver network status">
+          <div className="home-network-status__identity">
+            <span className="home-network-status__marker" aria-hidden="true" />
+            <span>BitRiver public relay</span>
+          </div>
+          <dl className="home-network-status__metrics">
+            <div>
+              <dt>Node</dt>
+              <dd>BR-LIVE-01</dd>
+            </div>
+            <div>
+              <dt>Live signals</dt>
+              <dd>{homeLoading ? "--" : liveNow.length}</dd>
+            </div>
+            <div>
+              <dt>Directory</dt>
+              <dd>{directoryLoading ? "--" : channels.length}</dd>
+            </div>
+          </dl>
+          <span className={`home-network-status__signal${hasLiveChannels ? " home-network-status__signal--live" : ""}`}>
+            <span aria-hidden="true" />
+            {networkState}
+          </span>
+        </div>
         <div className="home-hero__layout home-hero__layout--simple">
           <div className="home-hero__main home-hero__main--simple stack stack--lg">
             <div className="home-hero__copy stack stack--md">
               <div className="stack stack--xs">
-                <span className="home-hero__eyebrow">Live discovery</span>
+                <span className="home-hero__eyebrow">Community-owned live network</span>
                 <h1>{heroTitle}</h1>
                 <p className="home-hero__lede muted">{heroLede}</p>
               </div>
@@ -107,10 +132,10 @@ export function HomePageView({
             <div className="home-hero__featured">
               <div className="home-hero__aside-header">
                 <div className="stack stack--2xs">
-                  <span className="home-hero__eyebrow">Featured</span>
-                  <h2>Start here</h2>
+                  <span className="home-hero__eyebrow">Priority signal</span>
+                  <h2>Featured relay</h2>
                 </div>
-                <p className="muted">A featured live channel when one is available.</p>
+                <p className="muted">The network&apos;s selected live broadcast.</p>
               </div>
               <FeaturedChannel channels={featured} loading={homeLoading} />
             </div>

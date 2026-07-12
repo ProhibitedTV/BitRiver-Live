@@ -10,6 +10,7 @@ import "../styles/creator-studio.css";
 import "../styles/shared-polish.css";
 import "../styles/responsive.css";
 import "../styles/home.css";
+import "../styles/network-console.css";
 import { Providers } from "../components/Providers";
 import { Navbar } from "../components/Navbar";
 import { ViewerShell } from "../components/ViewerShell";

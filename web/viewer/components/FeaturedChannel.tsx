@@ -79,9 +79,9 @@ export function FeaturedChannel({
     return (
       <div className="featured-channel" role="region" aria-label="Featured channels">
         <div className="state-panel">
-          <strong>No featured broadcast yet</strong>
+          <strong>Awaiting first broadcast</strong>
           <p className="muted">
-            As soon as a standout creator emerges, their stream will appear here so new viewers have a strong first watch.
+            The public relay is ready. Its first live channel will be promoted here automatically.
           </p>
           <div className="browse-actions">
             <Link href="/browse" className="secondary-button">

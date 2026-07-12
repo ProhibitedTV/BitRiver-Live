@@ -1,27 +1,25 @@
 ## Scope (current change)
-- Address GitHub issue #1275 by exposing existing chat moderation commands in the viewer without adding a standalone moderation dashboard.
-- Add viewer slash command parsing for `/timeout <user> <duration> [reason]`, `/ban <user> [reason]`, `/unban <user>`, `/remove_timeout <user>`, and `/clear`.
-- Treat `/clear` as local transcript clearing only; do not mutate room history.
-- Surface compact moderator actions from message rows for channel owners, admins, and moderators while keeping normal viewers on report-only controls.
-- Tighten backend command behavior where needed: moderator role authorization and WebSocket reason propagation.
-- Document unsupported follow-ups for backend message deletion and `/me` action messages.
-- Keep the deployment contract untouched.
+- Align the public viewer shell and homepage with the established BitRiver ecosystem visual language shown in the supplied Radio and Visual Archive references.
+- Replace generic rounded SaaS styling with a compact broadcast-console system: near-black surfaces, gold structure, cyan live state, red warnings, square geometry, and restrained monospace metadata.
+- Preserve the existing route, auth, search, theme, loading, error, and empty-state behavior.
+- Make a fresh installation feel operational and intentional even before its first channel goes live.
+- Keep creator/admin product zones and the deployment contract untouched.
 
 ## Assumptions
-- There is no channel-level moderator membership model yet. For this pass, moderation UI is shown to channel owners, users with `admin`, and users with `moderator`.
-- Backend authorization remains authoritative. UI hiding is convenience, not security.
-- Slash command targets resolve from visible chat users by ID or display name when possible, then fall back to the typed token so the backend can reject invalid users consistently.
-- Message deletion/removal and `/me` action messages are not currently supported by the chat gateway and should be documented as follow-up work instead of approximated in the client.
+- The ecosystem screenshots are visual direction, not a request to clone product-specific Radio or archive content.
+- The public viewer should be calmer and more legible than the Radio console while sharing its visual DNA.
+- Existing light-theme support remains part of the viewer contract and needs an adapted high-contrast treatment.
+- Existing semantic markup and navigation policy should remain stable unless a small copy change materially improves the empty-install experience.
 
 ## Risks
-- Slash command display-name matching can be ambiguous; prefer exact user IDs and visible unique display names.
-- Message-row controls can clutter the transcript; keep labels compact and only render them for users who can moderate the current room.
-- WebSocket-only moderation means the viewer must show clear feedback when live chat is disconnected.
-- Existing local Windows verification can be constrained by shell/tooling availability; use focused tests and GitHub Actions proof before merge.
+- Broad token changes can regress channel, chat, or creator screens; scope overrides to shared primitives and homepage/navigation selectors, then run focused and full viewer checks.
+- Dense console styling can hurt mobile usability; verify desktop and mobile screenshots, overflow, focus states, and reduced-motion behavior.
+- Decorative scan lines and glow can reduce readability; keep effects low contrast and never place them above interactive content.
 
 ## Test plan
-- `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1`
-- `npm --prefix web/viewer run test -- chatPanel channelPage`
-- `npm --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts`
+- `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- Browser screenshots and DOM checks at desktop and mobile widths.
 - `git diff --check`
-- `./scripts/verify.sh`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --viewer` when available; otherwise record the host prerequisite blocker.
