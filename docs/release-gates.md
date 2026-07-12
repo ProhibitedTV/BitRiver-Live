@@ -12,7 +12,7 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
 | 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
-| 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh` | Release workflow artifacts, release notes, image digest list, env validation logs, pgx guard output |
+| 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned or secret-bearing artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh`; `./scripts/scan-release-evidence.sh` | Redacted contract status, release artifact inventory and scan status, release notes, image digest status, pgx guard output |
 | 6. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; non-mutating command plus operator evidence | `./scripts/release-canary.sh`; `go run ./cmd/bitriver release canary`; `docs/operations.md`; `/readyz`, `/healthz`, `/api/status` | Canary report JSON, redacted health snapshots, log scan summary, version metadata, rollback readiness notes |
 
 ## Gate details
@@ -96,6 +96,8 @@ Before tagging or promoting a release candidate, run the full source-checkout ti
 
 The full tier runs the fast evidence phases, then executes source quickstart, runs the smoke command, and captures `compose-ps.json` plus selected `compose-logs.txt` diagnostics. A failed phase returns a non-zero exit and names the artifact to inspect.
 
+Before attaching `.artifacts/release-gate/`, canary output, or collected diagnostics outside the operator host, run `./scripts/scan-release-evidence.sh --root <artifact-directory>`. Raw Compose logs and deployment-time generated configs are not automatically safe merely because the surrounding report is redacted.
+
 For source validation, use:
 
 ```bash
@@ -139,9 +141,12 @@ Before tagging, follow `docs/production-release.md`. A release candidate should 
 - the verifier and required targeted gates passed
 - release notes and changelog entries match the diff
 - release workflow artifacts are built from the intended tag
+- production credentials remain job-local and no populated environment or generated credential config is uploaded
+- `release-contract-evidence` reports successful environment and digest validation without values
+- `release-publication-evidence` inventories and passes scans for downloaded artifacts and the final publication payload
 - Postgres-aware binaries/images include the real pgx-backed implementation when required
 - production image digests and third-party digests are recorded or intentionally deferred
-- generated OME config matches the release env and image tag expectations
+- tracked and packaged OME config matches the placeholder contract; deployment-time credential renders remain local to the deployment host
 
 Failures here usually mean the tag should wait. Fix the source, rerun the relevant gate, and only then publish or promote artifacts.
 

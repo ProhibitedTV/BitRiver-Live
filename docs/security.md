@@ -29,6 +29,23 @@ Resolution rules:
 
 Use this consistently for sensitive values such as admin password, database/redis passwords, OME/SRS/transcoder/API tokens, and chat queue redis password.
 
+## Release CI secret boundary
+
+Treat GitHub Actions logs, caches, artifacts, build packages, generated configs, and release assets as potentially retrievable by more principals than the production secret store. Production credentials therefore stay inside the job that validates them.
+
+The release workflow must:
+
+- create any validation input only under the runner temporary directory with restrictive permissions;
+- capture validator output privately and scan it against the exact injected values before display;
+- upload only redacted validation status, artifact inventory, and scan status evidence;
+- remove validation inputs, sentinel values, and raw logs in an `always()` cleanup step;
+- scan downloaded build artifacts and the final publication payload before creating the GitHub Release; and
+- assign explicit short retention to all temporary workflow artifacts.
+
+Never retain a populated `.env`, private key, credential-bearing URL/DSN, raw secret mount, or deployment-time OME render. Run `./scripts/scan-release-evidence.sh --root <directory>` before attaching release-gate, canary, or diagnostic evidence to a ticket or release record.
+
+If a real or credential-shaped value is committed, logged, or uploaded, removing the file is not sufficient. Revoke or rotate the value, verify dependent services use the replacement, and record the incident response separately from repository cleanup.
+
 ## Operator workflow
 
 1. Mount secrets from your secret store to files (for example under `/run/secrets`).
@@ -181,8 +198,7 @@ Use an inventory + cadence model so rotation is scheduled, not ad hoc.
 
 ### `_FILE`-based secret mounts
 
-When `_FILE` secret inputs are implemented in this stack, prefer mounted secret files over plaintext values in `.env`.
-Until then, keep `.env` access tightly controlled and never commit real secrets.
+Prefer the supported `_FILE` secret inputs and mounted secret files over plaintext values in `.env` where the deployment platform permits them. Keep both the environment file and mounted secret paths tightly controlled and never commit real secrets.
 
 ## 7) Logging guidance
 

@@ -30,7 +30,7 @@
               want to protect API access, or leave the placeholder for
               open/local use.
             -->
-            <AccessToken>jBV-dd1KLUiVXIpH4VbNgYmZes5vOR6k</AccessToken>
+            <AccessToken>OME-Example-Access-Token</AccessToken>
         </API>
     </Managers>
 

@@ -26,3 +26,10 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - After each completed task, the assignee runs relevant tests/checks and records status in `TASKS.md`.
 - Runtime behavior, operator workflows, or public contracts are reflected in source-of-truth docs.
 - Workflow docs remain short working artifacts.
+
+## Current Change Success Criteria
+- Production release credentials remain inside the validation job and are deleted after use.
+- No release workflow artifact contains a populated `.env`, private key, credential-bearing DSN, rendered credential config, or known sentinel value.
+- Missing or malformed production credentials and image digests still block a release without exposing values in retained output.
+- OME freshness and deployment contract checks use non-secret inputs and do not mutate tracked contract files.
+- Retained release evidence is redacted, scanned, inventoried, and short-lived.
