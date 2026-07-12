@@ -18,8 +18,15 @@
 
 ## Test plan
 - `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts`
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - Browser screenshots and DOM checks at desktop and mobile widths.
 - `git diff --check`
 - `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --viewer` when available; otherwise record the host prerequisite blocker.
+
+## CI follow-up
+- Viewer CI on PR #1308 found a WCAG AA contrast regression in light-theme active directory chips: `#f7ffff` text on the translucent composite `#daefe5` measured 1.18:1.
+- Give active chips an opaque accent background and use the paired accent-contrast color for both labels and hints.
+- Keep light-theme primary-action text light against both normal and hover gold fills; the first local rerun exposed the hover pair at 2.69:1 after the chip violation was removed.
+- Re-run the exact accessibility spec locally, then push and require a green Viewer CI rerun before merge.

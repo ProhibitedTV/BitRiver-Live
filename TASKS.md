@@ -45,6 +45,19 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `git diff --check` passed.
     - Git Bash reached `./scripts/verify.sh --viewer`, passed go.sum and CI contract checks, then stopped because no Python 3 interpreter is installed on this host.
 
+- [-] Task 6 - Correct light-theme active-chip contrast and merge
+  - Acceptance criteria:
+    - Active chips use a deterministic background/text pair that meets WCAG AA in dark and light themes.
+    - `tests/accessibility.spec.ts` passes locally.
+    - PR #1308 Viewer CI and all required merge gates pass.
+    - PR #1308 is squash-merged into `main` only after green CI.
+  - Check:
+    - Viewer CI failure confirmed at 1.18:1 contrast for active browse chips; focused fix approved by the user.
+    - First local accessibility rerun cleared the chip violation and exposed light-theme hovered primary actions at 2.69:1; correction remains in Task 6 scope.
+    - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts` passed (2 tests) after both contrast pairs were corrected.
+    - `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell` passed (51 tests; existing search `act()` warnings and build-output haste warning remain).
+    - `git diff --check` passed.
+
 ### Execution log
 - Task 1 review:
   - Compared the supplied BitRiver Radio and Visual Archive screenshots against the running viewer homepage.
@@ -66,3 +79,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Confirmed desktop and mobile layouts keep critical status, setup, search, and featured-relay actions visible without horizontal overflow.
   - Confirmed the retained light theme applies the documented paper-console palette and remains overflow-free.
   - Focused tests, lint, production build, and diff hygiene passed; canonical verification remains host-blocked at its Python prerequisite.
+- Task 6 CI diagnosis:
+  - Viewer CI ran 36 Playwright integration tests; 35 passed and the directory accessibility test failed.
+  - Axe identified active `Live` and `All` browse chips using `#f7ffff` text over a translucent `#daefe5` light-theme composite at 1.18:1 contrast.
+  - The first local rerun confirmed the chip fix and then identified `#080601` text on hovered `#6f4f08` primary actions at 2.69:1.
+  - Active chips now use an opaque accent/contrast pair, and light-theme primary actions use a light foreground across normal, hover, and focus states.
+  - The exact accessibility spec and focused Jest regression set pass locally.

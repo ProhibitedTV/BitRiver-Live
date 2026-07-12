@@ -96,6 +96,15 @@
   --hero-background: #f8f5ec;
 }
 
+[data-theme="light"] .accent-button,
+[data-theme="light"] .primary-button,
+[data-theme="light"] .accent-button:hover,
+[data-theme="light"] .accent-button:focus-visible,
+[data-theme="light"] .primary-button:hover,
+[data-theme="light"] .primary-button:focus-visible {
+  color: #fffdf6;
+}
+
 html,
 body {
   background-color: var(--background);
@@ -412,6 +421,23 @@ h4 {
   background: rgba(82, 229, 225, 0.04);
   color: var(--accent-strong);
   transform: none;
+}
+
+.chip {
+  border-radius: 2px;
+}
+
+.chip--active,
+.chip--active:hover,
+.chip--active:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  transform: none;
+}
+
+.chip--active .chip__hint {
+  color: var(--accent-contrast);
 }
 
 input,
