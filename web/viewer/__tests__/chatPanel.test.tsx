@@ -153,7 +153,7 @@ test("renders compact live-room identity, counts, and roster", async () => {
   expect(screen.getByText("2 messages")).toBeInTheDocument();
 
   const roster = screen.getByLabelText("Room roster");
-  expect(within(roster).getByText("42 watching")).toBeInTheDocument();
+  expect(within(roster).getByText("42 viewers total")).toBeInTheDocument();
   expect(within(roster).getByText("Viewer")).toBeInTheDocument();
   expect(within(roster).getByText("DJ Nova")).toBeInTheDocument();
   expect(within(roster).getByText("host")).toBeInTheDocument();

@@ -863,7 +863,7 @@ export function ChatPanel({
               <span className="chat-panel__roster-label">Room</span>
               <strong>
                 {viewerCount !== undefined
-                  ? `${viewerCount.toLocaleString()} watching`
+                  ? `${viewerCount.toLocaleString()} viewers total`
                   : `${participantPreview.length} present`}
               </strong>
             </div>

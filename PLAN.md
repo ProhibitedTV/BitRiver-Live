@@ -3,6 +3,7 @@
 - Add gateway-owned presence state for room roster snapshots, join/leave deltas, viewer counts, and chatter counts.
 - Add viewer-facing user metadata to live message payloads: display name, normalized role, and badge slots that can evolve without another wire-shape change.
 - Add system event support for non-transcript room notices without persisting ephemeral presence as normal chat history.
+- Resolve the Viewer CI fallout from the new roster surface by keeping viewer count copy unambiguous and giving the channel recovery card a stable selector.
 - Preserve existing client commands and server envelopes: `join`, `leave`, `message`, `timeout`, `remove_timeout`, `ban`, `unban`, `report`, plus `ack`, `event`, and `error`.
 - Keep the deployment contract untouched.
 
@@ -22,5 +23,7 @@
 - `go test ./internal/chat -run "TestGateway(Presence|MessageMetadata|SystemEvent|MessageFlow|ModerationFlow)" -count=1`
 - `go test ./internal/chat -count=1`
 - `go test ./internal/storage -run TestApplyChatEvent -count=1`
+- `npm --prefix web/viewer run test -- chatPanel channelPage`
+- `npm --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/stream-playback.spec.ts`
 - `git diff --check`
 - `./scripts/verify.sh`

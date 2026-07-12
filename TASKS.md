@@ -51,7 +51,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `./scripts/verify.sh` runs or host blockers are recorded.
     - PR is opened, CI is monitored, and #1274 is closed by merge.
   - Check:
-    - Pending.
+    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed with 39 focused Jest tests.
+    - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts tests/stream-playback.spec.ts` passed with 5 focused Playwright tests.
+    - `git diff --check` passed.
+    - Full local `./scripts/verify.sh` is blocked because `bash` resolves to WSL and no WSL distro is installed.
 
 ### Execution log
 - Task 1 read-only pass:
@@ -77,3 +80,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `go test ./internal/chat -run "TestGateway(Presence|MessageMetadata|SystemEvent|MessageFlow|ModerationFlow)" -count=1` failed before compilation because the default Go build cache could not create `AppData\Local\go-build\00`.
   - Rerunning with repo-local `GOCACHE` reached compilation, then failed because `C:\Users\RHYTHM~1\AppData\Local\Temp` reported `There is not enough space on the disk`.
   - `Get-PSDrive -Name C` reported zero free space, so local Go verification and full `./scripts/verify.sh` are blocked until disk space is recovered or CI runs.
+- Viewer CI follow-up:
+  - `gh api repos/ProhibitedTV/BitRiver-Live/actions/jobs/86186419768/logs` showed Viewer CI failed only in Playwright after unit tests and build passed.
+  - The `stream-playback` failure was caused by the chat roster reusing the hero's exact `128 watching` copy, making the assertion ambiguous.
+  - The `channel-chat-playback` recovery path now uses a stable `channel-load-error` test id for the channel error card.
+  - Focused local Jest and Playwright checks passed for the changed viewer paths.
+  - `bash ./scripts/verify.sh` could not run locally: only `C:\Windows\System32\bash.exe` is on PATH, and WSL reports `WSL_E_DEFAULT_DISTRO_NOT_FOUND`.
