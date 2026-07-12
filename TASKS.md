@@ -99,3 +99,4 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Hardened scanner review added mixed-line bypass fixtures, XML credential detection, and a credential-only sentinel allowlist to avoid false positives from ordinary release values.
   - The first quickstart attempt inherited local offline Go settings and failed while downloading real pgx; rerunning the canonical command without those overrides passed end to end.
   - Smoke cleanup restored the tracked generated XML from `HEAD`, so the canonical placeholder render was reapplied and rescanned afterward.
+  - PR #1309 Shell lint found three `SC2016` info findings for intentionally literal `${` placeholder checks; replaced single-quoted literals with escaped double-quoted literals without changing scanner behavior.

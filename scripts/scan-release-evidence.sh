@@ -129,7 +129,7 @@ scan_file() {
     lower="${line,,}"
     if [[ "$lower" =~ ://[^[:space:]/:@]+:[^[:space:]@/]+@ ]]; then
       value="${BASH_REMATCH[0]}"
-      if [[ "$value" != *'${'* && "$value" != *"example"* && "$value" != *"sample"* && "$value" != *"placeholder"* && "$value" != *"redacted"* ]]; then
+      if [[ "$value" != *"\${"* && "$value" != *"example"* && "$value" != *"sample"* && "$value" != *"placeholder"* && "$value" != *"redacted"* ]]; then
         report_violation "credential-url" "$label"
         break
       fi
@@ -148,7 +148,7 @@ scan_file() {
       value="${value%%\}*}"
       value="${value//[[:space:]]/}"
       [[ -n "$value" ]] || continue
-      if [[ "$value" == *"redacted"* || "$value" == *"example"* || "$value" == *"sample"* || "$value" == *"placeholder"* || "$value" == *"changeme"* || "$value" == *'${'* || "$value" == \<*\> || "$value" == "***" || "$value" == "null" ]]; then
+      if [[ "$value" == *"redacted"* || "$value" == *"example"* || "$value" == *"sample"* || "$value" == *"placeholder"* || "$value" == *"changeme"* || "$value" == *"\${"* || "$value" == \<*\> || "$value" == "***" || "$value" == "null" ]]; then
         continue
       fi
       report_violation "secret-assignment" "$label"
@@ -162,7 +162,7 @@ scan_file() {
     if [[ "$lower" =~ $xml_credential_re ]]; then
       value="${BASH_REMATCH[2]}"
       value="${value//[[:space:]]/}"
-      if [[ "$value" != *"redacted"* && "$value" != *"example"* && "$value" != *"sample"* && "$value" != *"placeholder"* && "$value" != *"changeme"* && "$value" != *'${'* && "$value" != \<*\> && "$value" != "***" ]]; then
+      if [[ "$value" != *"redacted"* && "$value" != *"example"* && "$value" != *"sample"* && "$value" != *"placeholder"* && "$value" != *"changeme"* && "$value" != *"\${"* && "$value" != \<*\> && "$value" != "***" ]]; then
         report_violation "xml-credential" "$label"
         break
       fi
