@@ -1,81 +1,66 @@
-## Scoped change: viewer chat moderation controls and slash commands (#1275)
+## Scoped change: PowerShell verify wrapper for Windows install confidence
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish moderation UX scope
+- [x] Task 1 - Establish install-verification scope
   - Acceptance criteria:
-    - `PLAN.md` captures #1275 scope, assumptions, risks, and test plan.
+    - `PLAN.md` captures the current scope, assumptions, risks, and test plan.
     - `TASKS.md` lists ordered tasks before source edits for this pass.
-    - Existing gateway moderation commands, viewer auth roles, chat row UI, report UI, and protocol docs are reviewed.
+    - Existing quickstart/verify scripts and docs are reviewed.
   - Check:
     - Read-only analysis only.
 
-- [x] Task 2 - Tighten backend moderation command handling
+- [x] Task 2 - Add a PowerShell verify wrapper
   - Acceptance criteria:
-    - WebSocket moderation commands propagate `reason` into `ModerationEvent`.
-    - Users with `moderator` role can moderate through the same backend path as owners/admins.
-    - Unauthorized viewers still receive structured errors and cannot moderate by direct WebSocket command.
+    - `scripts/verify.ps1` exists and delegates to `./scripts/verify.sh`.
+    - The wrapper tests Bash candidates before use and gives clear Git Bash/WSL guidance when no usable Bash is found.
+    - Verify flags pass through to the canonical shell script.
   - Check:
-    - `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1` passed with repo-local `GOCACHE`/`GOTMPDIR` after the default Go cache path failed to initialize.
+    - `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --help` passed.
 
-- [x] Task 3 - Add viewer slash command handling
+- [x] Task 3 - Add wrapper regression coverage
   - Acceptance criteria:
-    - `/timeout`, `/ban`, `/unban`, `/remove_timeout`, and `/clear` are parsed locally.
-    - Valid moderation commands send the existing WebSocket payloads.
-    - Invalid commands, missing targets, invalid durations, disconnected sockets, and unauthorized users show useful local feedback.
-    - `/me` reports that action messages are not supported yet.
+    - `scripts/quickstart_test.go` guards the PowerShell verify wrapper's delegation and Bash discovery contract.
+    - Existing quickstart wrapper coverage remains intact.
   - Check:
-    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed.
+    - `go test ./scripts -run "TestPowerShellVerify|TestQuickstart" -count=1` passed with offline Go env and temp cache directories.
 
-- [x] Task 4 - Add permission-gated message row controls
+- [x] Task 4 - Update install and testing docs
   - Acceptance criteria:
-    - Normal viewers only see existing report controls.
-    - Channel owners, admins, and moderators see compact timeout/ban/remove-timeout/unban actions for other users' messages.
-    - Destructive actions are explicit and errors surface in the chat panel.
-  - Check:
-    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed.
-
-- [x] Task 5 - Update protocol and viewer docs
-  - Acceptance criteria:
-    - `internal/chat/PROTOCOL.md` documents moderation permissions, command `reason`, and viewer slash command expectations.
-    - `web/viewer/README.md` documents local `/clear` behavior and unsupported message deletion/`/me` follow-ups.
+    - README and testing/quickstart docs show the PowerShell verify entrypoint.
+    - Docs continue to identify `./scripts/verify.sh` as the canonical gate.
   - Check:
     - `git diff --check` passed.
-    - Follow-up issue #1291 opened for unsupported message deletion and `/me` action events.
 
-- [ ] Task 6 - Verify, publish, and merge
+- [-] Task 5 - Verify, publish, and merge
   - Acceptance criteria:
-    - Focused backend and viewer tests pass or host blockers are recorded.
+    - Focused tests pass or host blockers are recorded.
     - `git diff --check` passes.
-    - `./scripts/verify.sh` runs or host blockers are recorded.
-    - PR is opened, CI is monitored, and #1275 is closed by merge.
+    - `./scripts/verify.sh` or the PowerShell wrapper path runs, or host blockers are recorded.
+    - Changes are committed, pushed, opened as a PR, monitored, and merged when checks pass.
   - Check:
+    - `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --help` passed.
+    - `go test ./scripts -run "TestPowerShellVerify|TestQuickstart" -count=1` passed with offline Go env and temp cache directories.
     - `git diff --check` passed.
-    - `bash ./scripts/verify.sh` blocked locally because Windows `bash.exe` requires a WSL distro and none is installed.
+    - `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --go-packages ./scripts` reached `./scripts/verify.sh` through Git Bash and then stopped at host prerequisite: no usable Python 3 interpreter (`python3`, `python`, or `py -3`) is installed behind the Windows Python launcher.
 
 ### Execution log
 - Task 1 read-only pass:
-  - Confirmed #1275 is open and scoped to viewer moderation controls, slash commands, backend permission enforcement, and docs.
-  - Reviewed `internal/chat/gateway.go`, `internal/chat/event.go`, `internal/chat/gateway_test.go`, `internal/chat/PROTOCOL.md`, `web/viewer/components/ChatPanel.tsx`, `web/viewer/hooks/useAuth.tsx`, `web/viewer/lib/viewer-api-chat.ts`, `web/viewer/lib/viewer-api-types.ts`, `web/viewer/__tests__/chatPanel.test.tsx`, and `web/viewer/README.md`.
-  - Found backend WebSocket commands already exist for `timeout`, `remove_timeout`, `ban`, `unban`, and `report`, but `reason` is not copied into moderation events and `moderator` role is not currently accepted by backend authorization.
+  - Confirmed open issue queue remains focused on chat follow-up, 4K work, and release gates; no existing issue directly covers Windows verify entrypoint friction.
+  - Reviewed `scripts/quickstart.ps1`, `scripts/quickstart.sh`, `scripts/verify.sh`, `scripts/quickstart_test.go`, `README.md`, `docs/quickstart.md`, and `docs/testing.md`.
+  - Found quickstart has a PowerShell wrapper, but the default verify gate only documents Bash and known broken-WSL workarounds.
 - Task 2 implementation:
-  - WebSocket moderation commands now copy trimmed `reason` into `ModerationEvent`.
-  - Backend moderation authorization now allows channel owners, admins, and moderators.
-  - Added regression coverage for unauthorized viewer rejection, moderator role success, and reason propagation.
+  - Added `scripts/verify.ps1` as a thin PowerShell wrapper around `./scripts/verify.sh`.
+  - Bash discovery now checks `BITRIVER_VERIFY_BASH`, Git for Windows locations, and then `bash` on `PATH`, testing each candidate before use.
+  - Missing Bash guidance now calls out Git for Windows and `WSL_E_DEFAULT_DISTRO_NOT_FOUND`.
 - Task 3 implementation:
-  - Added slash command parsing for `/timeout`, `/ban`, `/unban`, `/remove_timeout`, `/untimeout`, and local `/clear`.
-  - Added local errors for unknown commands, invalid durations, unsupported `/me`, disconnected moderation sockets, and unauthorized moderation attempts.
-- Task 4 implementation:
-  - Passed `channelOwnerId` into `ChatPanel` and gated row controls to owners, admins, and moderators.
-  - Added compact timeout, remove-timeout, ban, and unban actions for other users' messages.
-  - Kept normal viewers on report-only controls.
-- Task 5 documentation:
-  - Updated `internal/chat/PROTOCOL.md` with moderation permissions, optional reason, viewer slash commands, local `/clear`, and unsupported `/me`/message delete follow-ups.
-  - Updated `web/viewer/README.md` chat control contract with moderator actions and slash command behavior.
-  - Created follow-up #1291 for the missing message deletion and `/me` backend event contract.
+  - Added `TestPowerShellVerifyWrapperDelegatesToCanonicalGate` to keep the wrapper thin, flag-pass-through oriented, and tied to the canonical Bash verify script.
+- Task 4 documentation:
+  - Updated `README.md` with the PowerShell verify entrypoint and broken-WSL rationale.
+  - Updated `docs/testing.md` to describe `.\scripts\verify.ps1` as a wrapper around the canonical gate.
+  - Updated `docs/quickstart.md` so source-checkout evaluators can verify from native PowerShell after first success.
 - Verification so far:
-  - `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1` passed with repo-local `GOCACHE`/`GOTMPDIR`.
-  - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed with 44 focused Jest tests.
-  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts` passed with 4 Playwright tests after a production build.
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --help` passed.
+  - `go test ./scripts -run "TestPowerShellVerify|TestQuickstart" -count=1` passed with offline Go env and temp cache directories.
   - `git diff --check` passed.
-  - `bash ./scripts/verify.sh` could not run locally: WSL reports `WSL_E_DEFAULT_DISTRO_NOT_FOUND`.
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 --go-packages ./scripts` confirmed wrapper delegation through Git Bash, then stopped because this host has `C:\Windows\py.exe` but no installed Python 3 interpreter.

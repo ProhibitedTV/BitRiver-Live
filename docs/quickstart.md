@@ -66,6 +66,22 @@ Success looks like:
 - `http://localhost:8080/admin` serves the control centre
 - `go run ./cmd/bitriver smoke --env-file ./.env` exits successfully
 
+If you are verifying a source checkout before contributing or opening a pull
+request, run the canonical repository gate next:
+
+```bash
+./scripts/verify.sh
+```
+
+PowerShell:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+The PowerShell wrapper delegates to `./scripts/verify.sh` after finding a usable
+Bash, preferring Git for Windows Bash over a broken WSL `bash.exe`.
+
 ## Migration note for older local scripts
 
 BitRiver Live no longer ships `deploy/docker-compose.ome-custom.yml`, and `BITRIVER_OME_CUSTOM_CONFIG` is no longer used. The default quickstart and Compose flow already renders and mounts `deploy/ome/Server.generated.xml` automatically.

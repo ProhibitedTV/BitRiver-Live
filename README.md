@@ -149,7 +149,13 @@ Recommended repo gate:
 ./scripts/verify.sh
 ```
 
-PowerShell users should run the Go CLI and PowerShell shims directly, or run Bash scripts from Git Bash. If `bash` resolves to a broken WSL install, use Git Bash or `scripts/quickstart.ps1` instead of the Bash wrapper.
+PowerShell:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+`verify.ps1` delegates to the same `./scripts/verify.sh` gate after finding a usable Bash. It prefers Git for Windows Bash before falling back to `bash` on `PATH`, which avoids the common broken-WSL case where Windows `bash.exe` reports no default distro.
 
 Common focused commands:
 

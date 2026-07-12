@@ -16,6 +16,17 @@ coverage.
 
 If no usable Python 3 interpreter is available, `./scripts/verify.sh` fails fast with a clear prerequisite error before running the verify sequence.
 
+Native PowerShell users can run the same canonical gate through the Windows
+wrapper:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+The wrapper does not duplicate the verify sequence. It finds a usable Bash,
+preferring Git for Windows Bash before `bash` on `PATH`, and then delegates to
+`./scripts/verify.sh` with all flags passed through.
+
 ## Test taxonomy and single entrypoints
 
 Use these category entrypoints from the repository root:

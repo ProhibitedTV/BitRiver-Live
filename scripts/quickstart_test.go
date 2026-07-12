@@ -297,6 +297,44 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	}
 }
 
+func TestPowerShellVerifyWrapperDelegatesToCanonicalGate(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	scriptPath := filepath.Join(repoRoot, "scripts", "verify.ps1")
+	content, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read verify.ps1: %v", err)
+	}
+
+	script := string(content)
+	for _, expected := range []string{
+		"PowerShell wrapper around the canonical repository verification gate",
+		"[Parameter(ValueFromRemainingArguments = $true)]",
+		"--viewer",
+		"--ci-viewer",
+		"--go-packages ./scripts",
+		"Get-BashCandidates",
+		"Test-BashCandidate",
+		"Find-Bash",
+		`Git\bin\bash.exe`,
+		`Git\usr\bin\bash.exe`,
+		"Get-Command bash",
+		"command -v dirname",
+		"WSL_E_DEFAULT_DISTRO_NOT_FOUND",
+		`exec ./scripts/verify.sh "$@"`,
+		"$bashArgs = @('-lc'",
+		"exit $LASTEXITCODE",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("expected verify.ps1 to contain %q", expected)
+		}
+	}
+}
+
 func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
