@@ -54,6 +54,19 @@ The viewer runs on [http://localhost:3000](http://localhost:3000) with hot reloa
 
 Set `BITRIVER_VIEWER_ORIGIN` on the Go API (for example, `http://127.0.0.1:3000`) so `/viewer` requests proxy to the running Next.js server.
 
+## Visual identity contract
+
+The public viewer shares the BitRiver ecosystem's network-console language while remaining calmer than operator or broadcast-control surfaces:
+
+- near-black or paper-light surfaces with gold structural lines;
+- cyan for live, connected, selected, and keyboard-focus state;
+- red for destructive, failed, or degraded state;
+- compact monospace metadata paired with legible condensed display headings;
+- square, low-radius geometry instead of generic pill and floating-card chrome;
+- real status data only: decorative labels must not imply stream, viewer, or service health.
+
+Keep video artwork and creator imagery visually dominant when available. Console styling belongs in the surrounding controls and metadata, and must not reduce playback clarity, mobile usability, keyboard access, or reduced-motion support. The late-loaded `styles/network-console.css` layer owns this shared identity while route-specific styles retain layout and behavior.
+
 
 ## Navigation contract
 

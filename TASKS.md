@@ -1,81 +1,87 @@
-## Scoped change: viewer chat moderation controls and slash commands (#1275)
+## Scoped change: BitRiver network-console viewer identity
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish moderation UX scope
+- [x] Task 1 - Establish visual and UX scope
   - Acceptance criteria:
-    - `PLAN.md` captures #1275 scope, assumptions, risks, and test plan.
-    - `TASKS.md` lists ordered tasks before source edits for this pass.
-    - Existing gateway moderation commands, viewer auth roles, chat row UI, report UI, and protocol docs are reviewed.
+    - `PLAN.md` records the visual direction, boundaries, risks, and test plan.
+    - Current viewer behavior, UI contracts, screenshots, responsive surface, and production roadmap are reviewed before source edits.
   - Check:
-    - Read-only analysis only.
+    - Read-only source review and local desktop screenshot completed.
 
-- [x] Task 2 - Tighten backend moderation command handling
+- [x] Task 2 - Build the shared network-console visual system
   - Acceptance criteria:
-    - WebSocket moderation commands propagate `reason` into `ModerationEvent`.
-    - Users with `moderator` role can moderate through the same backend path as owners/admins.
-    - Unauthorized viewers still receive structured errors and cannot moderate by direct WebSocket command.
+    - Dark and light tokens use the BitRiver gold/cyan/red status palette with high contrast.
+    - Navigation, buttons, inputs, surfaces, chips, and state panels use restrained square geometry and visible focus treatment.
+    - Existing navigation/auth behavior remains unchanged.
   - Check:
-    - `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1` passed with repo-local `GOCACHE`/`GOTMPDIR` after the default Go cache path failed to initialize.
+    - `npm.cmd --prefix web/viewer run test -- navbar viewerShell` passed (37 tests).
 
-- [x] Task 3 - Add viewer slash command handling
+- [x] Task 3 - Recompose homepage discovery and empty-install states
   - Acceptance criteria:
-    - `/timeout`, `/ban`, `/unban`, `/remove_timeout`, and `/clear` are parsed locally.
-    - Valid moderation commands send the existing WebSocket payloads.
-    - Invalid commands, missing targets, invalid durations, disconnected sockets, and unauthorized users show useful local feedback.
-    - `/me` reports that action messages are not supported yet.
+    - Homepage hierarchy reads as a live network surface rather than a marketing hero.
+    - Fresh installs show clear network-ready status, useful next actions, and compact discovery sections.
+    - Live, loading, empty, search, and error behavior remains represented.
   - Check:
-    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed.
+    - `npm.cmd --prefix web/viewer run test -- directoryPage` passed (14 tests; existing search interaction `act()` warnings remain).
 
-- [x] Task 4 - Add permission-gated message row controls
+- [x] Task 4 - Document the viewer identity contract
   - Acceptance criteria:
-    - Normal viewers only see existing report controls.
-    - Channel owners, admins, and moderators see compact timeout/ban/remove-timeout/unban actions for other users' messages.
-    - Destructive actions are explicit and errors surface in the chat panel.
+    - Viewer docs describe the shared ecosystem visual language and the public-viewer restraint rules.
+    - No deployment contract docs change.
   - Check:
-    - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed.
+    - `git diff --check` passed after removing one trailing blank line from `PLAN.md`.
 
-- [x] Task 5 - Update protocol and viewer docs
+- [x] Task 5 - Verify responsive behavior and release readiness
   - Acceptance criteria:
-    - `internal/chat/PROTOCOL.md` documents moderation permissions, command `reason`, and viewer slash command expectations.
-    - `web/viewer/README.md` documents local `/clear` behavior and unsupported message deletion/`/me` follow-ups.
+    - Focused tests, lint, and production build pass or blockers are recorded.
+    - Desktop and mobile browser checks show no horizontal overflow or clipped critical actions.
+    - The canonical viewer verify gate is attempted and any host blocker is recorded.
   - Check:
+    - `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell` passed (51 tests).
+    - `npm.cmd --prefix web/viewer run lint` passed with one pre-existing `UploadManager` hook dependency warning.
+    - `npm.cmd --prefix web/viewer run build` passed with the same hook warning and existing client-rendering notices.
+    - Desktop 1440x1000, mobile 390x844, and mobile light-theme browser checks passed with no horizontal overflow.
     - `git diff --check` passed.
-    - Follow-up issue #1291 opened for unsupported message deletion and `/me` action events.
+    - Git Bash reached `./scripts/verify.sh --viewer`, passed go.sum and CI contract checks, then stopped because no Python 3 interpreter is installed on this host.
 
-- [ ] Task 6 - Verify, publish, and merge
+- [-] Task 6 - Correct light-theme active-chip contrast and merge
   - Acceptance criteria:
-    - Focused backend and viewer tests pass or host blockers are recorded.
-    - `git diff --check` passes.
-    - `./scripts/verify.sh` runs or host blockers are recorded.
-    - PR is opened, CI is monitored, and #1275 is closed by merge.
+    - Active chips use a deterministic background/text pair that meets WCAG AA in dark and light themes.
+    - `tests/accessibility.spec.ts` passes locally.
+    - PR #1308 Viewer CI and all required merge gates pass.
+    - PR #1308 is squash-merged into `main` only after green CI.
   - Check:
+    - Viewer CI failure confirmed at 1.18:1 contrast for active browse chips; focused fix approved by the user.
+    - First local accessibility rerun cleared the chip violation and exposed light-theme hovered primary actions at 2.69:1; correction remains in Task 6 scope.
+    - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts` passed (2 tests) after both contrast pairs were corrected.
+    - `npm.cmd --prefix web/viewer run test -- directoryPage navbar viewerShell` passed (51 tests; existing search `act()` warnings and build-output haste warning remain).
     - `git diff --check` passed.
-    - `bash ./scripts/verify.sh` blocked locally because Windows `bash.exe` requires a WSL distro and none is installed.
 
 ### Execution log
-- Task 1 read-only pass:
-  - Confirmed #1275 is open and scoped to viewer moderation controls, slash commands, backend permission enforcement, and docs.
-  - Reviewed `internal/chat/gateway.go`, `internal/chat/event.go`, `internal/chat/gateway_test.go`, `internal/chat/PROTOCOL.md`, `web/viewer/components/ChatPanel.tsx`, `web/viewer/hooks/useAuth.tsx`, `web/viewer/lib/viewer-api-chat.ts`, `web/viewer/lib/viewer-api-types.ts`, `web/viewer/__tests__/chatPanel.test.tsx`, and `web/viewer/README.md`.
-  - Found backend WebSocket commands already exist for `timeout`, `remove_timeout`, `ban`, `unban`, and `report`, but `reason` is not copied into moderation events and `moderator` role is not currently accepted by backend authorization.
+- Task 1 review:
+  - Compared the supplied BitRiver Radio and Visual Archive screenshots against the running viewer homepage.
+  - Confirmed the viewer currently uses large rounded panels, gradient CTAs, and generic SaaS spacing that does not match the ecosystem identity.
+  - Reviewed `docs/ui-ux-model.md`, `web/viewer/README.md`, the public shell/navigation components, homepage composition, CSS tokens, and open production roadmap issues.
+  - Kept production epic #1293 and compatibility issue #1307 as release context; this user-directed visual pass does not claim to close either issue.
 - Task 2 implementation:
-  - WebSocket moderation commands now copy trimmed `reason` into `ModerationEvent`.
-  - Backend moderation authorization now allows channel owners, admins, and moderators.
-  - Added regression coverage for unauthorized viewer rejection, moderator role success, and reason propagation.
+  - Added a late-loaded `network-console.css` identity layer so existing component behavior and older route-specific styles remain intact.
+  - Replaced generic gradients and rounded chrome with gold structural lines, cyan live/focus states, red error states, compact square controls, and monospace operational metadata.
+  - Preserved the light theme with an adapted high-contrast paper-console palette.
 - Task 3 implementation:
-  - Added slash command parsing for `/timeout`, `/ban`, `/unban`, `/remove_timeout`, `/untimeout`, and local `/clear`.
-  - Added local errors for unknown commands, invalid durations, unsupported `/me`, disconnected moderation sockets, and unauthorized moderation attempts.
-- Task 4 implementation:
-  - Passed `channelOwnerId` into `ChatPanel` and gated row controls to owners, admins, and moderators.
-  - Added compact timeout, remove-timeout, ban, and unban actions for other users' messages.
-  - Kept normal viewers on report-only controls.
-- Task 5 documentation:
-  - Updated `internal/chat/PROTOCOL.md` with moderation permissions, optional reason, viewer slash commands, local `/clear`, and unsupported `/me`/message delete follow-ups.
-  - Updated `web/viewer/README.md` chat control contract with moderator actions and slash command behavior.
-  - Created follow-up #1291 for the missing message deletion and `/me` backend event contract.
-- Verification so far:
-  - `go test ./internal/chat -run "TestGateway(ModerationFlow|RejectsUnauthorizedModeration|AllowsModeratorRole)" -count=1` passed with repo-local `GOCACHE`/`GOTMPDIR`.
-  - `npm.cmd --prefix web/viewer run test -- chatPanel channelPage` passed with 44 focused Jest tests.
-  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts` passed with 4 Playwright tests after a production build.
-  - `git diff --check` passed.
-  - `bash ./scripts/verify.sh` could not run locally: WSL reports `WSL_E_DEFAULT_DISTRO_NOT_FOUND`.
+  - Added a real-data network status rail for node identity, live-signal count, directory count, and relay state.
+  - Reworked the homepage hierarchy into a public relay surface with a stronger first-stream state and a compact featured-signal panel.
+  - Added a regression test proving an empty installation presents itself as ready and actionable rather than broken.
+- Task 4 documentation:
+  - Added the network-console visual identity contract and public-viewer restraint rules to `web/viewer/README.md`.
+  - Added ecosystem identity and truthful visual status cues to the cross-role UX principles in `docs/ui-ux-model.md`.
+- Task 5 verification:
+  - Confirmed desktop and mobile layouts keep critical status, setup, search, and featured-relay actions visible without horizontal overflow.
+  - Confirmed the retained light theme applies the documented paper-console palette and remains overflow-free.
+  - Focused tests, lint, production build, and diff hygiene passed; canonical verification remains host-blocked at its Python prerequisite.
+- Task 6 CI diagnosis:
+  - Viewer CI ran 36 Playwright integration tests; 35 passed and the directory accessibility test failed.
+  - Axe identified active `Live` and `All` browse chips using `#f7ffff` text over a translucent `#daefe5` light-theme composite at 1.18:1 contrast.
+  - The first local rerun confirmed the chip fix and then identified `#080601` text on hovered `#6f4f08` primary actions at 2.69:1.
+  - Active chips now use an opaque accent/contrast pair, and light-theme primary actions use a light foreground across normal, hover, and focus states.
+  - The exact accessibility spec and focused Jest regression set pass locally.

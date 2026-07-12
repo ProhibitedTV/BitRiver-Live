@@ -126,6 +126,22 @@ describe("DirectoryPage", () => {
     expect(withinCard.queryByText(/12 viewers/i)).not.toBeInTheDocument();
   });
 
+  test("presents a fresh install as a ready public relay", async () => {
+    fetchDirectoryMock.mockResolvedValueOnce({
+      channels: [],
+      generatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
+    } as any);
+
+    await renderResolvedDirectoryPage();
+
+    expect(await screen.findByRole("heading", { level: 1, name: /start the first stream/i })).toBeInTheDocument();
+    const networkStatus = screen.getByRole("status", { name: /bitriver network status/i });
+    expect(networkStatus).toHaveTextContent(/relay ready/i);
+    expect(networkStatus).toHaveTextContent(/live signals\s*0/i);
+    expect(networkStatus).toHaveTextContent(/directory\s*0/i);
+    expect(screen.getByText(/awaiting first broadcast/i)).toBeInTheDocument();
+  });
+
   test("performs a search and swaps the directory results", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
     searchDirectoryMock.mockResolvedValueOnce(searchDirectoryResponse as any);
