@@ -498,7 +498,7 @@ func (g *Gateway) validateModeration(actor domain.User, evt ModerationEvent) err
 	if !exists {
 		return fmt.Errorf("channel %s not found", evt.ChannelID)
 	}
-	if actor.ID != channel.OwnerID && !actor.HasRole("admin") {
+	if actor.ID != channel.OwnerID && !actor.HasRole("admin") && !actor.HasRole("moderator") {
 		return fmt.Errorf("forbidden")
 	}
 	if evt.Action == ModerationActionTimeout && evt.ExpiresAt == nil {
@@ -927,6 +927,7 @@ func (c *client) handleModeration(ctx context.Context, msg inboundMessage, actio
 		ChannelID: msg.ChannelID,
 		ActorID:   c.user.ID,
 		TargetID:  msg.TargetID,
+		Reason:    strings.TrimSpace(msg.Reason),
 	}
 	if action == ModerationActionTimeout {
 		duration := time.Duration(msg.DurationMs) * time.Millisecond

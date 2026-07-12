@@ -109,10 +109,19 @@ and mobile navigation stay consistent.
   ordinary user messages.
 - Put secondary actions such as pop-out, sync detail, and display toggles behind
   the compact chat options control.
+- Channel owners, admins, and moderators can use compact message-row moderation
+  actions or slash commands. Normal viewers should only see report controls.
+- Viewer slash commands map to the chat gateway: `/timeout <user> <duration>
+  [reason]`, `/ban <user> [reason]`, `/unban <user>`, `/remove_timeout <user>`,
+  and `/clear`.
+- `/clear` only clears the local transcript view. It must not be presented as a
+  room-history deletion command.
 - Reports should open a separate review dialog/sheet instead of expanding the
   message row inside the thread.
 - Signed-out chat should present one clear sign-in CTA rather than a disabled
   composer that looks broken.
+- Message deletion/removal and `/me` action messages are follow-up work because
+  the current gateway has no persisted event contract for them.
 
 ## Testing
 

@@ -121,8 +121,13 @@ func TestGatewayModerationFlow(t *testing.T) {
 		"channelId":  channel.ID,
 		"targetId":   viewer.ID,
 		"durationMs": 5000,
+		"reason":     "cool down",
 	})
-	waitForEventType(t, ownerConn, "moderation")
+	moderationEvent := waitForEventType(t, ownerConn, "moderation")
+	moderation := eventSection(t, moderationEvent, "moderation")
+	if moderation["reason"] != "cool down" {
+		t.Fatalf("expected moderation reason, got %#v", moderation["reason"])
+	}
 	waitForEventType(t, viewerConn, "moderation")
 
 	// Attempt to speak while timed out
@@ -137,6 +142,98 @@ func TestGatewayModerationFlow(t *testing.T) {
 		_, ok := store.ChatTimeout(channel.ID, viewer.ID)
 		return ok
 	})
+}
+
+func TestGatewayRejectsUnauthorizedModeration(t *testing.T) {
+	store := newTestStorage(t)
+	owner := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"admin"}})
+	viewer := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	target := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "target", Email: "target@example.com"})
+	channel := mustCreateChannel(t, store, owner.ID, "Main")
+
+	gateway := chat.NewGateway(chat.GatewayConfig{Store: store})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("user")
+		user, ok := store.GetUser(userID)
+		if !ok {
+			http.Error(w, "unknown user", http.StatusUnauthorized)
+			return
+		}
+		gateway.HandleConnection(w, r, user)
+	}))
+	defer server.Close()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1)
+	viewerConn := mustDial(t, wsURL+"?user="+viewer.ID)
+	defer func() {
+		_ = viewerConn.Close()
+	}()
+
+	sendJSON(t, viewerConn, map[string]string{"type": "join", "channelId": channel.ID})
+	waitForType(t, viewerConn, "ack")
+	waitForEventType(t, viewerConn, "presence_snapshot")
+
+	sendJSON(t, viewerConn, map[string]any{
+		"type":       "timeout",
+		"channelId":  channel.ID,
+		"targetId":   target.ID,
+		"durationMs": 5000,
+		"reason":     "attempted overreach",
+	})
+
+	payload := waitForType(t, viewerConn, "error")
+	if payload["error"] != "forbidden" {
+		t.Fatalf("expected forbidden error, got %#v", payload["error"])
+	}
+	if _, ok := store.ChatTimeout(channel.ID, target.ID); ok {
+		t.Fatalf("expected unauthorized timeout to be rejected")
+	}
+}
+
+func TestGatewayAllowsModeratorRole(t *testing.T) {
+	store := newTestStorage(t)
+	owner := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com"})
+	moderator := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "mod", Email: "mod@example.com", Roles: []string{"moderator"}})
+	target := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "target", Email: "target@example.com"})
+	channel := mustCreateChannel(t, store, owner.ID, "Main")
+
+	gateway := chat.NewGateway(chat.GatewayConfig{Store: store})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("user")
+		user, ok := store.GetUser(userID)
+		if !ok {
+			http.Error(w, "unknown user", http.StatusUnauthorized)
+			return
+		}
+		gateway.HandleConnection(w, r, user)
+	}))
+	defer server.Close()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1)
+	moderatorConn := mustDial(t, wsURL+"?user="+moderator.ID)
+	defer func() {
+		_ = moderatorConn.Close()
+	}()
+
+	sendJSON(t, moderatorConn, map[string]string{"type": "join", "channelId": channel.ID})
+	waitForType(t, moderatorConn, "ack")
+	waitForEventType(t, moderatorConn, "presence_snapshot")
+
+	sendJSON(t, moderatorConn, map[string]any{
+		"type":      "ban",
+		"channelId": channel.ID,
+		"targetId":  target.ID,
+		"reason":    "spam raid",
+	})
+
+	event := waitForEventType(t, moderatorConn, "moderation")
+	moderation := eventSection(t, event, "moderation")
+	if moderation["action"] != "ban" {
+		t.Fatalf("expected ban action, got %#v", moderation["action"])
+	}
+	if moderation["reason"] != "spam raid" {
+		t.Fatalf("expected ban reason, got %#v", moderation["reason"])
+	}
 }
 
 func TestGatewayPresenceSnapshotAndConnectionDeduping(t *testing.T) {
