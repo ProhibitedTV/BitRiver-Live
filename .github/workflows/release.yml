@@ -22,7 +22,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
 
       - name: Prepare job-local production validation input
@@ -235,7 +235,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
 
       - name: Verify placeholder OME config freshness
@@ -283,7 +283,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
 
 
@@ -339,8 +339,9 @@ jobs:
     env:
       CGO_ENABLED: 0
       GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
+      GOPROXY: https://proxy.golang.org,direct
+      GOSUMDB: sum.golang.org
+      PRODUCTION_MODFILE: ${{ github.workspace }}/go.production.mod
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -348,10 +349,17 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
 
+      - name: Prepare upstream production module graph
+        run: |
+          go run ./cmd/tools/production-module --output "$PRODUCTION_MODFILE"
+          go mod download -modfile="$PRODUCTION_MODFILE" all
+
       - name: Verify pgx mode for postgres artifacts
+        env:
+          GOFLAGS: -modfile=${{ github.workspace }}/go.production.mod
         run: ./scripts/check-postgres-pgx.sh postgres
 
       - name: Build binaries
@@ -408,9 +416,13 @@ jobs:
             output_path="$out_dir/$bin_name$bin_ext"
             tags="${build_tags[$target]-}"
             if [[ -n "$tags" ]]; then
-              go build -tags "$tags" -o "$output_path" "./cmd/$target"
+              go build -modfile="$PRODUCTION_MODFILE" -tags "$tags" -o "$output_path" "./cmd/$target"
+              go run ./cmd/tools/verify-production-binary \
+                --require-module github.com/jackc/pgx/v5 \
+                "$output_path"
             else
-              go build -o "$output_path" "./cmd/$target"
+              go build -modfile="$PRODUCTION_MODFILE" -o "$output_path" "./cmd/$target"
+              go run ./cmd/tools/verify-production-binary "$output_path"
             fi
           done
 
@@ -474,8 +486,9 @@ jobs:
     env:
       CGO_ENABLED: 0
       GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
+      GOPROXY: https://proxy.golang.org,direct
+      GOSUMDB: sum.golang.org
+      PRODUCTION_MODFILE: ${{ github.workspace }}/go.production.mod
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -483,8 +496,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
+
+      - name: Prepare upstream production module graph
+        run: |
+          go run ./cmd/tools/production-module --output "$PRODUCTION_MODFILE"
+          go mod download -modfile="$PRODUCTION_MODFILE" all
 
       - name: Build bitriver binary
         shell: bash
@@ -515,7 +533,8 @@ jobs:
             "-X" "main.date=${build_date}"
           )
 
-          go build -trimpath -ldflags "${ldflags[*]}" -o "$out_dir/bitriver${bin_ext}" ./cmd/bitriver
+          go build -modfile="$PRODUCTION_MODFILE" -trimpath -ldflags "${ldflags[*]}" -o "$out_dir/bitriver${bin_ext}" ./cmd/bitriver
+          go run ./cmd/tools/verify-production-binary "$out_dir/bitriver${bin_ext}"
 
           if [ "$archive_ext" = "zip" ]; then
             (cd dist && zip -r "bitriver-${GOOS}-${GOARCH}.zip" "bitriver-${GOOS}-${GOARCH}")
@@ -553,9 +572,10 @@ jobs:
     env:
       CGO_ENABLED: 0
       GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
+      GOPROXY: https://proxy.golang.org,direct
+      GOSUMDB: sum.golang.org
       COSIGN_EXPERIMENTAL: "true"
+      PRODUCTION_MODFILE: ${{ github.workspace }}/go.production.mod
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -563,8 +583,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
+
+      - name: Prepare upstream production module graph
+        run: |
+          go run ./cmd/tools/production-module --output "$PRODUCTION_MODFILE"
+          go mod download -modfile="$PRODUCTION_MODFILE" all
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -598,7 +623,8 @@ jobs:
             "-X" "main.date=${build_date}"
           )
 
-          go build -trimpath -ldflags "${ldflags[*]}" -o "$launcher_root/bin/bitriver${bin_ext}" ./cmd/bitriver
+          go build -modfile="$PRODUCTION_MODFILE" -trimpath -ldflags "${ldflags[*]}" -o "$launcher_root/bin/bitriver${bin_ext}" ./cmd/bitriver
+          go run ./cmd/tools/verify-production-binary "$launcher_root/bin/bitriver${bin_ext}"
           cp deploy/docker-compose.yml "$launcher_root/share/deploy/docker-compose.yml"
           cp deploy/.env.example "$launcher_root/share/deploy/.env.example"
 
@@ -663,7 +689,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: web/viewer/package-lock.json
 
@@ -671,6 +697,9 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
         run: npm ci
+
+      - name: Audit production and build dependencies
+        run: npm audit --audit-level=high
 
       - name: Lint
         env:
@@ -770,10 +799,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify pgx mode for API image
-        if: matrix.component == 'api'
-        run: ./scripts/check-postgres-pgx.sh postgres
-
       - name: Build and push ${{ matrix.component }} image
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -850,8 +875,9 @@ jobs:
     env:
       CGO_ENABLED: 0
       GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
+      GOPROXY: https://proxy.golang.org,direct
+      GOSUMDB: sum.golang.org
+      PRODUCTION_MODFILE: ${{ github.workspace }}\go.production.mod
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -859,8 +885,14 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: 'go.mod'
+          go-version-file: '.go-version'
           cache: true
+
+      - name: Prepare upstream production module graph
+        shell: pwsh
+        run: |
+          go run ./cmd/tools/production-module --output $env:PRODUCTION_MODFILE
+          go mod download -modfile=$env:PRODUCTION_MODFILE all
 
       - name: Build MSI
         shell: pwsh
@@ -876,7 +908,9 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $launcherRoot "share\deploy") | Out-Null
 
           $ldflags = "-X main.version=$env:RELEASE_TAG -X main.commit=$env:COMMIT_SHA -X main.date=$buildDate"
-          go build -trimpath -ldflags $ldflags -o (Join-Path $launcherRoot "bin/bitriver.exe") ./cmd/bitriver
+          $binaryPath = Join-Path $launcherRoot "bin/bitriver.exe"
+          go build -modfile=$env:PRODUCTION_MODFILE -trimpath -ldflags $ldflags -o $binaryPath ./cmd/bitriver
+          go run ./cmd/tools/verify-production-binary $binaryPath
           Copy-Item scripts/bitriver-live-wrapper.ps1 (Join-Path $launcherRoot "bin/bitriver-live.ps1")
           Copy-Item deploy/docker-compose.yml (Join-Path $launcherRoot "share/deploy/docker-compose.yml")
           Copy-Item deploy/.env.example (Join-Path $launcherRoot "share/deploy/.env.example")

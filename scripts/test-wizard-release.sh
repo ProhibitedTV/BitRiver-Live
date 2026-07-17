@@ -24,11 +24,11 @@ printf '%s\n' "$@" >"$invocation_file"
 EOF
 chmod +x "$installer_dir/ubuntu.sh"
 
-cat >"$release_dir/server" <<'EOF'
+cat >"$release_dir/bitriver-live" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$release_dir/server"
+chmod +x "$release_dir/bitriver-live"
 
 cat >"$release_dir/bootstrap-admin" <<'EOF'
 #!/usr/bin/env bash
@@ -70,7 +70,7 @@ if [[ ! -f $invocation_file ]]; then
         exit 1
 fi
 
-if grep -q "Go 1.21" <<<"$output"; then
+if grep -q "Go 1.26" <<<"$output"; then
         echo "Go toolchain checks should not run when using release binaries" >&2
         echo "$output" >&2
         exit 1

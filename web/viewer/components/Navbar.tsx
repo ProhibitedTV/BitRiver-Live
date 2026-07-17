@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { appendRedirectParam, joinConfiguredPath, resolveSignupUrl } from "../lib/auth-links";
+import { navigateBrowser } from "../lib/browser-navigation";
 import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } from "../lib/navigation";
 import { fetchManagedChannels } from "../lib/viewer-api";
 
@@ -374,7 +375,7 @@ export function Navbar() {
     closeMenu();
     const redirectTarget = buildRedirectTarget();
     if (externalSignupDestination && typeof window !== "undefined") {
-      window.location.href = appendRedirectParam(externalSignupDestination, window.location.origin, redirectTarget, "next");
+      navigateBrowser(appendRedirectParam(externalSignupDestination, window.location.origin, redirectTarget, "next"));
       return;
     }
     void signUp(redirectTarget);

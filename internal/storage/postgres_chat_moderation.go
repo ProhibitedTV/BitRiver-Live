@@ -1077,14 +1077,20 @@ func (r *postgresRepository) ListAppeals(channelID, requesterID string, includeC
 			}
 			a.CreatedAt = a.CreatedAt.UTC()
 			a.Status = strings.ToLower(a.Status)
-			events, err := r.listAppealEventsTx(ctx, conn, a.ID)
+			appeals = append(appeals, a)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+		for i := range appeals {
+			events, err := r.listAppealEventsTx(ctx, conn, appeals[i].ID)
 			if err != nil {
 				return err
 			}
-			a.Events = events
-			appeals = append(appeals, a)
+			appeals[i].Events = events
 		}
-		return rows.Err()
+		return nil
 	})
 	return appeals, err
 }

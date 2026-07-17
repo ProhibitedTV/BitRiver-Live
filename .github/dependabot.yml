@@ -8,3 +8,49 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      go-production-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "deps(go)"
+
+  - package-ecosystem: "npm"
+    directory: "/web/viewer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 8
+    groups:
+      viewer-runtime:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "hls.js"
+          - "ovenplayer"
+        update-types:
+          - "minor"
+          - "patch"
+      viewer-tooling:
+        patterns:
+          - "@*"
+          - "eslint*"
+          - "jest*"
+          - "ts-jest"
+          - "typescript"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "deps(viewer)"

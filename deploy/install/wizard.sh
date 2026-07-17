@@ -26,27 +26,7 @@ else
 fi
 
 if [[ $BUILD_FROM_SOURCE == true ]]; then
-        if ! command -v go >/dev/null 2>&1; then
-                echo "Go 1.21 or newer is required when building from source (go command not found)." >&2
-                exit 1
-        fi
-
-        GO_VERSION_OUTPUT=$(go version)
-        if [[ $GO_VERSION_OUTPUT =~ go([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-                GO_MAJOR=${BASH_REMATCH[1]}
-                GO_MINOR=${BASH_REMATCH[2]}
-        elif [[ $GO_VERSION_OUTPUT =~ go([0-9]+)\.([0-9]+) ]]; then
-                GO_MAJOR=${BASH_REMATCH[1]}
-                GO_MINOR=${BASH_REMATCH[2]}
-        else
-                echo "Unable to determine Go version from: $GO_VERSION_OUTPUT" >&2
-                exit 1
-        fi
-
-        if (( GO_MAJOR < 1 )) || { (( GO_MAJOR == 1 )) && (( GO_MINOR < 21 )); }; then
-                echo "Go 1.21 or newer is required when building from source (found ${GO_VERSION_OUTPUT#*go})." >&2
-                exit 1
-        fi
+        "$SCRIPT_DIR/../../scripts/check-go-toolchain.sh"
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

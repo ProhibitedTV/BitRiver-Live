@@ -193,6 +193,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Set up Go toolchain
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-go
+
       - name: Validate quickstart.sh help and static checks
         if: runner.os != 'Windows'
         shell: bash
@@ -280,7 +284,6 @@ jobs:
 
       - name: Audit dependencies
         run: npm audit --audit-level=high
-        continue-on-error: true
         env:
           NEXT_TELEMETRY_DISABLED: 1
 

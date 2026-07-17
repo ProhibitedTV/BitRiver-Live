@@ -327,8 +327,7 @@ func (s *Server) dispatch(writer *bufio.Writer, args []string) bool {
 		}
 		return true
 	default:
-		_ = writeError(writer, "ERR unsupported command")
-		return false
+		return writeError(writer, "ERR unsupported command") == nil
 	}
 }
 

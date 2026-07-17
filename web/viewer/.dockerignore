@@ -1,0 +1,7 @@
+node_modules
+.next
+.swc
+.npm-cache
+playwright-report
+test-results
+npm-debug.log*

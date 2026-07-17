@@ -26,7 +26,7 @@ PowerShell:
 .\scripts\quickstart.ps1
 ```
 
-Both wrappers are thin shims around `go run ./cmd/bitriver quickstart`, so source checkouts require Go 1.21+
+Both wrappers are thin shims around `go run ./cmd/bitriver quickstart`, so source checkouts require Go 1.26+
 available on `PATH` (they do not provide a pure-Docker startup path with no local Go toolchain). On Windows, use
 PowerShell or Git Bash for repository scripts; a broken WSL `bash` can fail before the quickstart reaches Docker or
 BitRiver validation.

@@ -2,7 +2,7 @@
 # BitRiver Live Ubuntu installation helper.
 #
 # This script prepares a systemd-managed deployment of the BitRiver Live control center.
-# Run it from the repository root on a host with Go 1.21+ and systemd available.
+# Run it from the repository root on a host with Go 1.26+ and systemd available.
 #
 # Required inputs can be provided either as flags or environment variables:
 #   --install-dir  / INSTALL_DIR        Absolute path for the BitRiver Live binaries.
@@ -459,14 +459,19 @@ if [[ -n $LOG_DIR ]]; then
 fi
 
 if [[ $BUILD_FROM_SOURCE == true ]]; then
-        if ! command -v go >/dev/null 2>&1; then
-                echo "Go 1.21+ is required to build BitRiver Live" >&2
-                exit 1
-        fi
-
-        ./scripts/check-postgres-pgx.sh postgres
-        GOFLAGS="-trimpath" go build -tags postgres -o bitriver-live ./cmd/server
-        GOFLAGS="-trimpath" go build -tags postgres -o bootstrap-admin ./cmd/tools/bootstrap-admin
+        ./scripts/check-go-toolchain.sh
+        (
+                production_mod=$(mktemp "${TMPDIR:-/tmp}/bitriver-go-production.XXXXXX.mod")
+                production_sum="${production_mod%.mod}.sum"
+                trap 'rm -f "$production_mod" "$production_sum"' EXIT
+                go run ./cmd/tools/production-module --output "$production_mod"
+                go mod download -modfile="$production_mod" all
+                GOFLAGS="-modfile=$production_mod" ./scripts/check-postgres-pgx.sh postgres
+                go build -modfile="$production_mod" -trimpath -tags postgres -o bitriver-live ./cmd/server
+                go build -modfile="$production_mod" -trimpath -tags postgres -o bootstrap-admin ./cmd/tools/bootstrap-admin
+                go run ./cmd/tools/verify-production-binary --require-module github.com/jackc/pgx/v5 bitriver-live
+                go run ./cmd/tools/verify-production-binary --require-module github.com/jackc/pgx/v5 bootstrap-admin
+        )
         sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
         sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
         rm -f bitriver-live bootstrap-admin

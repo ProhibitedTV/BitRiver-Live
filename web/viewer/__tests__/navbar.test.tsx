@@ -13,48 +13,20 @@ import {
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
+import { navigateBrowser } from "../lib/browser-navigation";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 jest.mock("../hooks/useAuth");
+jest.mock("../lib/browser-navigation");
 
 const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
+const navigateBrowserMock = jest.mocked(navigateBrowser);
 
 describe("Navbar", () => {
   const originalApiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   const originalSignupUrl = process.env.NEXT_PUBLIC_SIGNUP_URL;
   const originalViewerUrl = process.env.NEXT_PUBLIC_VIEWER_URL;
-  const overrideWindowLocation = (
-    overrides: Partial<Pick<Location, "hash" | "href" | "origin" | "pathname" | "search">>,
-  ) => {
-    const originalLocation = window.location;
-    const mockLocation = {
-      ancestorOrigins: originalLocation.ancestorOrigins,
-      assign: jest.fn(),
-      hash: "",
-      host: "localhost",
-      hostname: "localhost",
-      href: "http://localhost/",
-      origin: "http://localhost",
-      pathname: "/",
-      port: "",
-      protocol: "http:",
-      reload: jest.fn(),
-      replace: jest.fn(),
-      search: "",
-      toString: () => "http://localhost/",
-      ...overrides,
-    } as unknown as Location & { href: string };
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: mockLocation,
-    });
-    return {
-      mockLocation,
-      restore: () =>
-        Object.defineProperty(window, "location", { configurable: true, value: originalLocation }),
-    };
-  };
   const mediaListeners = new Map<string, ((event: MediaQueryListEvent) => void)[]>();
   const setMatchMedia = (resolver: (query: string) => boolean) => {
     mediaListeners.clear();
@@ -551,8 +523,6 @@ describe("Navbar", () => {
   test("create-account CTA routes to a configured onboarding URL", async () => {
     mockAnonymousUser();
     process.env.NEXT_PUBLIC_SIGNUP_URL = "https://accounts.example.com/onboarding";
-    const { mockLocation, restore } = overrideWindowLocation({});
-
     const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
@@ -562,15 +532,14 @@ describe("Navbar", () => {
       await user.click(joinButton);
     });
 
-    expect(mockLocation.href).toMatch(/^https:\/\/accounts\.example\.com\/onboarding\?next=%2F/);
-    restore();
+    expect(navigateBrowserMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^https:\/\/accounts\.example\.com\/onboarding\?next=%2F/),
+    );
   });
 
   test("create-account CTA respects a configured auth base URL", async () => {
     mockAnonymousUser();
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://auth.example.com";
-    const { mockLocation, restore } = overrideWindowLocation({});
-
     const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
@@ -580,8 +549,9 @@ describe("Navbar", () => {
       await user.click(joinButton);
     });
 
-    expect(mockLocation.href).toMatch(/^https:\/\/auth\.example\.com\/signup\?next=%2F/);
-    restore();
+    expect(navigateBrowserMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^https:\/\/auth\.example\.com\/signup\?next=%2F/),
+    );
   });
 
   test("shows only the sign in CTA when signup is not configured", () => {

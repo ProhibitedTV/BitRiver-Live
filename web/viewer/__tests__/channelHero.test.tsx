@@ -256,9 +256,7 @@ test("renders donation addresses and copies to clipboard", async () => {
     expect(writeText).toHaveBeenCalledWith("0xabc123");
   });
 
-  expect(
-    screen.getByText(/ETH address copied to clipboard\./i)
-  ).toBeInTheDocument();
+  expect(await screen.findByText(/ETH address copied to clipboard\./i)).toBeInTheDocument();
 });
 test("returns focus to send a tip trigger when drawer closes", async () => {
   render(<ChannelHeader data={baseData} />);

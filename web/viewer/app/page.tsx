@@ -2,13 +2,14 @@ import { DirectoryDataBoundary, DirectoryPageShell } from "./directory-page-shel
 import { normalizeDirectoryQuery } from "../lib/directory-state";
 
 type PageProps = {
-  searchParams?: {
-    q?: string;
-  };
+  searchParams?: Promise<{ q?: string | string[] }>;
 };
 
-export default function DirectoryPage({ searchParams }: PageProps) {
-  const query = normalizeDirectoryQuery(typeof searchParams?.q === "string" ? searchParams.q : "");
+export default async function DirectoryPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams;
+  const query = normalizeDirectoryQuery(
+    typeof resolvedSearchParams?.q === "string" ? resolvedSearchParams.q : "",
+  );
 
   return (
     <DirectoryPageShell query={query}>

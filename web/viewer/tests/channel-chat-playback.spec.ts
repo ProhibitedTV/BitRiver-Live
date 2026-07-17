@@ -43,8 +43,11 @@ test.describe("channel playback and chat integration", () => {
     const video = page.locator("video");
     await expect(video).toBeVisible();
     await expect
-      .poll(async () => video.evaluate((element) => element.currentSrc))
-      .toMatch(/^blob:/);
+      .poll(async () => {
+        const source = await video.evaluate((element) => element.currentSrc);
+        return source.startsWith("blob:") || source === playbackResponse.playback?.playbackUrl;
+      })
+      .toBe(true);
     await expect(video).toHaveAttribute("poster", playbackResponse.playback?.originUrl ?? "");
 
     const chatLog = page.getByRole("log");

@@ -3,6 +3,7 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { appendRedirectParam } from "../lib/auth-links";
+import { navigateBrowser } from "../lib/browser-navigation";
 import { ViewerApiError, viewerRequest } from "../lib/viewer-api-core";
 
 type AuthUser = {
@@ -375,7 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (resolvedRedirect !== currentPath) {
-      window.location.assign(resolvedRedirect);
+      navigateBrowser(resolvedRedirect);
       return;
     }
 
@@ -386,7 +387,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (redirectTo?: string) => {
       const resolvedRedirect = resolveRedirectTarget(redirectTo);
       if (loginUrl && typeof window !== "undefined") {
-        window.location.href = appendRedirectParam(loginUrl, window.location.origin, resolvedRedirect, "redirect");
+        navigateBrowser(appendRedirectParam(loginUrl, window.location.origin, resolvedRedirect, "redirect"));
         return;
       }
 

@@ -50,7 +50,8 @@ fi
 
 generated_block_file="$(mktemp)"
 updated_doc_file="$(mktemp)"
-trap 'rm -f "$generated_block_file" "$updated_doc_file"' EXIT
+normalized_doc_file="$(mktemp)"
+trap 'rm -f "$generated_block_file" "$updated_doc_file" "$normalized_doc_file"' EXIT
 
 awk '
 function group_for(name, parts, n) {
@@ -77,6 +78,10 @@ BEGIN {
   print ""
   print "_This section is generated from `deploy/.env.example` by `scripts/generate-contract-doc.sh`. Do not edit by hand._"
   print ""
+}
+
+{
+  sub(/\r$/, "", $0)
 }
 
 /^[[:space:]]*#/ || /^[[:space:]]*$/ {
@@ -144,6 +149,10 @@ BEGIN {
   replaced = 0
 }
 
+{
+  sub(/\r$/, "", $0)
+}
+
 index($0, begin) {
   while ((getline line < replacement) > 0) {
     print line
@@ -173,7 +182,8 @@ END {
 ' "$doc_file" > "$updated_doc_file"
 
 if [[ "$check_mode" -eq 1 ]]; then
-  if ! cmp -s "$doc_file" "$updated_doc_file"; then
+  tr -d '\r' < "$doc_file" > "$normalized_doc_file"
+  if ! cmp -s "$normalized_doc_file" "$updated_doc_file"; then
     echo "docs/contract.md generated env section is out of date." >&2
     echo "Run: ./scripts/generate-contract-doc.sh" >&2
     exit 1

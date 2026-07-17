@@ -37,12 +37,8 @@ export function Player({
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [runtimeState, setRuntimeState] = useState<UIState>(loading ? UIState.LoadingStream : UIState.StreamEnded);
   const playbackSourceKey = playback?.playbackUrl ? `${playback.sessionId}:${playback.playbackUrl}` : undefined;
-  const previousPlaybackSourceKeyRef = useRef<string | undefined>(playbackSourceKey);
-  const playbackSourceChanged = previousPlaybackSourceKeyRef.current !== playbackSourceKey;
-
-  if (playbackSourceChanged) {
-    previousPlaybackSourceKeyRef.current = playbackSourceKey;
-  }
+  const [runtimeSourceKey, setRuntimeSourceKey] = useState<string | undefined>(playbackSourceKey);
+  const playbackSourceChanged = runtimeSourceKey !== playbackSourceKey;
 
   const clearErrorTimeout = useCallback(() => {
     if (!errorTimeoutRef.current) {
@@ -66,6 +62,7 @@ export function Player({
       return;
     }
 
+    setRuntimeSourceKey(playbackSourceKey);
     setRuntimeState(UIState.LoadingStream);
 
     if (playback.protocol === "webrtc") {
@@ -185,7 +182,7 @@ export function Player({
     }
 
     return undefined;
-  }, [channelId, playback, playerId, scheduleUnavailableWithGrace, clearErrorTimeout]);
+  }, [channelId, playback, playbackSourceKey, playerId, scheduleUnavailableWithGrace, clearErrorTimeout]);
 
   useEffect(() => {
     if (!playback || playback.protocol === "webrtc") {

@@ -63,9 +63,11 @@ test.describe("homepage desktop shell", () => {
     await page.goto("/");
 
     const sidebar = page.locator(".viewer-sidebar");
-    const hero = page.locator(".home-hero");
+    const heroes = page.locator(".home-hero");
+    const settledHero = page.locator(".home-hero:visible").filter({ hasText: /Relay ready|Signal live/ });
 
-    await expect(hero).toBeVisible();
+    await expect(settledHero).toBeVisible();
+    await expect(heroes).toHaveCount(1);
     await expect(sidebar).toHaveCount(0);
     await expect(page.locator(".viewer-shell")).toHaveClass(/viewer-shell--following-disabled/);
     await expect(page.getByText(/keep an eye on the creators you already know while you browse the rest of the platform/i)).toHaveCount(0);

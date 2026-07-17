@@ -81,7 +81,8 @@ If your local scripts still include that override filename or env toggle, remove
 | Windows 11 (WSL 2 backend) | Docker Desktop | Run the quickstart inside WSL with the WSL 2 backend enabled; check `docker-desktop` has 15GB free. |
 | Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Use the Go CLI or `.\scripts\quickstart.ps1`; do not rely on `bash` unless it is Git Bash or a healthy WSL shell. |
 
-Install Go 1.21+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. Installer-backed
+Install Go 1.26+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. CI and production
+containers pin Go 1.26.5 through `.go-version` and their builder images. Installer-backed
 launchers ship a bundled CLI and do not require Go on the host.
 
 ### Minimum host requirements (safe defaults)

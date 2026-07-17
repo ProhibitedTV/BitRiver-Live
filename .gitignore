@@ -27,6 +27,8 @@ bin/
 /.tmp/
 /.codex-tmp/
 /dist/
+/go.production.mod
+/go.production.sum
 /deploy/srs/conf/srs.generated.conf
 /web/viewer/.next/
 /web/viewer/playwright-report/

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { DirectoryGrid } from "../../components/DirectoryGrid";
 import { SearchBar } from "../../components/SearchBar";
 import type { DirectoryChannel } from "../../lib/viewer-api";
@@ -11,11 +11,19 @@ type SortKey = "live" | "trending" | "new";
 type FilterKey = string | null;
 
 export default function BrowsePage() {
+  return (
+    <Suspense fallback={<main className="container container--wide" aria-busy="true" />}>
+      <BrowsePageContent />
+    </Suspense>
+  );
+}
+
+function BrowsePageContent() {
   const {
     queryFromParams: searchParamQuery,
     topicFromParams,
-    lastQueryFromParams,
-    lastTopicFromParams,
+    lastQueryFromParams: lastQueryFromParamsRef,
+    lastTopicFromParams: lastTopicFromParamsRef,
     navigateWithDirectoryState,
   } = useDirectorySearch({
     fallbackPathname: "/browse",
@@ -51,17 +59,17 @@ export default function BrowsePage() {
   }, [filter, loadChannels, query, queryHydrated]);
 
   useEffect(() => {
-    const queryChanged = lastQueryFromParams.current !== searchParamQuery;
-    const topicChanged = lastTopicFromParams.current !== topicFromParams;
+    const queryChanged = lastQueryFromParamsRef.current !== searchParamQuery;
+    const topicChanged = lastTopicFromParamsRef.current !== topicFromParams;
 
     if (!queryHydrated || queryChanged || topicChanged) {
-      lastQueryFromParams.current = searchParamQuery;
-      lastTopicFromParams.current = topicFromParams;
+      lastQueryFromParamsRef.current = searchParamQuery;
+      lastTopicFromParamsRef.current = topicFromParams;
       setQuery(searchParamQuery);
       setFilter(topicFromParams);
       setQueryHydrated(true);
     }
-  }, [lastQueryFromParams, lastTopicFromParams, queryHydrated, searchParamQuery, topicFromParams]);
+  }, [lastQueryFromParamsRef, lastTopicFromParamsRef, queryHydrated, searchParamQuery, topicFromParams]);
 
   const discoveredFilters = useMemo(() => {
     const filters = new Set<string>();

@@ -54,9 +54,14 @@ export const mockRouter = {
 };
 
 let pathname = "/";
+let routeParams: Record<string, string> = {};
 
 export const setMockPathname = (nextPathname: string) => {
   pathname = nextPathname;
+};
+
+export const setMockParams = (nextParams: Record<string, string>) => {
+  routeParams = nextParams;
 };
 
 export const resetRouterMocks = () => {
@@ -67,6 +72,7 @@ export const resetRouterMocks = () => {
   mockRouter.refresh.mockReset();
   mockRouter.replace.mockReset();
   pathname = "/";
+  routeParams = {};
 };
 
 jest.mock("next/link", () => {
@@ -92,6 +98,7 @@ jest.mock("next/link", () => {
 
 jest.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
+  useParams: () => routeParams,
   usePathname: () => pathname,
   useSearchParams: () => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""),
 }));
