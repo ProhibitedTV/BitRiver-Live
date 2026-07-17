@@ -24,11 +24,11 @@ printf '%s\n' "$@" >"$invocation_file"
 EOF
 chmod +x "$installer_dir/ubuntu.sh"
 
-cat >"$release_dir/server" <<'EOF'
+cat >"$release_dir/bitriver-live" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$release_dir/server"
+chmod +x "$release_dir/bitriver-live"
 
 cat >"$release_dir/bootstrap-admin" <<'EOF'
 #!/usr/bin/env bash
