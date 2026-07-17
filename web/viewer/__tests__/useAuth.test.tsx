@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "../hooks/useAuth";
+import { navigateBrowser } from "../lib/browser-navigation";
 
 const mockRouterRefresh = jest.fn();
 
@@ -9,6 +10,9 @@ jest.mock("next/navigation", () => ({
     refresh: mockRouterRefresh,
   }),
 }));
+jest.mock("../lib/browser-navigation");
+
+const navigateBrowserMock = jest.mocked(navigateBrowser);
 
 function AuthHarness() {
   const {
@@ -115,37 +119,6 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const overrideWindowLocation = (
-  overrides: Partial<Pick<Location, "hash" | "href" | "origin" | "pathname" | "search">>,
-) => {
-  const originalLocation = window.location;
-  const mockLocation = {
-    ancestorOrigins: originalLocation.ancestorOrigins,
-    assign: jest.fn(),
-    hash: "",
-    host: "localhost",
-    hostname: "localhost",
-    href: "http://localhost/",
-    origin: "http://localhost",
-    pathname: "/",
-    port: "",
-    protocol: "http:",
-    reload: jest.fn(),
-    replace: jest.fn(),
-    search: "",
-    toString: () => "http://localhost/",
-    ...overrides,
-  } as unknown as Location & { href: string };
-  Object.defineProperty(window, "location", {
-    configurable: true,
-    value: mockLocation,
-  });
-  return {
-    mockLocation,
-    restore: () => Object.defineProperty(window, "location", { configurable: true, value: originalLocation }),
-  };
-};
-
 describe("useAuth", () => {
   const originalFetch = global.fetch;
 
@@ -205,11 +178,7 @@ describe("useAuth", () => {
       text: async () => "",
     })) as jest.MockedFunction<typeof fetch>;
 
-    const { mockLocation, restore } = overrideWindowLocation({
-      pathname: "/channels/alpha",
-      search: "?view=live",
-      hash: "#info",
-    });
+    window.history.replaceState({}, "", "/channels/alpha?view=live#info");
     const user = userEvent.setup();
 
     render(
@@ -226,8 +195,9 @@ describe("useAuth", () => {
       await user.click(screen.getByRole("button", { name: /open sign in/i }));
     });
 
-    expect(mockLocation.href).toBe("https://auth.example.com/login?redirect=%2Fchannels%2Falpha%3Fview%3Dlive%23info");
-    restore();
+    expect(navigateBrowserMock).toHaveBeenCalledWith(
+      "https://auth.example.com/login?redirect=%2Fchannels%2Falpha%3Fview%3Dlive%23info",
+    );
   });
 
   test("coerces sign-up requests back to sign-in when self-signup is disabled", async () => {

@@ -18,8 +18,17 @@ The viewer talks to the Go API for channel data, chat, and authentication. When 
 
 ## Prerequisites
 
-- [Node.js 18+](https://nodejs.org/en/download/package-manager)
+- [Node.js 24 LTS](https://nodejs.org/en/download/package-manager) (the supported major in `.nvmrc`, CI, and containers)
 - npm (bundled with Node.js on most platforms)
+
+The viewer baseline is Next.js 16 with React 19 and TypeScript 6. Use `npm ci` so local work, CI, and standalone builds resolve the reviewed lockfile exactly.
+
+### Runtime upgrade notes
+
+- Linting uses ESLint 9 flat configuration through `eslint.config.mjs`; `next lint` is no longer available.
+- App Router `params` and `searchParams` follow the Next.js 16 asynchronous request API. Client routes read dynamic segments with `useParams`.
+- Components that read search parameters are enclosed by stable Suspense boundaries so static prerendering does not fall back to an implicit client-only page.
+- React 19 tests use an explicit act environment and a browser-navigation boundary instead of redefining jsdom's immutable `window.location` object.
 - A running BitRiver Live API (follow the [root quickstart](../../README.md#quickstart) or the more detailed manual workflow in the root docs)
 
 ## Quick preview

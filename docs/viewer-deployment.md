@@ -51,7 +51,7 @@ The standalone server reads the `.env` file automatically when you start it via
 
 ## Running the viewer behind Nginx
 
-1. Install Node.js 20 (or later) on the host.
+1. Install Node.js 24 LTS on the host. Other Node majors are outside the supported viewer baseline.
 2. Configure the runtime base path if you plan to serve the viewer from a
    sub-path. The bundle respects the `NEXT_VIEWER_BASE_PATH` environment
    variable.

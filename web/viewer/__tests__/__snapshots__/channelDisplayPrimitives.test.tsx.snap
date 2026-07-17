@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`channel display primitives renders consistent badge and count labels in directory and featured layouts 1`] = `
 <DocumentFragment>

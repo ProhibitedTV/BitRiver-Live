@@ -46,7 +46,7 @@ sudo apt install -y build-essential git curl ufw pkg-config libcap2-bin \
 
 `libcap2-bin` provides the `setcap` utility the Ubuntu installer uses to keep privileged ports working across manual restarts. If you plan to bind to :80 or :443 directly from the Go process, keep it installed; otherwise pass `--addr :8080` (or another high port) when terminating traffic at a reverse proxy.
 
-If you prefer managed runtimes, replace the distribution Go and Node.js packages with upstream toolchains (e.g., via `snap`, `asdf`, or tarballs). Ensure `go version` reports 1.21+ and `node --version` reports 18+.
+If you prefer managed runtimes, replace the distribution Go and Node.js packages with upstream toolchains (for example, via `snap`, `asdf`, or tarballs). Ensure `go version` reports 1.26+ and `node --version` reports 24.x.
 
 ## 3. Configure PostgreSQL and Redis
 
@@ -460,7 +460,7 @@ HOSTNAME=0.0.0.0
 EOF
    ```
 
-3. Start the bundled server with Node.js 20+ (or wrap it in systemd as documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md)):
+3. Start the bundled server with Node.js 24 LTS (or wrap it in systemd as documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md)):
 
    ```bash
    cd /opt/bitriver-viewer

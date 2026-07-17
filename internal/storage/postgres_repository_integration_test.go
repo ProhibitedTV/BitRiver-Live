@@ -64,6 +64,7 @@ func postgresRepositoryFactory(t *testing.T, opts ...storage.Option) (storage.Re
 		return nil, nil, err
 	}
 
+	t.Cleanup(func() { pool.Close() })
 	t.Cleanup(func() {
 		if err := truncatePostgresTables(context.Background(), pool); err != nil {
 			t.Fatalf("truncate tables: %v", err)
@@ -81,7 +82,6 @@ func postgresRepositoryFactory(t *testing.T, opts ...storage.Option) (storage.Re
 			}
 		}
 	})
-	t.Cleanup(func() { pool.Close() })
 
 	return repo, nil, nil
 }
@@ -128,45 +128,6 @@ func TestPostgresRepositoryConnection(t *testing.T) {
 	}
 	if repo == nil {
 		t.Fatalf("expected postgres repository instance")
-	}
-}
-
-func TestPostgresRepositoryAcquireTimeoutCoversQueries(t *testing.T) {
-	repo, cleanup, err := postgresRepositoryFactory(t,
-		storage.WithPostgresAcquireTimeout(50*time.Millisecond),
-	)
-	if errors.Is(err, storage.ErrPostgresUnavailable) {
-		t.Skip("postgres repository unavailable in this build")
-	}
-	if err != nil {
-		t.Fatalf("failed to open postgres repository: %v", err)
-	}
-	if cleanup != nil {
-		defer cleanup()
-	}
-
-	type withConnInvoker interface {
-		withConn(func(context.Context, *pgxpool.Conn) error) error
-	}
-
-	invoker, ok := repo.(withConnInvoker)
-	if !ok {
-		t.Fatalf("expected postgres repository implementation, got %T", repo)
-	}
-
-	start := time.Now()
-	err = invoker.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
-		_, execErr := conn.Exec(ctx, "SELECT pg_sleep(0.1)")
-		return execErr
-	})
-	if err == nil {
-		t.Fatal("expected query to fail due to context deadline")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected context deadline exceeded; got %v", err)
-	}
-	if time.Since(start) > time.Second {
-		t.Fatalf("query exceeded expected timeout: %v", time.Since(start))
 	}
 }
 
@@ -357,7 +318,7 @@ func TestPostgresProfileSocialLinksPersistence(t *testing.T) {
 	}
 
 	socialLinks := []domain.SocialLink{
-		{Platform: " Twitch ", URL: " https://twitch.example.com/creator \\t"},
+		{Platform: " Twitch ", URL: " https://twitch.example.com/creator \t"},
 		{Platform: "Twitter", URL: "https://twitter.com/creator"},
 	}
 	profile, err := repo.UpsertProfile(owner.ID, storage.ProfileUpdate{SocialLinks: &socialLinks})

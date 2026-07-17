@@ -92,18 +92,19 @@ contains no duplicate third-party modules across `third_party/` and `vendor/`.
 
 ## pgx sourcing modes
 
-BitRiver Live now treats pgx wiring as an explicit two-mode contract:
+BitRiver Live treats Go dependency wiring as an explicit two-mode contract:
 
-- **Stub mode (`stub`)**: default local/offline mode using `third_party/github.com/jackc/pgx/v5`. This keeps unit and JSON-driver workflows reproducible without reaching external module sources.
-- **Release mode (`real`)**: required for Postgres-capable binaries/images. Release/build jobs must point `github.com/jackc/pgx/v5` at a non-stub module source before compiling Postgres artifacts (for example, a maintained vendored real pgx mirror under `third_party/` or a controlled CI-only replace strategy), and must also unpin stubbed transitive replacements (for example `golang.org/x/text`) before running `go mod download`.
+- **Offline mode**: the default local verification path uses every checked-in `third_party` replacement with `GOPROXY=off`.
+- **Production mode**: `go run ./cmd/tools/production-module --output go.production.mod` creates an isolated module file that removes every local replacement. Production builds download that complete graph with `go mod download -modfile=go.production.mod all` and compile with `-modfile=go.production.mod`.
 
-Use the guard below whenever `BITRIVER_LIVE_STORAGE_DRIVER=postgres` is expected:
+Use both guards whenever `BITRIVER_LIVE_STORAGE_DRIVER=postgres` is expected:
 
 ```bash
-./scripts/check-postgres-pgx.sh postgres
+GOFLAGS="-modfile=$PWD/go.production.mod" ./scripts/check-postgres-pgx.sh postgres
+go run ./cmd/tools/verify-production-binary --require-module github.com/jackc/pgx/v5 ./bitriver-live
 ```
 
-The check fails if `pgx.IsStub` is `true`, which prevents publishing binaries/images that would boot with Postgres configured but only have stubbed driver wiring.
+The runtime guard rejects stub mode before compilation. The artifact guard reads Go build metadata and rejects any local replacement or a missing pgx module. Release Dockerfiles and workflows run these checks automatically.
 
 ## Go API
 
@@ -225,12 +226,11 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1 -ru
 Security scanning uses `govulncheck` with the same offline Go settings and
 the default module mode so the results track the pinned `third_party/`
 replacements declared in `go.mod`. Install the same pinned tool version used in
-CI (`v1.1.3`, matching `.github/workflows/go-unit-tests.yml`) instead of
-`@latest`; pinning is required so CI's Go 1.21 runners always use a compatible
-`govulncheck` release.
+CI (`v1.6.0`, matching `.github/workflows/go-unit-tests.yml`) instead of
+`@latest`; pinning keeps local and CI evidence comparable on Go 1.26.
 
 `./scripts/run-govulncheck.sh` enforces the current vulnerability policy for the
-pinned Go 1.21 toolchain and now writes structured artifacts under
+pinned Go 1.26.5 toolchain and writes structured artifacts under
 `.artifacts/govulncheck/<timestamp>/`:
 
 - `raw/*.jsonl`: full per-scan govulncheck JSON output for audit/history.
@@ -240,22 +240,18 @@ pinned Go 1.21 toolchain and now writes structured artifacts under
 
 Execution policy:
 
-- Reachable vulnerabilities in **non-stdlib modules** are disallowed, but only
+- Reachable vulnerabilities in modules or the Go standard library are disallowed, but only
   fail the run when they are **not** listed in
   `scripts/govulncheck-baseline.json`.
-- Reachable vulnerabilities that affect only the Go `stdlib` are logged as
-  informational while the repository remains on Go 1.21.
 - Baseline matching includes platform (`goos`/`goarch`) so OS-specific
   advisories (for example Windows-only findings) report meaningful matrix
   deltas.
-- Once the toolchain target in `go.mod` is raised beyond 1.21, stdlib findings
-  return to fail-closed behavior automatically.
 
 Use the helper script to run the root module scan plus checks for each replaced
 third-party module:
 
 ```bash
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@v1.1.3
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off ./scripts/run-govulncheck.sh
 ```
 
@@ -347,7 +343,7 @@ Run the installer-language guard to keep shipped milestones consistent across re
 
 CI enforces the same check in [`.github/workflows/docs-consistency.yml`](../.github/workflows/docs-consistency.yml).
 
-Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce SHA-pinned `actions/setup-go@<40-hex-sha>` usage (either directly in workflows or through the approved `./.github/actions/setup-go` composite action that pins `actions/setup-go` by SHA), `go-version-file: go.mod`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across the core Go workflows.
+Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce SHA-pinned `actions/setup-go@<40-hex-sha>` usage (either directly in workflows or through the approved `./.github/actions/setup-go` composite action that pins `actions/setup-go` by SHA), `go-version-file: .go-version`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across core verification workflows.
 
 ## Postgres storage layer
 

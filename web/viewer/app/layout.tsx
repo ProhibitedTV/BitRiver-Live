@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ReactNode } from "react";
+import Link from "next/link";
+import { ReactNode, Suspense } from "react";
 import "../styles/globals.css";
 import "../styles/navigation.css";
 import "../styles/viewer-shell.css";
@@ -37,12 +38,33 @@ export const metadata: Metadata = {
   }
 };
 
+function NavbarFallback() {
+  return (
+    <header className="navbar" aria-label="Loading primary navigation">
+      <div className="navbar-inner">
+        <div className="navbar-main">
+          <div className="navbar-branding">
+            <Link href="/" aria-label="BitRiver Live home" className="navbar-logo">
+              <span className="navbar-logo__icon" aria-hidden="true">BR</span>
+              <span className="navbar-logo__copy">
+                <span className="navbar-logo__text">BitRiver Live</span>
+              </span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
         <Providers>
-          <Navbar />
+          <Suspense fallback={<NavbarFallback />}>
+            <Navbar />
+          </Suspense>
           <ViewerShell>{children}</ViewerShell>
         </Providers>
       </body>

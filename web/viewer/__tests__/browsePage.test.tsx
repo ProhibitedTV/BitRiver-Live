@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { mockRouter, resetRouterMocks, setMockPathname, viewerApiMocks } from "../test/test-utils";
+import { resetRouterMocks, setMockPathname, viewerApiMocks } from "../test/test-utils";
 import BrowsePage from "../app/browse/page";
 import { directoryInputMatrix } from "../test/directory-input-matrix";
 
@@ -117,7 +117,7 @@ describe("BrowsePage", () => {
     expect((await screen.findAllByText("Deep Space Beats")).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Music" }));
 
-    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith("/browse?topic=Music"));
+    await waitFor(() => expect(window.location.search).toBe("?topic=Music"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true"));
   });
 
@@ -151,7 +151,7 @@ describe("BrowsePage", () => {
     await user.click(screen.getByRole("tab", { name: "New" }));
     await user.click(screen.getByRole("button", { name: "Reset" }));
 
-    expect(mockRouter.replace).toHaveBeenCalledWith("/browse");
+    expect(window.location.pathname + window.location.search).toBe("/browse");
     await waitFor(() => expect(screen.getByRole("tab", { name: "Live" })).toHaveAttribute("aria-selected", "true"));
   });
 });

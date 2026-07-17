@@ -10,7 +10,7 @@ cd "$ROOT_DIR"
 
 export GOTOOLCHAIN GOPROXY GOSUMDB
 
-GOVULNCHECK_VERSION="v1.1.3"
+GOVULNCHECK_VERSION="v1.6.0"
 BASELINE_FILE="${GOVULNCHECK_BASELINE:-${ROOT_DIR}/scripts/govulncheck-baseline.json}"
 OUTPUT_ROOT="${GOVULNCHECK_OUT_DIR:-${ROOT_DIR}/.artifacts/govulncheck}"
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
@@ -121,8 +121,38 @@ def load_json(path: pathlib.Path):
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
+def load_json_stream(path: pathlib.Path):
+    data = path.read_text(encoding="utf-8")
+    decoder = json.JSONDecoder()
+    offset = 0
+    while offset < len(data):
+        while offset < len(data) and data[offset].isspace():
+            offset += 1
+        if offset >= len(data):
+            return
+        event, offset = decoder.raw_decode(data, offset)
+        if isinstance(event, dict):
+            yield event
+
 baseline = load_json(baseline_path)
 entries = baseline.get("entries", [])
+
+if not isinstance(entries, list):
+    raise SystemExit("govulncheck baseline entries must be a list")
+
+today = datetime.now(timezone.utc).date()
+for index, entry in enumerate(entries):
+    if not isinstance(entry, dict):
+        raise SystemExit(f"govulncheck baseline entry {index} must be an object")
+    for field in ("id", "owner", "reason", "tracking_issue", "expires"):
+        if not str(entry.get(field, "")).strip():
+            raise SystemExit(f"govulncheck baseline entry {index} missing {field}")
+    try:
+        expires = datetime.strptime(str(entry["expires"]), "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise SystemExit(f"govulncheck baseline entry {index} has invalid expires date") from exc
+    if expires < today:
+        raise SystemExit(f"govulncheck baseline entry {index} expired on {expires.isoformat()}")
 
 def matches(entry, finding):
     def field(name):
@@ -152,70 +182,59 @@ with scan_index_path.open("r", encoding="utf-8") as f:
 
 for label, scan_file in scan_files:
     osv_modules = {}
-    with scan_file.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+    for event in load_json_stream(scan_file):
+        osv = event.get("osv")
+        if isinstance(osv, dict) and osv.get("id"):
+            modules = set()
+            for affected in osv.get("affected", []) or []:
+                if not isinstance(affected, dict):
+                    continue
+                module = affected.get("module")
+                package = affected.get("package")
+                if isinstance(module, dict) and module.get("path"):
+                    modules.add(module["path"])
+                elif isinstance(package, dict) and package.get("name"):
+                    modules.add(package["name"])
+            if modules:
+                osv_modules[osv["id"]] = sorted(modules)
+            continue
 
-            osv = event.get("osv")
-            if isinstance(osv, dict) and osv.get("id"):
-                modules = set()
-                for affected in osv.get("affected", []) or []:
-                    module_path = ((affected or {}).get("module") or {}).get("path")
-                    if module_path:
-                        modules.add(module_path)
-                if modules:
-                    osv_modules[osv["id"]] = sorted(modules)
-                continue
+        finding = event.get("finding")
+        if not isinstance(finding, dict):
+            continue
 
-            finding = event.get("finding")
-            if not isinstance(finding, dict):
-                continue
+        vuln_id = finding.get("osv")
+        if not vuln_id:
+            continue
 
-            vuln_id = finding.get("osv")
-            if not vuln_id:
-                continue
+        modules = list(osv_modules.get(vuln_id, []))
+        if not modules:
+            trace = finding.get("trace") or []
+            first_frame = trace[0] if trace and isinstance(trace[0], dict) else {}
+            module = first_frame.get("module")
+            if isinstance(module, dict):
+                module = module.get("path")
+            if module:
+                modules = [module]
+        if not modules:
+            modules = ["unknown"]
 
-            modules = list(osv_modules.get(vuln_id, []))
-            if not modules:
-                trace = finding.get("trace") or []
-                if trace:
-                    module_name = (trace[0] or {}).get("module")
-                    if module_name:
-                        modules = [module_name]
-            if not modules:
-                modules = ["unknown"]
+        for module in modules:
+            key = (vuln_id, module, label, goos, goarch)
+            all_findings[key] = {
+                "id": vuln_id,
+                "module": module,
+                "scan": label,
+                "goos": goos,
+                "goarch": goarch,
+            }
 
-            for module in modules:
-                key = (vuln_id, module, label, goos, goarch)
-                all_findings[key] = {
-                    "id": vuln_id,
-                    "module": module,
-                    "scan": label,
-                    "goos": goos,
-                    "goarch": goarch,
-                }
-
-is_go121 = go_version.startswith("1.21")
 processed = []
 new_disallowed = []
 baselined_disallowed = []
 informational = []
 
 for finding in sorted(all_findings.values(), key=lambda item: (item["id"], item["scan"], item["module"])):
-    only_stdlib = finding["module"] == "stdlib"
-    if is_go121 and only_stdlib:
-        finding["policy"] = "informational-stdlib-on-go1.21"
-        finding["status"] = "informational"
-        informational.append(finding)
-        processed.append(finding)
-        continue
-
     finding["policy"] = "disallowed-reachable"
     is_baselined = any(matches(entry, finding) for entry in entries)
     if is_baselined:

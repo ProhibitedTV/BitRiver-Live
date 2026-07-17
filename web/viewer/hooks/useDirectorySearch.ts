@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef } from "react";
 import { normalizeDirectoryQuery, normalizeDirectoryTopic, resolveDirectoryNavigation } from "../lib/directory-state";
 
@@ -10,7 +10,6 @@ export function useDirectorySearch({
   fallbackPathname: string;
 }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname() ?? fallbackPathname;
   const searchParamQuery = useMemo(() => normalizeDirectoryQuery(searchParams.get("q")), [searchParams]);
   const searchParamTopic = useMemo(() => normalizeDirectoryTopic(searchParams.get("topic")), [searchParams]);
@@ -34,18 +33,15 @@ export function useDirectorySearch({
         previousTopic: lastTopicFromParams.current,
       });
 
-      lastQueryFromParams.current = next.normalizedQuery;
-      lastTopicFromParams.current = next.normalizedTopic;
-
       if (next.useReplace) {
-        router.replace(next.url);
+        window.history.replaceState(null, "", next.url);
       } else {
-        router.push(next.url);
+        window.history.pushState(null, "", next.url);
       }
 
       return next;
     },
-    [pathname, router, searchParams]
+    [pathname, searchParams]
   );
 
   const navigateWithQuery = useCallback(

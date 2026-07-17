@@ -1,4 +1,4 @@
-import { guestAuthState, mockAnonymousUser, mockRouter, mockUseAuth, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
+import { guestAuthState, mockAnonymousUser, mockUseAuth, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import DirectoryPage from "../app/page";
@@ -85,6 +85,7 @@ describe("DirectoryPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetRouterMocks();
+    window.history.replaceState({}, "", "/");
     mockAnonymousUser();
     const sliceResponse = {
       channels: [],
@@ -169,13 +170,15 @@ describe("DirectoryPage", () => {
   test("clearing search returns to the default directory route", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
     const user = userEvent.setup();
+    window.history.replaceState({}, "", "/?q=retro");
 
     await renderResolvedDirectoryPage("retro");
 
     const clearButton = await screen.findByRole("button", { name: /clear/i });
     await user.click(clearButton);
 
-    expect(mockRouter.replace).toHaveBeenCalledWith("/");
+    expect(window.location.pathname).toBe("/");
+    expect(window.location.search).toBe("");
   });
 
 
@@ -258,7 +261,7 @@ describe("DirectoryPage", () => {
   });
 
   test("keeps DirectoryPage lightweight and normalizes query before passing to shell", async () => {
-    const page = DirectoryPage({ searchParams: { q: "   retro   " } });
+    const page = await DirectoryPage({ searchParams: Promise.resolve({ q: "   retro   " }) });
 
     expect(page.type).toBe(DirectoryPageShell);
     expect(page.props.query).toBe("retro");

@@ -72,6 +72,26 @@ func shellPath(path string) string {
 	return clean
 }
 
+func copyQuickstartScripts(t *testing.T, repoRoot, tempDir string) string {
+	t.Helper()
+	scriptDir := filepath.Join(tempDir, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir: %v", err)
+	}
+	for _, name := range []string{"quickstart.sh", "check-go-toolchain.sh"} {
+		source := filepath.Join(repoRoot, "scripts", name)
+		destination := filepath.Join(scriptDir, name)
+		contents, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if err := os.WriteFile(destination, contents, 0o755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return filepath.Join(scriptDir, "quickstart.sh")
+}
+
 func TestQuickstartDelegatesToCli(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -80,22 +100,9 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	repoRoot := filepath.Dir(wd)
 	tempDir := t.TempDir()
 
-	scriptDir := filepath.Join(tempDir, "scripts")
-	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
-		t.Fatalf("create script dir: %v", err)
-	}
+	quickstartDst := copyQuickstartScripts(t, repoRoot, tempDir)
 	if err := os.MkdirAll(filepath.Join(tempDir, "cmd", "bitriver"), 0o755); err != nil {
 		t.Fatalf("create fake cli dir: %v", err)
-	}
-
-	quickstartSrc := filepath.Join(repoRoot, "scripts", "quickstart.sh")
-	quickstartDst := filepath.Join(scriptDir, "quickstart.sh")
-	scriptBytes, err := os.ReadFile(quickstartSrc)
-	if err != nil {
-		t.Fatalf("read quickstart: %v", err)
-	}
-	if err := os.WriteFile(quickstartDst, scriptBytes, 0o755); err != nil {
-		t.Fatalf("write quickstart: %v", err)
 	}
 
 	logPath := filepath.Join(tempDir, "go-log.txt")
@@ -104,7 +111,7 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 		t.Fatalf("create stub bin: %v", err)
 	}
 	goStubPath := filepath.Join(stubBin, "go")
-	goStubBytes := []byte("#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n")
+	goStubBytes := []byte("#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"$*\" == \"env GOVERSION\" ]]; then echo go1.26.5; exit 0; fi\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n")
 	if err := os.WriteFile(goStubPath, goStubBytes, 0o755); err != nil {
 		t.Fatalf("write go stub: %v", err)
 	}
@@ -150,19 +157,7 @@ func TestQuickstartFailsWhenCliSourcesMissing(t *testing.T) {
 	repoRoot := filepath.Dir(wd)
 	tempDir := t.TempDir()
 
-	scriptDir := filepath.Join(tempDir, "scripts")
-	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
-		t.Fatalf("create script dir: %v", err)
-	}
-	quickstartSrc := filepath.Join(repoRoot, "scripts", "quickstart.sh")
-	quickstartDst := filepath.Join(scriptDir, "quickstart.sh")
-	scriptBytes, err := os.ReadFile(quickstartSrc)
-	if err != nil {
-		t.Fatalf("read quickstart: %v", err)
-	}
-	if err := os.WriteFile(quickstartDst, scriptBytes, 0o755); err != nil {
-		t.Fatalf("write quickstart: %v", err)
-	}
+	quickstartDst := copyQuickstartScripts(t, repoRoot, tempDir)
 
 	bash := testBash(t)
 	cmd := exec.Command(bash, shellPath(quickstartDst))
@@ -375,7 +370,7 @@ func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	}
 }
 
-func TestDockerfileDropsStubbedPuddleInRealPgxMode(t *testing.T) {
+func TestDockerfileUsesVerifiedProductionModuleGraph(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -389,14 +384,18 @@ func TestDockerfileDropsStubbedPuddleInRealPgxMode(t *testing.T) {
 	}
 
 	dockerfile := string(content)
-	if !strings.Contains(dockerfile, `go mod edit -dropreplace=github.com/jackc/pgx/v5;`) {
-		t.Fatalf("expected real pgx mode to drop the local pgx replacement")
+	if strings.Contains(dockerfile, "go mod edit -dropreplace=") {
+		t.Fatal("production dependency policy must not use a hand-maintained replacement list")
 	}
-	if !strings.Contains(dockerfile, `go mod edit -dropreplace=github.com/jackc/puddle/v2;`) {
-		t.Fatalf("expected real pgx mode to drop the local puddle replacement")
-	}
-	if !strings.Contains(dockerfile, `go mod edit -dropreplace=golang.org/x/text;`) {
-		t.Fatalf("expected real pgx mode to drop the local x/text replacement")
+	for _, required := range []string{
+		"go run ./cmd/tools/production-module --output go.production.mod",
+		"go mod download -modfile=go.production.mod all",
+		"GOFLAGS=\"-buildvcs=false -modfile=/src/go.production.mod\" ./scripts/check-postgres-pgx.sh postgres",
+		"go run ./cmd/tools/verify-production-binary --require-module github.com/jackc/pgx/v5 /out/bitriver-live",
+	} {
+		if !strings.Contains(dockerfile, required) {
+			t.Fatalf("expected production Dockerfile invariant %q", required)
+		}
 	}
 }
 

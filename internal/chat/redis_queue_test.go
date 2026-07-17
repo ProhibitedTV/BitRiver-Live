@@ -390,13 +390,10 @@ func TestRedisQueueEnsureGroupRecoversAfterTransientFailure(t *testing.T) {
 		_ = srv.Close()
 	})
 
-	delegate, err := redis.NewUniversalClient(&redis.UniversalOptions{
+	delegate := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:    []string{srv.Addr()},
 		Password: "secret",
 	})
-	if err != nil {
-		t.Fatalf("create redis client: %v", err)
-	}
 	client := newFlakyGroupClient(delegate)
 
 	queue := &redisQueue{
@@ -527,12 +524,12 @@ var errTransientGroupCreate = errors.New("transient group creation failure")
 var errSimulatedXAddFailure = errors.New("simulated xadd failure")
 
 type flakyGroupClient struct {
-	delegate redis.UniversalClient
+	delegate redisCommandClient
 	mu       sync.Mutex
 	failNext bool
 }
 
-func newFlakyGroupClient(delegate redis.UniversalClient) *flakyGroupClient {
+func newFlakyGroupClient(delegate redisCommandClient) *flakyGroupClient {
 	return &flakyGroupClient{delegate: delegate, failNext: true}
 }
 
@@ -540,9 +537,11 @@ func (c *flakyGroupClient) Close() error {
 	return nil
 }
 
-func (c *flakyGroupClient) Do(ctx context.Context, args ...interface{}) (interface{}, error) {
+func (c *flakyGroupClient) Do(ctx context.Context, args ...interface{}) *redis.Cmd {
 	if c.shouldFail(args) {
-		return nil, errTransientGroupCreate
+		cmd := redis.NewCmd(ctx, args...)
+		cmd.SetErr(errTransientGroupCreate)
+		return cmd
 	}
 	return c.delegate.Do(ctx, args...)
 }
@@ -565,17 +564,17 @@ func (c *flakyGroupClient) shouldFail(args []interface{}) bool {
 }
 
 type failingXAddClient struct {
-	redis.UniversalClient
-	mu      sync.Mutex
-	allowed int
-	acks    []string
+	delegate redisCommandClient
+	mu       sync.Mutex
+	allowed  int
+	acks     []string
 }
 
-func newFailingXAddClient(delegate redis.UniversalClient, allowed int) *failingXAddClient {
-	return &failingXAddClient{UniversalClient: delegate, allowed: allowed}
+func newFailingXAddClient(delegate redisCommandClient, allowed int) *failingXAddClient {
+	return &failingXAddClient{delegate: delegate, allowed: allowed}
 }
 
-func (c *failingXAddClient) Do(ctx context.Context, args ...interface{}) (interface{}, error) {
+func (c *failingXAddClient) Do(ctx context.Context, args ...interface{}) *redis.Cmd {
 	if len(args) > 0 {
 		if cmd, _ := args[0].(string); strings.EqualFold(cmd, "xadd") {
 			c.mu.Lock()
@@ -583,7 +582,9 @@ func (c *failingXAddClient) Do(ctx context.Context, args ...interface{}) (interf
 			fail := c.allowed < 0
 			c.mu.Unlock()
 			if fail {
-				return nil, errSimulatedXAddFailure
+				cmd := redis.NewCmd(ctx, args...)
+				cmd.SetErr(errSimulatedXAddFailure)
+				return cmd
 			}
 		} else if cmd, _ := args[0].(string); strings.EqualFold(cmd, "xack") {
 			if len(args) > 3 {
@@ -601,7 +602,7 @@ func (c *failingXAddClient) Do(ctx context.Context, args ...interface{}) (interf
 			}
 		}
 	}
-	return c.UniversalClient.Do(ctx, args...)
+	return c.delegate.Do(ctx, args...)
 }
 
 func (c *failingXAddClient) AckIDs() []string {

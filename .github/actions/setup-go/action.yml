@@ -7,9 +7,9 @@ inputs:
     required: false
     default: '1'
   go-version-file:
-    description: Path to the go.mod file for selecting Go version.
+    description: Path to the file containing the exact CI Go version.
     required: false
-    default: go.mod
+    default: .go-version
   cache:
     description: Enable Go build/module caching.
     required: false

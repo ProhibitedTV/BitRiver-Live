@@ -1,8 +1,8 @@
 "use client";
 
-import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { KeyboardEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChannelStudioNav } from "../../../components/ChannelStudioNav";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
@@ -80,8 +80,16 @@ function resolveTabFromUrl(searchParams: URLSearchParams, hash: string): Channel
   return parseChannelTab(searchParams.get("tab")) ?? parseChannelTab(hash.replace(/^#/, "")) ?? DEFAULT_CHANNEL_TAB;
 }
 
-export default function ChannelPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function ChannelPage() {
+  return (
+    <Suspense fallback={<main className="container" aria-busy="true" />}>
+      <ChannelPageContent />
+    </Suspense>
+  );
+}
+
+function ChannelPageContent() {
+  const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<ChannelPlaybackResponse | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -94,13 +102,13 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const tabSearchParam = searchParams.get("tab");
   const { user } = useAuth();
-  const previousUserIdRef = useRef<string | undefined>();
-  const previousChannelIdRef = useRef<string | undefined>();
-  const refreshIntervalRef = useRef<NodeJS.Timeout | undefined>();
+  const previousUserIdRef = useRef<string | undefined>(undefined);
+  const previousChannelIdRef = useRef<string | undefined>(undefined);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const cancelledRef = useRef(false);
   const vodCancelledRef = useRef(false);
-  const vodRequestedChannelIdRef = useRef<string | undefined>();
-  const previousVodChannelIdRef = useRef<string | undefined>();
+  const vodRequestedChannelIdRef = useRef<string | undefined>(undefined);
+  const previousVodChannelIdRef = useRef<string | undefined>(undefined);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const setTabFromCurrentUrl = useCallback(() => {
@@ -373,7 +381,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
             <div className="channel-player">
               <Player
                 playback={data.playback}
-                channelId={params.id}
+                channelId={id}
                 live={data.live}
                 liveState={data.channel.liveState}
                 loading={loading}

@@ -1,103 +1,110 @@
 # TASKS
 
-## Scoped change: secret-safe production release evidence (#1294)
+## Scoped change: supported production runtime baselines (#1295)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Establish the release secret boundary
+- [x] Task 1 - Establish supported baselines and migration boundaries
   - Acceptance criteria:
-    - `PLAN.md` records scope, assumptions, risks, tests, and contract boundaries.
-    - `SPEC.md` identifies secret-safe release evidence as the current success target.
-    - The current release, quickstart, canary, diagnostics, and packaging artifact flows are reviewed before implementation.
+    - `PLAN.md` records selected versions, dependency-source policy, risks, tests, and boundaries.
+    - `SPEC.md` identifies supported runtimes and production dependency provenance as the current target.
+    - Existing Docker, CI, installer, release, viewer, and local replacement paths are inventoried before implementation.
   - Check:
-    - Read-only workflow, validation-script, release-gate, canary, artifact, and documentation review completed.
+    - Read-only Docker, CI, installer, release, viewer, and replacement-path inventory completed.
+    - Official support policy and registry metadata reviewed for the selected runtime and tool versions.
     - `git diff --check -- PLAN.md TASKS.md SPEC.md` passed.
 
-- [x] Task 2 - Add a release evidence scanner
+- [x] Task 2 - Align Go toolchains and production dependency provenance
   - Acceptance criteria:
-    - A reusable scanner rejects forbidden secret files, known sentinel values, private keys, credential-bearing URLs, and secret-shaped assignments.
-    - Supported archives are inspected recursively.
-    - Findings identify the file and rule without printing the secret value.
-    - Automated tests cover safe and unsafe fixtures.
+    - `go.mod`, CI, Dockerfiles, installers, and contributor docs agree on Go 1.26.
+    - One tested helper creates the production modfile by removing every local `third_party` replacement.
+    - Release binaries and Postgres-capable images fail inspection if pgx is stubbed or any local replacement is linked.
+    - Direct upstream Go dependencies and checksums are refreshed intentionally.
   - Check:
-    - `bash -n scripts/scan-release-evidence.sh` passed.
-    - `go test ./scripts -run ReleaseEvidence -count=1 -timeout=120s` passed (workspace-local Go cache used because the host default cache is damaged).
+    - `go test ./... -count=1 -timeout=120s` passed under the pinned `golang:1.26.5` container with offline module settings.
+    - A Go 1.26.5 upstream-graph build of `cmd/server` passed and `verify-production-binary --require-module github.com/jackc/pgx/v5` confirmed real pgx with no local replacements.
+    - Production-module, binary-inspection, runtime-alignment, Redis chat/session, and scripts suites passed.
+    - Shell syntax, Go workflow consistency, checksum refresh, and `git diff --check` passed.
 
-- [x] Task 3 - Keep production secret validation job-local
+- [x] Task 3 - Upgrade the viewer runtime and toolchain
   - Acceptance criteria:
-    - The release workflow no longer uploads or downloads a populated `.env`.
-    - Missing, malformed, digest, and `_FILE`-compatible secret inputs still fail in the owning job.
-    - Validation output is scanned and only redacted status evidence is retained.
-    - Temporary secret files are removed in an always-running cleanup step.
+    - Viewer uses Node 24, Next.js 16, React 19, TypeScript 6, ESLint 9 flat config, and compatible maintained test tooling.
+    - Removed commands and deprecated configuration are replaced.
+    - Lockfile review and a blocking high-severity npm audit pass.
   - Check:
-    - No `release-env`, `.env` artifact path, or verified-environment download remains in `.github/workflows/release.yml`.
-    - `go test ./cmd/bitriver -run 'TestValidateEnv.*File|TestResolveEnv.*File' -count=1 -timeout=120s` passed, covering direct and `_FILE` secret resolution behavior.
-    - `git diff --check -- .github/workflows/release.yml scripts/scan-release-evidence.sh scripts/release_evidence_test.go PLAN.md SPEC.md TASKS.md` passed.
+    - Clean `npm ci` completed under Node 24 and the reviewed lockfile resolves Next.js 16.2.10 with React 19.2.7.
+    - `npm run lint` passed with zero warnings and all 214 Jest tests passed.
+    - `npm audit --audit-level=high` passed; only two moderate PostCSS findings remain and npm offers no non-breaking fix for the current Next.js line.
+    - `npm run build` passed compilation, TypeScript 6 validation, static generation, and route generation after the Next.js 16 migrations.
 
-- [x] Task 4 - Gate release artifacts and retained evidence
+- [x] Task 4 - Preserve viewer routing and standalone deployment
   - Acceptance criteria:
-    - OME freshness uses non-secret fixture inputs and a temporary output.
-    - Release artifacts are inventoried and scanned before publication.
-    - Temporary build and evidence artifacts have explicit short retention periods.
-    - Static tests prevent reintroducing `release-env` transfer or unscanned release evidence.
+    - Next.js request API migrations compile without unsafe casts or duplicate route state.
+    - `/viewer` base-path behavior, proxy navigation, and standalone Docker packaging remain functional.
+    - Playwright coverage exercises critical public and authenticated shell paths.
   - Check:
-    - `go test ./scripts -run 'Release(Evidence|Workflow)' -count=1 -timeout=120s` passed.
-    - `js-yaml` parsed `.github/workflows/release.yml` with all 11 jobs present.
-    - All 10 `upload-artifact` steps have explicit retention; temporary build artifacts retain 7 days and evidence retains 3 days.
-    - A temporary OME render from `deploy/.env.example` byte-matches the refreshed tracked generated XML.
-    - `git diff --check` passed.
+    - `npm run build` passed Next.js 16 compilation, TypeScript validation, route generation, and static prerendering.
+    - All 36 Playwright tests passed with Chromium 149, including desktop/mobile navigation, HLS/native playback, chat, auth, creator, upload, and accessibility paths.
+    - The Node 24 viewer Dockerfile built successfully with a 7.78 kB incremental context after adding `.dockerignore` (the first build sent 530 MB of local artifacts).
+    - A temporary container reported Node v24.18.0 and returned HTTP 200 with BitRiver content from `/viewer`.
 
-- [x] Task 5 - Document the release threat model
+- [x] Task 5 - Enforce dependency maintenance policy
   - Acceptance criteria:
-    - Security and production release docs prohibit secret-bearing CI artifacts and logs.
-    - Docs define allowed redacted evidence, cleanup expectations, sentinel scanning, and `_FILE` compatibility.
-    - Release-gate documentation names the retained artifact inventory and scan result.
+    - Dependabot creates grouped, reviewable Go and viewer updates.
+    - High/critical dependency findings block CI and release unless a complete time-bounded exception exists.
+    - Support windows, update cadence, provenance rules, and operator upgrade notes are documented.
   - Check:
-    - Stale guidance to persist or reuse a verified release `.env` was removed from source-of-truth docs.
-    - `git diff --check -- docs/contract.md docs/production-release.md docs/release-gates.md docs/secrets-hardening.md docs/security.md PLAN.md TASKS.md` passed.
-    - Contract docs now require tracked and packaged OME XML to remain placeholder-only and deployment-time renders to remain local.
+    - Workflow policy, runtime-alignment, Dependabot grouping, and exception-policy tests passed under Go 1.26.5.
+    - Changed Dependabot and GitHub Actions YAML parsed successfully; shell syntax checks passed.
+    - `npm audit --audit-level=high` passed with only the two documented moderate PostCSS findings and no valid non-breaking fix.
+    - Pinned `govulncheck v1.6.0` completed every root/offline-mirror scan with zero reachable findings and an empty exception baseline.
+    - The live scan exposed a v1.6 pretty-printed JSON stream/schema change; the parser now decodes concatenated objects and supports both module and package identities.
 
-- [-] Task 6 - Verify, publish, and close #1294
+- [-] Task 6 - Verify, publish, and close #1295
   - Acceptance criteria:
-    - Focused tests, repository verification, and diff hygiene pass or blockers are recorded.
-    - Pull request checks pass before squash merge.
+    - Full repository, Postgres, viewer, Compose, quickstart, and release smoke gates pass or blockers are recorded precisely.
+    - Pull-request checks pass before squash merge.
     - The issue is closed by the merged pull request and local `main` is synchronized.
   - Check:
-    - `go test ./... -count=1 -timeout=120s` passed with a workspace-local Go cache.
-    - Focused scanner/workflow and `_FILE` validation suites passed.
-    - `js-yaml` parsed the 11-job release workflow and `git diff --check` passed.
-    - `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed.
-    - `./scripts/test-quickstart.sh` passed after release-mode images built, migrations completed, all services became healthy, and API/viewer probes succeeded.
-    - `./scripts/verify.sh` passed the go.sum and CI contract phases, then stopped at env placeholder hygiene because this host has no Python 3 interpreter; equivalent available gates were run separately and CI remains required before merge.
+    - Full offline Go 1.26.5 suite passed, including the offline mirrors and new runtime/dependency policy tests.
+    - Full upstream production module suite passed with Postgres tags against the migrated canonical Postgres service.
+    - Viewer lint, all 214 Jest tests, blocking high-severity audit, production build, all 36 Playwright tests, and standalone Node 24 container smoke passed.
+    - Canonical Compose config, all five custom image builds, service health, API/controller/transcoder probes, and `/viewer` proxy smoke passed; the final rebuilt API image remained healthy.
+    - Pinned `govulncheck v1.6.0` completed with zero reachable findings; generated contract documentation and CRLF-safe `--check` passed.
+    - Fresh continuation checks on 2026-07-16 passed: full offline Go 1.26.5 suite and architecture graph in the pinned container; viewer lint, 214 Jest tests, high-severity audit, and production build under Node 24; Compose config and contract invariants; and an isolated full quickstart image/build/health/endpoint smoke.
+    - The one-line `./scripts/verify.sh --viewer` wrapper could not run directly because the Windows `bash` shim targets an uninstalled WSL distribution and the host Go 1.25.6 binary is older than the module baseline. Its constituent checks were run with Git Bash, the bundled Python runtime, Node 24, Docker, and the pinned Go 1.26.5 container; the isolated quickstart avoided touching the root `.env` or persistent volumes.
+    - Publication is now the only remaining step: create the scoped commit and pull request, require green checks, squash-merge, confirm #1295 closes, and synchronize local `main`.
 
 ### Execution log
 - Task 1 analysis:
-  - Confirmed `.github/workflows/release.yml` creates a fully populated production `.env`, uploads it as `release-env`, and downloads it in `go-tests` for OME freshness validation.
-  - Confirmed downstream release jobs only require the validation gate; they do not need production credential values.
-  - Confirmed existing security guidance permits a generated CI `.env` artifact and must be corrected.
-  - Kept the canonical Compose, root environment, and generated OME deployment contract out of scope.
+  - Confirmed the repository declares Go 1.21 while production Go containers already drifted to 1.25.7 and the host uses 1.25.6.
+  - Confirmed Next.js 13.5.11 is unsupported, Node 20 is used in viewer CI/containers, and `next lint` must be replaced for Next.js 16.
+  - Found three App Router request-API call sites requiring migration and no custom webpack surface.
+  - Found eight local Go replacements while the API Dockerfile drops only pgx, puddle, and x/text; release binary jobs currently use the local module graph with `GOPROXY=off`.
+  - Selected supported Go 1.26.5, Node 24 LTS, Next.js 16.2.10, React 19.2.7, TypeScript 6.0.3, and ESLint 9.39.5 baselines from official support policy and package metadata.
 - Task 2 implementation:
-  - Added a reusable release evidence scanner with exact known-value detection, forbidden filename checks, private-key and secret-shape rules, and recursive archive inspection.
-  - Added a deterministic SHA-256 inventory mode and diagnostics that report only rule identifiers and relative paths.
-  - Added Go fixtures for safe redacted evidence, direct leak classes, output non-disclosure, and an archived sentinel leak.
+  - Added an exact `.go-version`, aligned all Go builder images and offline mirror modules, refreshed direct upstream dependencies and checksums, and centralized CI setup on the pinned toolchain.
+  - Replaced partial Docker `-dropreplace` lists with a tested production-module generator that removes every local mirror without mutating `go.mod`.
+  - Added build-metadata inspection to release binaries, source installers, and all Go Dockerfiles; Postgres artifacts additionally require an upstream pgx module.
+  - The first real-module compile exposed that both Redis queue and session-store code had been written against a divergent local stub API. Aligned application code, the mirror, and test doubles with upstream `go-redis` command semantics.
+  - Added a shared Unix Go minimum-version guard, equivalent PowerShell enforcement, runtime drift tests, and production dependency provenance documentation.
 - Task 3 implementation:
-  - Replaced the cross-job `.env` artifact with a runner-temporary validation input and exact-value sentinel list.
-  - Captured validation output privately, scanned it before display, retained only fixed-schema status evidence, and added an always-running cleanup step.
-  - Removed the downstream environment artifact download while preserving production validation, digest enforcement, and existing `_FILE` resolution behavior.
-- Task 4 analysis:
-  - Placeholder OME rendering exposed a credential-shaped access token in the tracked generated XML, which is copied into release packages.
-  - Expanded the scoped contract work only enough to refresh that generated file from `deploy/.env.example`; Compose and root `.env` remain untouched.
+  - Upgraded the viewer to Node 24, Next.js 16.2.10, React 19.2.7, TypeScript 6.0.3, ESLint 9 flat config, Jest 30, Playwright 1.61.1, and compatible current types/testing libraries.
+  - Kept the React Compiler-specific `set-state-in-effect` rule disabled until compiler adoption is scoped, while fixing stricter ref, immutability, memoization, and dependency findings.
+  - Replaced browser-global mutation in tests with a small navigation boundary, enabled the React 19 act environment, isolated server API tests under the Node Jest environment, and ignored generated standalone output in Jest discovery.
+  - Migrated dynamic client routes to `useParams`, made server `searchParams` asynchronous, and added stable Suspense boundaries for search-parameter consumers.
 - Task 4 implementation:
-  - Added non-mutating OME freshness validation against `deploy/.env.example` and sanitized the tracked generated XML to that canonical placeholder render.
-  - Added final downloaded-artifact and publication-payload scans plus a SHA-256 artifact inventory before GitHub Release publication.
-  - Added explicit short retention to every workflow artifact and static tests that prevent plaintext env transfer, missing scans, or retention drift.
-- Task 5 documentation:
-  - Replaced unsafe guidance to upload a generated CI environment file with a job-local validation and cleanup model.
-  - Added release CI threat boundaries, sentinel and artifact scanning, evidence retention, rotation response, and `_FILE` compatibility guidance.
-  - Updated release-gate and deployment contract docs for redacted evidence, inventory review, and placeholder-only packaged OME config.
-- Task 6 verification:
-  - Hardened scanner review added mixed-line bypass fixtures, XML credential detection, and a credential-only sentinel allowlist to avoid false positives from ordinary release values.
-  - The first quickstart attempt inherited local offline Go settings and failed while downloading real pgx; rerunning the canonical command without those overrides passed end to end.
-  - Smoke cleanup restored the tracked generated XML from `HEAD`, so the canonical placeholder render was reapplied and rescanned afterward.
-  - PR #1309 Shell lint found three `SC2016` info findings for intentionally literal `${` placeholder checks; replaced single-quoted literals with escaped double-quoted literals without changing scanner behavior.
-  - The next CI run passed Shell lint and Ubuntu, then macOS Go tests exposed Bash 3.2 incompatibility in `${value,,}` lowercasing; replaced it with portable `tr` lowercasing.
+  - Added stable route-level Suspense boundaries for every `useSearchParams` consumer and preserved a branded navigation fallback during hydration.
+  - Fixed a real Browse reset race by treating refs as last-observed URL state and using Next.js 16's native History API integration for same-page query navigation.
+  - Updated playback browser assertions to accept both native HLS URLs and hls.js blob sources, which are both valid under current Chromium.
+  - Added a viewer `.dockerignore`, reducing the Docker context from 530 MB of local dependencies/build output to a minimal source context.
+- Task 5 implementation:
+  - Added grouped weekly Dependabot updates for Go production dependencies and separate viewer runtime/tooling review lanes.
+  - Made high-severity npm audits blocking in viewer, main CI, and release artifact jobs; critical findings remain unconditionally unreleasable.
+  - Upgraded the pinned Go vulnerability scanner, removed the obsolete Go 1.21 exception, and made baseline entries complete, owner-assigned, tracked, and expiry-validated.
+  - Hardened the scanner parser against the actual v1.6 JSON stream and OSV package schema after exercising the live tool, not only workflow fixtures.
+- Task 6 verification and hardening:
+  - Replaced the chat queue's oversized Redis dependency with a queue-owned command interface and made its RESP2 wire contract explicit.
+  - Corrected the Redis test server to return unsupported-command errors without closing healthy connections, with a raw protocol regression test.
+  - Ran real-pgx storage tests and fixed cleanup ordering, lazy-row context lifetime, nested appeal query row ownership, subscription status/column parity, and stub-only test isolation.
+  - Fixed contract-document generation so CRLF templates do not pollute generated values or fail checks solely because of checkout line endings.

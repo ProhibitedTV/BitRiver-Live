@@ -1,3 +1,5 @@
+/** @jest-environment node */
+
 import { fetchChannelUploads, fetchDirectory, publishRecording, reportChatMessage, searchDirectory } from "../lib/viewer-api";
 
 describe("viewer api", () => {
@@ -70,14 +72,8 @@ describe("viewer api", () => {
   });
 
   it("uses the internal API origin for server-side relative requests when no public base is configured", async () => {
-    const originalWindow = global.window;
     const originalApiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-    // Simulate server-side rendering where relative fetch targets are invalid.
-    Object.defineProperty(global, "window", {
-      configurable: true,
-      value: undefined,
-    });
     process.env.NEXT_PUBLIC_API_BASE_URL = '""';
 
     try {
@@ -88,10 +84,6 @@ describe("viewer api", () => {
         expect.objectContaining({ credentials: "include" }),
       );
     } finally {
-      Object.defineProperty(global, "window", {
-        configurable: true,
-        value: originalWindow,
-      });
       if (originalApiBase === undefined) {
         delete process.env.NEXT_PUBLIC_API_BASE_URL;
       } else {

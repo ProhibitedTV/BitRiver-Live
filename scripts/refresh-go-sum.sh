@@ -15,33 +15,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cat >"$temp_dir/go.mod" <<'MOD'
-module bitriver-live-go-sum-sync
-
-go 1.21
-
-require (
-	github.com/jackc/pgpassfile v1.0.0
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a
-	github.com/jackc/pgx/v5 v5.7.4
-	github.com/jackc/puddle/v2 v2.2.2
-	github.com/redis/go-redis/v9 v9.5.1
-	golang.org/x/crypto v0.27.0
-	golang.org/x/sync v0.7.0
-	golang.org/x/text v0.18.0
-)
-MOD
+production_mod="$temp_dir/go.production.mod"
+go run ./cmd/tools/production-module --output "$production_mod"
+rm -f "$temp_dir/go.production.sum"
 
 (
-  cd "$temp_dir"
   env \
     GOTOOLCHAIN=local \
     GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}" \
     GOSUMDB="${GOSUMDB:-sum.golang.org}" \
     GOFLAGS='' \
-    go mod download all
+    go mod download -modfile="$production_mod" all
 )
 
-cp "$temp_dir/go.sum" "$ROOT_DIR/go.sum"
+cp "$temp_dir/go.production.sum" "$ROOT_DIR/go.sum"
 
 echo "Refreshed go.sum using networked module checksums."

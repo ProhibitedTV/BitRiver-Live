@@ -310,7 +310,7 @@ func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive
 		query := "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference, idempotency_key FROM subscriptions WHERE channel_id = $1"
 		args := []any{channelID}
 		if !includeInactive {
-			query += " AND status = 'active'"
+			query += " AND status IN ('active', 'pending', 'confirmed')"
 		}
 		query += " ORDER BY started_at DESC, id ASC"
 
@@ -351,8 +351,8 @@ func (r *postgresRepository) GetSubscription(id string) (domain.Subscription, bo
 	}
 
 	ctx, cancel := r.acquireContext()
+	defer cancel()
 	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference, idempotency_key FROM subscriptions WHERE id = $1", id)
-	cancel()
 
 	sub, err := scanSubscriptionRow(row)
 	if err != nil {
@@ -564,9 +564,10 @@ func scanSubscriptionRow(row pgx.Row) (domain.Subscription, error) {
 		cancelledReason   pgtype.Text
 		cancelledAt       pgtype.Timestamptz
 		externalReference pgtype.Text
+		idempotencyKey    pgtype.Text
 	)
 	var amountMinor int64
-	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &amountMinor, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
+	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &amountMinor, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference, &idempotencyKey); err != nil {
 		return domain.Subscription{}, err
 	}
 	sub.Amount = domain.NewMoneyFromMinorUnits(amountMinor)
@@ -586,6 +587,9 @@ func scanSubscriptionRow(row pgx.Row) (domain.Subscription, error) {
 	}
 	if externalReference.Valid {
 		sub.ExternalReference = externalReference.String
+	}
+	if idempotencyKey.Valid {
+		sub.IdempotencyKey = idempotencyKey.String
 	}
 	return sub, nil
 }

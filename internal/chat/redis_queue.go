@@ -83,11 +83,12 @@ func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := redis.NewUniversalClient(&redis.UniversalOptions{
+	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        addrs,
 		MasterName:   strings.TrimSpace(cfg.MasterName),
 		Username:     strings.TrimSpace(cfg.Username),
 		Password:     cfg.Password,
+		Protocol:     2,
 		TLSConfig:    tlsConfig,
 		DialTimeout:  cfg.DialTimeout,
 		ReadTimeout:  cfg.ReadTimeout,
@@ -95,9 +96,6 @@ func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
 		PoolSize:     cfg.PoolSize,
 		MaxRetries:   2,
 	})
-	if err != nil {
-		return nil, err
-	}
 	queue := &redisQueue{
 		client:       client,
 		stream:       stream,
@@ -119,8 +117,12 @@ func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
 	return queue, nil
 }
 
+type redisCommandClient interface {
+	Do(ctx context.Context, args ...interface{}) *redis.Cmd
+}
+
 type redisQueue struct {
-	client       redis.UniversalClient
+	client       redisCommandClient
 	stream       string
 	group        string
 	blockTimeout time.Duration
@@ -229,8 +231,7 @@ func (q *redisQueue) Publish(ctx context.Context, event Event) error {
 	if err := q.ensureGroup(ctx); err != nil {
 		return err
 	}
-	_, err = q.client.Do(ctx, "XADD", q.stream, "*", "payload", string(payload))
-	return err
+	return q.client.Do(ctx, "XADD", q.stream, "*", "payload", string(payload)).Err()
 }
 
 // Subscribe performs subscribe and returns an error when dependent systems reject the operation.
@@ -262,7 +263,7 @@ func (q *redisQueue) ensureGroup(ctx context.Context) error {
 	if q.groupReady.Load() {
 		return nil
 	}
-	_, err := q.client.Do(ctx, "XGROUP", "CREATE", q.stream, q.group, "$", "MKSTREAM")
+	err := q.client.Do(ctx, "XGROUP", "CREATE", q.stream, q.group, "$", "MKSTREAM").Err()
 	if err != nil {
 		if isBusyGroup(err) {
 			q.groupReady.Store(true)
@@ -286,8 +287,7 @@ func (q *redisQueue) Ping(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, err := q.client.Do(ctx, "PING")
-	return err
+	return q.client.Do(ctx, "PING").Err()
 }
 
 type redisSubscription struct {
@@ -381,7 +381,7 @@ func (s *redisSubscription) ack(ctx context.Context, id string) {
 	if id == "" {
 		return
 	}
-	if _, err := s.queue.client.Do(ctx, "XACK", s.queue.stream, s.queue.group, id); err != nil && s.queue.logger != nil {
+	if err := s.queue.client.Do(ctx, "XACK", s.queue.stream, s.queue.group, id).Err(); err != nil && s.queue.logger != nil {
 		s.queue.logger.Warn("redis ack failed", "id", id, "error", err)
 	}
 }
@@ -399,7 +399,7 @@ func (s *redisSubscription) requeueEntry(entry redisStreamEntry) {
 	retryBackoff := newBackoff(50*time.Millisecond, time.Second)
 	const maxAttempts = 3
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if _, err := s.queue.client.Do(ctx, "XADD", s.queue.stream, "*", "payload", string(entry.Payload)); err != nil {
+		if err := s.queue.client.Do(ctx, "XADD", s.queue.stream, "*", "payload", string(entry.Payload)).Err(); err != nil {
 			if s.queue.logger != nil {
 				s.queue.logger.Warn("redis requeue failed", "id", entry.ID, "attempt", attempt, "error", err)
 			}
@@ -441,7 +441,7 @@ func (s *redisSubscription) read(ctx context.Context) ([]redisStreamEntry, error
 		"STREAMS",
 		s.queue.stream,
 		">",
-	)
+	).Result()
 	if err != nil {
 		if isNilReply(err) {
 			return nil, nil

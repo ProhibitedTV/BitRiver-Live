@@ -70,7 +70,7 @@ if [[ ! -f $invocation_file ]]; then
         exit 1
 fi
 
-if grep -q "Go 1.21" <<<"$output"; then
+if grep -q "Go 1.26" <<<"$output"; then
         echo "Go toolchain checks should not run when using release binaries" >&2
         echo "$output" >&2
         exit 1

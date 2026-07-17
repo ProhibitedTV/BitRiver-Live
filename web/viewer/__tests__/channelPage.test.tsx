@@ -1,8 +1,13 @@
 import { buildAuthUser, guestAuthState, mockUseAuth, signedInAuthState } from "../test/auth";
-import { mockRouter, setMockPathname, viewerApiMocks } from "../test/test-utils";
+import { mockRouter, setMockParams, setMockPathname, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import ChannelPage from "../app/channels/[id]/page";
+import ChannelRoutePage from "../app/channels/[id]/page";
+
+function ChannelPage({ params }: { params: { id: string } }) {
+  setMockParams(params);
+  return <ChannelRoutePage />;
+}
 
 jest.mock("../hooks/useAuth");
 

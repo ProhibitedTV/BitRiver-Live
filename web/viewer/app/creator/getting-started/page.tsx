@@ -116,7 +116,7 @@ export default function CreatorGettingStartedPage() {
     } finally {
       setLiveLoading(false);
     }
-  }, [selectedChannel?.id]);
+  }, [selectedChannel]);
 
   useEffect(() => {
     void refreshLiveStatus();

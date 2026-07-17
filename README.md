@@ -43,7 +43,7 @@ This is the fastest source-based path from a checkout to a working local stack. 
 ### Prerequisites
 
 - Docker with Compose V2
-- Go 1.21+
+- Go 1.26+ (CI and containers pin 1.26.5)
 - Enough local disk for images and stateful services
 
 ### 1. Create a local environment file

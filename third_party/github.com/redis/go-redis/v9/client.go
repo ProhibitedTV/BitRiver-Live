@@ -21,6 +21,7 @@ type UniversalOptions struct {
 	Username   string
 	Password   string
 	DB         int
+	Protocol   int
 	TLSConfig  *tls.Config
 
 	DialTimeout     time.Duration
@@ -37,6 +38,7 @@ type Options struct {
 	Username  string
 	Password  string
 	DB        int
+	Protocol  int
 	TLSConfig *tls.Config
 
 	DialTimeout     time.Duration
@@ -50,27 +52,60 @@ type Options struct {
 
 type UniversalClient interface {
 	Close() error
-	Do(ctx context.Context, args ...interface{}) (interface{}, error)
+	Do(ctx context.Context, args ...interface{}) *Cmd
 }
 
 type Client struct {
-	opt    Options
-	pool   *connPool
-	mu     sync.Mutex
-	closed bool
+	opt     Options
+	pool    *connPool
+	mu      sync.Mutex
+	closed  bool
+	initErr error
 }
 
-func NewUniversalClient(opt *UniversalOptions) (UniversalClient, error) {
+type Cmd struct {
+	value interface{}
+	err   error
+}
+
+func NewCmd(_ context.Context, _ ...interface{}) *Cmd {
+	return &Cmd{}
+}
+
+func (c *Cmd) SetVal(value interface{}) {
+	c.value = value
+}
+
+func (c *Cmd) SetErr(err error) {
+	c.err = err
+}
+
+func (c *Cmd) Result() (interface{}, error) {
+	if c == nil {
+		return nil, errors.New("redis: nil command")
+	}
+	return c.value, c.err
+}
+
+func (c *Cmd) Err() error {
+	if c == nil {
+		return errors.New("redis: nil command")
+	}
+	return c.err
+}
+
+func NewUniversalClient(opt *UniversalOptions) UniversalClient {
 	if opt == nil {
-		return nil, errors.New("redis: options required")
+		panic("redis: options required")
 	}
 	if len(opt.Addrs) == 0 {
-		return nil, errors.New("redis: at least one address is required")
+		return &Client{initErr: errors.New("redis: at least one address is required")}
 	}
 	baseOpt := Options{
 		Username:        opt.Username,
 		Password:        opt.Password,
 		DB:              opt.DB,
+		Protocol:        opt.Protocol,
 		TLSConfig:       opt.TLSConfig,
 		DialTimeout:     opt.DialTimeout,
 		ReadTimeout:     opt.ReadTimeout,
@@ -83,14 +118,14 @@ func NewUniversalClient(opt *UniversalOptions) (UniversalClient, error) {
 	if opt.MasterName != "" {
 		addr, err := resolveSentinel(context.Background(), opt.Addrs, opt.MasterName, baseOpt)
 		if err != nil {
-			return nil, err
+			return &Client{opt: baseOpt, initErr: err}
 		}
 		baseOpt.Addr = addr
-		return NewClient(&baseOpt), nil
+		return NewClient(&baseOpt)
 	}
 	if len(opt.Addrs) == 1 {
 		baseOpt.Addr = opt.Addrs[0]
-		return NewClient(&baseOpt), nil
+		return NewClient(&baseOpt)
 	}
 	// Very small cluster support: pick random node per dial.
 	baseOpt.Addr = opt.Addrs[rand.Intn(len(opt.Addrs))]
@@ -99,7 +134,7 @@ func NewUniversalClient(opt *UniversalOptions) (UniversalClient, error) {
 		baseOpt.Addr = addr
 		return dialConn(ctx, baseOpt)
 	}, baseOpt.poolSize(), baseOpt.ReadTimeout, baseOpt.WriteTimeout)
-	return &Client{opt: baseOpt, pool: pool}, nil
+	return &Client{opt: baseOpt, pool: pool}
 }
 
 func NewClient(opt *Options) *Client {
@@ -132,7 +167,15 @@ func (c *Client) Close() error {
 	return nil
 }
 
-func (c *Client) Do(ctx context.Context, args ...interface{}) (interface{}, error) {
+func (c *Client) Do(ctx context.Context, args ...interface{}) *Cmd {
+	value, err := c.do(ctx, args...)
+	return &Cmd{value: value, err: err}
+}
+
+func (c *Client) do(ctx context.Context, args ...interface{}) (interface{}, error) {
+	if c.initErr != nil {
+		return nil, c.initErr
+	}
 	if len(args) == 0 {
 		return nil, errors.New("redis: missing command")
 	}

@@ -261,7 +261,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
         setUploadProgress(null);
       }
     },
-    [canManage, channelId, formValues.filename, formValues.playbackUrl, formValues.sizeBytes, formValues.title, load, metadataEntries, resetUploadState, selectedFile],
+    [canManage, channelId, formValues, load, metadataEntries, resetUploadState, selectedFile],
   );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

@@ -146,13 +146,17 @@ npm run test:integration
 
 ### Postgres artifact pgx guard
 
-Before producing release binaries or container images that expect `BITRIVER_LIVE_STORAGE_DRIVER=postgres`, run the pgx guard to verify the build is not linking the stubbed `third_party` pgx module:
+Before producing release binaries or container images, generate the isolated upstream module graph. For artifacts that expect `BITRIVER_LIVE_STORAGE_DRIVER=postgres`, run both the pre-build pgx guard and post-build metadata inspection:
 
 ```bash
-./scripts/check-postgres-pgx.sh postgres
+go run ./cmd/tools/production-module --output go.production.mod
+go mod download -modfile=go.production.mod all
+GOFLAGS="-modfile=$PWD/go.production.mod" ./scripts/check-postgres-pgx.sh postgres
+go build -modfile=go.production.mod -tags postgres -o bitriver-live ./cmd/server
+go run ./cmd/tools/verify-production-binary --require-module github.com/jackc/pgx/v5 bitriver-live
 ```
 
-If this fails with `pgx.IsStub=true`, switch the build job to the approved non-stub pgx source path (vendored real module mirror or controlled replace strategy) before publishing artifacts. In Docker release mode (`BITRIVER_PGX_MODE=real`), also drop stubbed transitive replacements (for example `golang.org/x/text`) before `go mod download` so pgx dependencies like `secure/precis` resolve from full upstream modules.
+The generator fails closed on local replacements outside `third_party` and removes all checked-in offline mirrors from the production graph. The artifact inspector rejects any linked local replacement and proves pgx is present when required. Release workflows and Dockerfiles perform the same checks automatically; do not publish an artifact built directly from the offline root module graph.
 
 ### Legal publication checks
 

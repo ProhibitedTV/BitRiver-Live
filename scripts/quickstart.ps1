@@ -35,7 +35,16 @@ Examples:
 
 function Ensure-Go {
     if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-        Write-Error "Go is required to run the BitRiver Live CLI. Install Go 1.21+ from https://go.dev/dl/ and ensure it is in your PATH."
+        Write-Error "Go 1.26 or newer is required to run the BitRiver Live CLI. Install it from https://go.dev/dl/ and ensure it is in your PATH."
+    }
+    $version = (& go env GOVERSION).Trim()
+    if ($version -notmatch 'go(?<major>\d+)\.(?<minor>\d+)') {
+        Write-Error "Unable to determine Go version from: $version"
+    }
+    $major = [int]$Matches.major
+    $minor = [int]$Matches.minor
+    if ($major -lt 1 -or ($major -eq 1 -and $minor -lt 26)) {
+        Write-Error "Go 1.26 or newer is required to run the BitRiver Live CLI (found $version)."
     }
 }
 

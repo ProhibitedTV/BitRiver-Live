@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS build
 WORKDIR /src
 
 RUN apk add --no-cache ca-certificates git openssh-client
@@ -11,12 +11,16 @@ ARG GOPROXY=direct
 ARG GOSUMDB=off
 
 COPY go.mod go.sum ./
+COPY cmd/tools/production-module ./cmd/tools/production-module
+COPY cmd/tools/verify-production-binary ./cmd/tools/verify-production-binary
+COPY third_party ./third_party
+RUN go run ./cmd/tools/production-module --output go.production.mod
+RUN GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download -modfile=go.production.mod all
+
 COPY internal ./internal
 COPY cmd ./cmd
-COPY third_party ./third_party
-
-RUN GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/srs-controller ./cmd/srs-controller
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -modfile=go.production.mod -o /out/srs-controller ./cmd/srs-controller
+RUN go run ./cmd/tools/verify-production-binary /out/srs-controller
 
 FROM --platform=$TARGETPLATFORM alpine:3.23 AS runtime
 RUN apk add --no-cache ca-certificates curl

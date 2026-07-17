@@ -34,7 +34,6 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: web/viewer

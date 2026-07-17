@@ -16,8 +16,8 @@ if ! grep -Eq "uses:[[:space:]]+actions/setup-go@[0-9a-f]{40}" "$approved_local_
   exit 1
 fi
 
-if ! grep -Eq "default:[[:space:]]*'go\\.mod'|default:[[:space:]]*go\\.mod" "$approved_local_setup_go_action"; then
-  echo "$approved_local_setup_go_action must default go-version-file to go.mod" >&2
+if ! grep -Eq "default:[[:space:]]*'\\.go-version'|default:[[:space:]]*\\.go-version" "$approved_local_setup_go_action"; then
+  echo "$approved_local_setup_go_action must default go-version-file to .go-version" >&2
   exit 1
 fi
 
@@ -38,8 +38,8 @@ for workflow in "${workflows[@]}"; do
     exit 1
   fi
 
-  if ! grep -Eq "go-version-file:[[:space:]]*'go\.mod'|go-version-file:[[:space:]]*go\.mod" "$workflow" && [[ "$uses_approved_local_setup_go" == false ]]; then
-    echo "$workflow must set go-version-file: go.mod" >&2
+  if ! grep -Eq "go-version-file:[[:space:]]*'\.go-version'|go-version-file:[[:space:]]*\.go-version" "$workflow" && [[ "$uses_approved_local_setup_go" == false ]]; then
+    echo "$workflow must set go-version-file: .go-version" >&2
     exit 1
   fi
 

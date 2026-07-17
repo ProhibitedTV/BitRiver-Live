@@ -669,7 +669,7 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 	if !ok {
 		t.Fatalf("expected GetSubscription to find %q", sub.ID)
 	}
-	if stored.ID != sub.ID || stored.Status != "active" {
+	if stored.ID != sub.ID || stored.Status != domain.PaymentStatePending {
 		t.Fatalf("unexpected stored subscription: %+v", stored)
 	}
 	if stored.Amount.MinorUnits() != expectedSubAmount.MinorUnits() {

@@ -1,3 +1,3 @@
 module github.com/jackc/puddle/v2
 
-go 1.21
+go 1.26.0

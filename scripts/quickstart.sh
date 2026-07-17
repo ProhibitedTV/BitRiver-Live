@@ -24,17 +24,14 @@ if (($# > 0)); then
   esac
 fi
 
-if ! command -v go >/dev/null 2>&1; then
-  cat <<'NEEDGO'
-Error: Go is required to run the BitRiver Live CLI.
-Install Go 1.21+ from https://go.dev/dl/ and ensure it is available in your PATH.
-NEEDGO
-  exit 1
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CODE_ROOT="${BITRIVER_QUICKSTART_REPO_ROOT:-$REPO_ROOT}"
+
+if ! "$SCRIPT_DIR/check-go-toolchain.sh"; then
+  echo "Install a supported toolchain from https://go.dev/dl/ and ensure it is available in your PATH." >&2
+  exit 1
+fi
 
 if [[ ! -d "$CODE_ROOT/cmd/bitriver" ]]; then
   echo "Error: expected Go CLI sources at $CODE_ROOT/cmd/bitriver" >&2

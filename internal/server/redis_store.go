@@ -59,7 +59,7 @@ func newRedisStore(cfg redisStoreConfig) (*redisStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := redis.NewUniversalClient(&redis.UniversalOptions{
+	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        addrs,
 		MasterName:   strings.TrimSpace(cfg.MasterName),
 		Username:     strings.TrimSpace(cfg.Username),
@@ -71,9 +71,6 @@ func newRedisStore(cfg redisStoreConfig) (*redisStore, error) {
 		WriteTimeout: cfg.Timeout,
 		MaxRetries:   2,
 	})
-	if err != nil {
-		return nil, err
-	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = 2 * time.Second
@@ -90,7 +87,7 @@ func (s *redisStore) Allow(ctx context.Context, key string, limit int, window ti
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	countReply, err := s.client.Do(ctx, "INCR", key)
+	countReply, err := s.client.Do(ctx, "INCR", key).Result()
 	if err != nil {
 		return false, 0, err
 	}
@@ -103,14 +100,14 @@ func (s *redisStore) Allow(ctx context.Context, key string, limit int, window ti
 		if seconds <= 0 {
 			seconds = 1
 		}
-		if _, err := s.client.Do(ctx, "EXPIRE", key, seconds); err != nil {
+		if err := s.client.Do(ctx, "EXPIRE", key, seconds).Err(); err != nil {
 			return false, 0, err
 		}
 	}
 	if count <= int64(limit) {
 		return true, 0, nil
 	}
-	ttlReply, err := s.client.Do(ctx, "TTL", key)
+	ttlReply, err := s.client.Do(ctx, "TTL", key).Result()
 	if err != nil {
 		return false, 0, err
 	}
@@ -144,8 +141,7 @@ func (s *redisStore) Ping(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, err := s.client.Do(ctx, "PING")
-	return err
+	return s.client.Do(ctx, "PING").Err()
 }
 
 // toInt performs to int and propagates validation or dependency failures to the caller.
