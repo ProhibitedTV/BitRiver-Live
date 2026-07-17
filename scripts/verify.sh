@@ -252,6 +252,7 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 if [[ "$docker_available" == true ]]; then
+  run_step "Postgres migration lifecycle" ./scripts/test-postgres-migrations.sh
   run_step "Docker Compose config validation" run_docker_compose_config_validation
   run_step "Quickstart smoke" ./scripts/test-quickstart.sh
 else

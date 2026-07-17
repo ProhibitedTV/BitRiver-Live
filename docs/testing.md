@@ -30,6 +30,9 @@ Use these category entrypoints from the repository root:
 - **Postgres integration (tagged):** `./scripts/test-postgres.sh`
   - Runs storage integration tests behind the `postgres` tag using Docker or `BITRIVER_TEST_POSTGRES_DSN`.
   - CI: [`.github/workflows/postgres-tests.yml`](../.github/workflows/postgres-tests.yml), plus `postgres-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and release validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+- **Postgres migration lifecycle:** `./scripts/test-postgres-migrations.sh`
+  - Uses a disposable Postgres 15 container to prove fresh apply, previous-schema upgrade, no-op rerun, checksum drift refusal, failed retry, interrupted-state acknowledgment, and non-sensitive status output.
+  - Runs automatically inside `./scripts/verify.sh` when Docker is available.
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) and `quickstart-smoke` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
@@ -346,6 +349,14 @@ CI enforces the same check in [`.github/workflows/docs-consistency.yml`](../.git
 Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce SHA-pinned `actions/setup-go@<40-hex-sha>` usage (either directly in workflows or through the approved `./.github/actions/setup-go` composite action that pins `actions/setup-go` by SHA), `go-version-file: .go-version`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across core verification workflows.
 
 ## Postgres storage layer
+
+Before storage behavior, the ledger-aware deployment runner has its own real-Postgres lifecycle gate:
+
+```bash
+./scripts/test-postgres-migrations.sh
+```
+
+The test never uses the developer's database. It creates and removes a uniquely named `postgres:15-alpine` container, exercises `deploy/postgres-migrate.sh`, and fails if plan mutates an uninitialized database, applied files rerun, history edits pass, failed/interrupted state becomes healthy silently, or status output exposes the test credential.
 
 Storage integration tests live behind the `postgres` build tag. They expect an
 empty database that matches the schema in `deploy/migrations/`. The configured

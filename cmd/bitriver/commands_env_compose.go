@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -1196,16 +1195,11 @@ func valueOrDefault(value, fallback string) string {
 
 // runMigrations runs migrations and exits when the work completes or a dependency fails.
 func runMigrations(composeFile, envFile string) error {
-	if _, err := lookPathRunner("docker"); err != nil {
-		return err
-	}
-
-	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm")
-	if runtime.GOOS == "windows" || !stdinIsTerminal() {
-		args = append(args, "-T")
-	}
-	args = append(args, "postgres-migrations")
-	return commandRunner("docker", args...)
+	return runMigrationCompose(migrationCommandConfig{
+		ComposeFile: composeFile,
+		EnvFile:     envFile,
+		Mode:        "apply",
+	})
 }
 
 // waitForAPIReadiness performs wait for apireadiness and propagates validation or dependency failures to the caller.

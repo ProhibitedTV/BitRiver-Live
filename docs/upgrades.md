@@ -29,6 +29,12 @@ The planner prints a checklist with current-image detection, migration expectati
 
 The command is best-effort: if Docker is unavailable or the stack is stopped, it warns and falls back to `.env` tags when possible.
 
+Before changing images, query the database-backed plan. This command is read-only and does not create the ledger on an uninitialized database:
+
+```bash
+go run ./cmd/bitriver migrations --mode plan --compose-file deploy/docker-compose.yml --env-file .env
+```
+
 Example output:
 
 ```text
@@ -82,11 +88,12 @@ Run from repo root (replace `vX.Y.Z`):
 
 ```bash
 go run ./cmd/bitriver upgrade-plan --compose-file deploy/docker-compose.yml --env-file .env --target vX.Y.Z
+go run ./cmd/bitriver migrations --mode plan --compose-file deploy/docker-compose.yml --env-file .env
 docker compose -f deploy/docker-compose.yml down
 cp .env .env.backup.$(date +%Y%m%d%H%M%S)
 deploy/check-env.sh
 ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
-docker compose -f deploy/docker-compose.yml run --rm postgres-migrations
+go run ./cmd/bitriver migrations --mode apply --compose-file deploy/docker-compose.yml --env-file .env
 docker compose -f deploy/docker-compose.yml up -d
 go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env
 ```
@@ -96,14 +103,45 @@ go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file
 For the supported Compose deployment:
 
 - `postgres-migrations` runs before API startup during `docker compose up`.
-- All SQL files in `deploy/migrations/` are applied in version order expected by the migration engine.
+- Migration identity is the complete filename, ordered byte-for-byte (the historical set contains two distinct `0002_*` files).
+- The `schema_migrations` ledger records filename, version prefix, raw SHA-256, `applying`/`applied`/`failed` status, timestamps, and release/commit provenance.
+- Only pending SQL files are applied. Applied files are skipped; changed or removed history and unresolved `applying`/`failed` rows stop startup.
+- Each SQL file runs with `psql --single-transaction`. The final non-sensitive ledger is printed into the migration job log collected by release diagnostics.
+- Compose and Helm consume the same canonical runner and byte-identical SQL generated from `deploy/migrations/`.
 - The API expects the schema to match the release's migration set before serving traffic.
 
 Important limitations:
 
-- Not every migration is reversible.
-- Release notes may require operator-managed data transforms before/after SQL migrations.
+- Migrations are forward-only by default; automatic down migrations are not provided.
+- Destructive, data-transforming, or rollback-incompatible changes require explicit release notes describing compatibility, backup/restore, validation, and rollback impact.
+- Never edit or rename an applied migration. Add a new forward migration instead.
 - Schema compatibility is only guaranteed for the supported upgrade hops above.
+
+## Failed or interrupted migration recovery
+
+Inspect the sanitized history first:
+
+```bash
+go run ./cmd/bitriver migrations --mode status --compose-file deploy/docker-compose.yml --env-file .env
+```
+
+A `failed` row means PostgreSQL reported an error and the release remains blocked. Fix the external cause, confirm the transaction rolled back (or clean up documented partial state), copy the exact checksum from status, then explicitly retry:
+
+```bash
+go run ./cmd/bitriver migrations --mode repair --repair-action retry \
+  --file 0012_example.sql --checksum <64-character-sha256> \
+  --compose-file deploy/docker-compose.yml --env-file .env
+```
+
+An `applying` row is deliberately treated as ambiguous: the process may have stopped after rollback, or after the schema commit but before the ledger update. Inspect the migration SQL and database schema. If the SQL did not commit, restore/clean partial state and use the failed retry path after recording the incident. If every intended schema effect is already present and validated, acknowledge only that exact file/checksum:
+
+```bash
+go run ./cmd/bitriver migrations --mode repair --repair-action mark-applied \
+  --file 0012_example.sql --checksum <64-character-sha256> \
+  --compose-file deploy/docker-compose.yml --env-file .env
+```
+
+Do not use `mark-applied` to bypass a migration error. If the schema result is uncertain, restore the pre-upgrade Postgres backup and repeat the supported upgrade instead.
 
 ## Roll back
 

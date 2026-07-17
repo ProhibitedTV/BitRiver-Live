@@ -1,7 +1,3 @@
--- GENERATED FILE: DO NOT EDIT DIRECTLY
--- Canonical source: deploy/migrations/0001_initial.sql
--- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
-
 -- 0001_initial.sql
 --
 -- Establishes the relational schema that mirrors the entities defined in
@@ -40,6 +36,7 @@ CREATE TABLE IF NOT EXISTS channels (
     title TEXT NOT NULL,
     category TEXT,
     tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    schedule JSONB NOT NULL DEFAULT '[]'::JSONB,
     live_state TEXT NOT NULL,
     current_session_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

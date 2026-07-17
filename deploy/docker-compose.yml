@@ -190,42 +190,23 @@ services:
       - ../.env
     environment:
       PGPASSWORD: ${BITRIVER_POSTGRES_PASSWORD:?set via .env}
+      PGHOST: postgres
+      PGUSER: ${BITRIVER_POSTGRES_USER:?set via .env}
+      PGDATABASE: ${BITRIVER_POSTGRES_DB:-bitriver}
+      BITRIVER_MIGRATION_RELEASE: ${BITRIVER_LIVE_IMAGE_TAG:-unknown}
+      BITRIVER_MIGRATION_COMMIT: ${BITRIVER_RELEASE_COMMIT:-unknown}
     volumes:
       - ./migrations:/migrations:ro
+      - ./postgres-migrate.sh:/usr/local/bin/bitriver-postgres-migrate:ro
     tmpfs:
       - /tmp
     depends_on:
       postgres:
         condition: service_healthy
-    command:
+    entrypoint:
       - /bin/sh
-      - -c
-      - |
-        set -e
-        if ! ls /migrations/*.sql >/dev/null 2>&1; then
-          echo "No Postgres migrations found; exiting."
-          exit 1
-        fi
-
-        for file in /migrations/*.sql; do
-          echo "Applying $$file"
-          psql \
-            -h postgres \
-            -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
-            -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
-            -v ON_ERROR_STOP=1 \
-            -f "$${file}"
-        done
-
-        echo "Running post-migration sanity check"
-        psql \
-          -h postgres \
-          -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
-          -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
-          -v ON_ERROR_STOP=1 \
-          -c "SELECT 1 FROM users LIMIT 1;"
-
-        echo "Postgres migrations completed."
+      - /usr/local/bin/bitriver-postgres-migrate
+    command: ["apply"]
     networks:
       - internal
 

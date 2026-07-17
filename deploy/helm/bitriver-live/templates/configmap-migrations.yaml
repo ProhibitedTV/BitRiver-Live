@@ -5,6 +5,8 @@ metadata:
   labels:
     {{- include "bitriver-live.labels" . | nindent 4 }}
 data:
+  runner.sh: |-
+{{ .Files.Get "files/postgres-migrate.sh" | indent 4 }}
 {{- range $path, $bytes := .Files.Glob "migrations/*.sql" }}
   {{ base $path }}: |-
 {{ $bytes | indent 4 }}

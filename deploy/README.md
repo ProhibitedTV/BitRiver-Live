@@ -9,7 +9,8 @@ This directory contains everything used to start BitRiver Live locally (Docker C
 - `ome/Server.xml` – Source OvenMediaEngine config template. `./scripts/quickstart.sh` renders it into `ome/Server.generated.xml`; edit the template, not the generated file.
 - `srs/` – Stock SRS configuration template plus the generated file rendered from `.env` for Compose/systemd.
 - `migrations/` – Canonical SQL migrations for the API database.
-- `helm/bitriver-live/files/srs.conf` and `helm/bitriver-live/migrations/*.sql` – Generated Helm copies synced from canonical `deploy/srs/conf/srs.conf` and `deploy/migrations/` via `./scripts/sync-helm-deploy-assets.sh` (do not edit generated files directly).
+- `postgres-migrate.sh` – Canonical ledger-aware migration runner used directly by Compose.
+- `helm/bitriver-live/files/postgres-migrate.sh`, `helm/bitriver-live/files/srs.conf`, and `helm/bitriver-live/migrations/*.sql` – Generated Helm copies synced from canonical deploy assets via `./scripts/sync-helm-deploy-assets.sh` (do not edit generated files directly).
 - `install/` – Interactive installer and automation helpers for systemd deployments (see below).
 - `systemd/` – Unit files for running the services outside of Docker; see `systemd/README.md` for installation steps.
 
@@ -74,6 +75,7 @@ docker compose --env-file .env -f "$COMPOSE_FILE" up -d --build --pull never
 Helm keeps generated copies of selected deploy artifacts so charts can be packaged self-contained, but the authoritative sources live outside the chart:
 
 - `deploy/srs/conf/srs.conf`
+- `deploy/postgres-migrate.sh`
 - `deploy/migrations/*.sql`
 
 To refresh generated Helm copies after editing canonical files, run:
@@ -88,7 +90,7 @@ To enforce drift detection in CI (or locally before commits), run:
 ./scripts/check-helm-deploy-assets-drift.sh
 ```
 
-If drift is reported, re-run the sync command and commit the regenerated Helm files. Do not hand-edit `deploy/helm/bitriver-live/files/srs.conf` or `deploy/helm/bitriver-live/migrations/*.sql`.
+If drift is reported, re-run the sync command and commit the regenerated Helm files. Do not hand-edit `deploy/helm/bitriver-live/files/postgres-migrate.sh`, `deploy/helm/bitriver-live/files/srs.conf`, or `deploy/helm/bitriver-live/migrations/*.sql`. Migration runner and SQL copies are byte-identical to canonical sources so Compose and Helm record the same SHA-256 history.
 
 ## Backup scheduling examples
 

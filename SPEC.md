@@ -28,8 +28,10 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
-- Go, Node.js, Next.js, React, and viewer tooling use documented supported production release lines across source, CI, containers, installers, and release artifacts.
-- Offline local verification may use checked-in `third_party` replacements, but every production build removes all local replacements and proves real pgx is linked where Postgres is supported.
-- Next.js runtime changes preserve `/viewer` base-path behavior, proxy navigation, and standalone container packaging.
-- High and critical dependency findings block release unless a documented, owner-assigned, time-bounded high-severity exception applies.
-- Automated dependency updates are grouped for review, and operator upgrade notes describe runtime or configuration changes.
+- PostgreSQL schema changes are recorded in a durable, queryable ledger with stable filenames, checksums, status, timestamps, and release provenance.
+- Startup applies only pending migrations and refuses edited history, failed migrations, or ambiguous interrupted state.
+- Operators can inspect a read-only migration plan/history and recover only through explicit checksum-confirmed commands and documented validation steps.
+- Docker Compose and Helm execute the same canonical migration bytes in the same deterministic order.
+- Fresh installs, upgrades from a representative previous schema, no-op reruns, drift refusal, and failure/interruption recovery have automated evidence.
+- Upgrade and rollback docs define the forward-only policy and require backups plus release notes for destructive or rollback-incompatible changes.
+- This work preserves the roadmap toward an Ubuntu 24.04 XOA VM installer behind Nginx Proxy Manager without claiming installer or OvenMediaEngine readiness is complete.

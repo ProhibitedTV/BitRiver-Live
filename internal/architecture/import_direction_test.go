@@ -26,7 +26,7 @@ func TestImportDirectionContract(t *testing.T) {
 		"internal/api/":           {"bitriver-live/internal/storage", "bitriver-live/internal/app", "bitriver-live/cmd/"},
 	}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

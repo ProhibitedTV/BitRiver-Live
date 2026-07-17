@@ -64,6 +64,8 @@ Recent schema changes to account for:
   MFA. Apply the migration before you promote new admin/creator logins so
   privileged accounts can complete MFA verification.
 
+Migration files are immutable after release. Every schema change must be a new forward migration. A destructive, data-transforming, or rollback-incompatible migration must have explicit release notes covering supported source versions, expected duration, compatibility while old/new binaries overlap, pre-upgrade backup and restore evidence, validation queries, and whether binary rollback requires database restore. Missing guidance blocks promotion.
+
 For the upgrade mechanics around schema migrations, safe Compose sequencing, `.env` changes, and OvenMediaEngine config regeneration, follow the upgrade essentials in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render).
 For secret management hardening patterns that keep the same `.env` + Compose contract, see [`docs/secrets-hardening.md`](secrets-hardening.md).
 
@@ -72,7 +74,7 @@ For secret management hardening patterns that keep the same `.env` + Compose con
 Run every test suite locally (or on a staging CI run) so the GitHub release
 workflow does not discover failures after the tag is pushed.
 
-For the default local quality gate, run `./scripts/verify.sh`; it covers Go and contract checks plus Docker-gated Compose validation and quickstart smoke (`./scripts/test-quickstart.sh`) in deterministic order when Docker is available.
+For the default local quality gate, run `./scripts/verify.sh`; it covers Go and contract checks plus the real-Postgres migration lifecycle, Compose validation, and quickstart smoke (`./scripts/test-quickstart.sh`) in deterministic order when Docker is available.
 
 Before tagging or promoting a release candidate, run the named golden-path release gate and attach its artifact directory to the release ticket/change request:
 
@@ -98,7 +100,7 @@ docker compose -f deploy/docker-compose.yml --env-file ./.env logs --tail=200 > 
   --artifact-dir .artifacts/release-canary
 ```
 
-The canary gate is non-mutating. It checks `/readyz`, `/healthz`, `/api/status`, and `/viewer`, saves redacted response artifacts, scans supplied logs for high-confidence rollout blockers, and verifies rollback notes cover previous version/tag, data or migration handling, env/config rollback, and artifact/image rollback path.
+The canary gate is non-mutating. It checks `/readyz`, `/healthz`, `/api/status`, and `/viewer`, saves redacted response artifacts, scans supplied logs for high-confidence rollout blockers, and verifies rollback notes cover previous version/tag, data or migration handling, env/config rollback, and artifact/image rollback path. Include the `postgres-migrations` log: successful jobs print the non-sensitive ledger, while `DRIFT`, `BLOCKED`, `failed`, or `applying` migration output is a rollout blocker.
 
 ### GitHub Actions supply-chain pinning
 

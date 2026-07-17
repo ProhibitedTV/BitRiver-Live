@@ -1,7 +1,3 @@
--- GENERATED FILE: DO NOT EDIT DIRECTLY
--- Canonical source: deploy/migrations/0005_auth_session_absolute_expiry.sql
--- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
-
 ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS absolute_expires_at TIMESTAMPTZ;
 
 UPDATE auth_sessions

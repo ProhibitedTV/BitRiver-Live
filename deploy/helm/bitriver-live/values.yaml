@@ -3,6 +3,9 @@ fullnameOverride: ""
 
 imagePullPolicy: IfNotPresent
 
+# Optional immutable source commit recorded with newly applied database migrations.
+releaseCommit: unknown
+
 images:
   api: ghcr.io/bitriver-live/bitriver-live
   viewer: ghcr.io/bitriver-live/bitriver-viewer
