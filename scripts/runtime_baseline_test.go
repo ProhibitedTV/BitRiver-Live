@@ -20,7 +20,7 @@ func TestGoRuntimeBaselineIsAligned(t *testing.T) {
 	}
 
 	goMod := readRepoFile(t, repoRoot, "go.mod")
-	if !strings.Contains(goMod, "\ngo "+goMinimumVersion+"\n") {
+	if !hasGoDirective(goMod, goMinimumVersion) {
 		t.Fatalf("go.mod must declare go %s", goMinimumVersion)
 	}
 
@@ -150,13 +150,31 @@ func TestOfflineMirrorsDeclareCurrentMinimumGoVersion(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(string(contents), "\ngo "+goMinimumVersion+"\n") {
+		if !hasGoDirective(string(contents), goMinimumVersion) {
 			t.Errorf("%s must declare go %s", path, goMinimumVersion)
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk third_party modules: %v", err)
+	}
+}
+
+func hasGoDirective(contents, version string) bool {
+	normalized := strings.ReplaceAll(contents, "\r\n", "\n")
+	return strings.Contains(normalized, "\ngo "+version+"\n")
+}
+
+func TestHasGoDirectiveAcceptsCommonLineEndings(t *testing.T) {
+	for name, contents := range map[string]string{
+		"LF":   "module example\n\ngo 1.26.0\n",
+		"CRLF": "module example\r\n\r\ngo 1.26.0\r\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !hasGoDirective(contents, goMinimumVersion) {
+				t.Fatalf("expected %s Go directive to match", name)
+			}
+		})
 	}
 }
 
