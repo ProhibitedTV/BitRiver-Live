@@ -28,6 +28,7 @@
 - Blocking audits can become routinely bypassed if exceptions are vague; require advisory, impact, owner, mitigation, and expiry fields in tracked policy.
 - Real pgx and go-redis behavior can diverge from offline mirrors; keep real-driver-only assertions guarded on the offline graph, run them with the production modfile upstream, and fix ownership, protocol, row-lifecycle, and scan-contract defects at the narrowest boundary.
 - The staged-release wizard fixture can drift from packaged binary names; keep it aligned with the required `bitriver-live` and `bootstrap-admin` pair and exercise that exact layout in CI.
+- Quickstart entrypoint checks that execute the Go CLI must install the pinned `.go-version` toolchain first; otherwise Go's automatic toolchain probe can pass before the wrapper's intentional `GOTOOLCHAIN=local` execution falls back to an older runner binary.
 
 ## Test Plan
 - Focused tests for production modfile generation, replacement rejection, runtime-version alignment, installer minimum-version behavior, and workflow audit policy.
