@@ -74,7 +74,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Fresh continuation checks on 2026-07-16 passed: full offline Go 1.26.5 suite and architecture graph in the pinned container; viewer lint, 214 Jest tests, high-severity audit, and production build under Node 24; Compose config and contract invariants; and an isolated full quickstart image/build/health/endpoint smoke.
     - The one-line `./scripts/verify.sh --viewer` wrapper could not run directly because the Windows `bash` shim targets an uninstalled WSL distribution and the host Go 1.25.6 binary is older than the module baseline. Its constituent checks were run with Git Bash, the bundled Python runtime, Node 24, Docker, and the pinned Go 1.26.5 container; the isolated quickstart avoided touching the root `.env` or persistent volumes.
     - PR #1312's first CI run exposed a staged-release fixture drift: the wizard requires `bitriver-live` plus `bootstrap-admin`, while the regression test created `server` plus `bootstrap-admin`. The fixture now uses the packaged binary name and `scripts/test-wizard-release.sh` passes locally.
-    - Publication is now the only remaining step: create the scoped commit and pull request, require green checks, squash-merge, confirm #1295 closes, and synchronize local `main`.
+    - PR #1312's second CI run passed unit, verification, Compose, quickstart, and image-vulnerability gates before the Postgres-tagged offline lane reached a new real-driver-only acquire-timeout test. The test now follows the existing pgx-stub guard: it skips explicitly on the offline graph and passes against isolated Postgres with the generated upstream production modfile.
+    - Publication is now limited to obtaining a fully green replacement run on PR #1312, squash-merging, confirming #1295 closes, and synchronizing local `main`.
 
 ### Execution log
 - Task 1 analysis:

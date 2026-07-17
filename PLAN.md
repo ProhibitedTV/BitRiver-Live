@@ -26,7 +26,7 @@
 - Running the latest major of every auxiliary tool adds unnecessary migration risk; update only to a mutually compatible maintained set and review the lockfile and audit result.
 - Toolchain strings duplicated across Dockerfiles, CI, and docs can drift; add static contract tests that compare every production declaration to the baseline.
 - Blocking audits can become routinely bypassed if exceptions are vague; require advisory, impact, owner, mitigation, and expiry fields in tracked policy.
-- Real pgx and go-redis behavior can diverge from offline mirrors; run focused upstream integration tests and fix ownership, protocol, row-lifecycle, and scan-contract defects at the narrowest boundary.
+- Real pgx and go-redis behavior can diverge from offline mirrors; keep real-driver-only assertions guarded on the offline graph, run them with the production modfile upstream, and fix ownership, protocol, row-lifecycle, and scan-contract defects at the narrowest boundary.
 - The staged-release wizard fixture can drift from packaged binary names; keep it aligned with the required `bitriver-live` and `bootstrap-admin` pair and exercise that exact layout in CI.
 
 ## Test Plan

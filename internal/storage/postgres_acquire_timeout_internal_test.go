@@ -10,10 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestPostgresRepositoryAcquireTimeoutCoversQueries(t *testing.T) {
+	if strings.Contains(strings.ToLower(pgx.ErrNoRows.Error()), "stub") {
+		t.Skip("pgx stubbed; acquire timeout requires the upstream driver")
+	}
+
 	dsn := strings.TrimSpace(os.Getenv("BITRIVER_TEST_POSTGRES_DSN"))
 	if dsn == "" {
 		t.Fatal("BITRIVER_TEST_POSTGRES_DSN is required")
