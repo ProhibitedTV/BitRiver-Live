@@ -30,6 +30,7 @@
 - The staged-release wizard fixture can drift from packaged binary names; keep it aligned with the required `bitriver-live` and `bootstrap-admin` pair and exercise that exact layout in CI.
 - Quickstart entrypoint checks that execute the Go CLI must install the pinned `.go-version` toolchain first; otherwise Go's automatic toolchain probe can pass before the wrapper's intentional `GOTOOLCHAIN=local` execution falls back to an older runner binary.
 - Runtime-baseline assertions must tolerate Git's CRLF checkout policy on Windows while still matching an exact Go directive; normalize line endings inside the test rather than rewriting module files.
+- Next.js streaming may briefly overlap the directory Suspense fallback with settled content; Playwright assertions must identify the settled relay state before requiring a single hero instead of using a strict shared-class locator during the reveal.
 
 ## Test Plan
 - Focused tests for production modfile generation, replacement rejection, runtime-version alignment, installer minimum-version behavior, and workflow audit policy.
