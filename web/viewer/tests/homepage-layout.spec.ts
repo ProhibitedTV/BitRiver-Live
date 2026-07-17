@@ -64,7 +64,7 @@ test.describe("homepage desktop shell", () => {
 
     const sidebar = page.locator(".viewer-sidebar");
     const heroes = page.locator(".home-hero");
-    const settledHero = heroes.filter({ hasText: /Relay ready|Signal live/ });
+    const settledHero = page.locator(".home-hero:visible").filter({ hasText: /Relay ready|Signal live/ });
 
     await expect(settledHero).toBeVisible();
     await expect(heroes).toHaveCount(1);
