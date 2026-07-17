@@ -60,7 +60,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Pinned `govulncheck v1.6.0` completed every root/offline-mirror scan with zero reachable findings and an empty exception baseline.
     - The live scan exposed a v1.6 pretty-printed JSON stream/schema change; the parser now decodes concatenated objects and supports both module and package identities.
 
-- [-] Task 6 - Verify, publish, and close #1295
+- [x] Task 6 - Verify, publish, and close #1295
   - Acceptance criteria:
     - Full repository, Postgres, viewer, Compose, quickstart, and release smoke gates pass or blockers are recorded precisely.
     - Pull-request checks pass before squash merge.
@@ -78,7 +78,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - PR #1312's third CI run passed the Ubuntu unified gate, image scan, and macOS/Linux quickstart checks before Windows exposed that its no-op Go entrypoint ran without the pinned toolchain. The quickstart matrix now installs `.go-version` on Windows before invoking the intentionally offline `GOTOOLCHAIN=local` wrapper; CI-contract checks, the scripts Go tests, and the exact `quickstart.ps1 -ValidateOnly` path passed locally with Go 1.26.5.
     - The next Windows Go matrix run confirmed the pinned quickstart fix, then exposed LF-only matching in the new module-baseline assertions. The checks now normalize CRLF before matching the exact Go directive, include LF/CRLF regression cases, and pass in the full `scripts` package with the pinned Windows Go 1.26.5 toolchain.
     - The subsequent run passed every backend, image, quickstart, and policy job before one homepage Playwright assertion observed both the streamed `Syncing` fallback and settled `Relay ready` hero during Suspense reveal. Waiting for settled text alone still matched hidden and visible transition copies on the hosted runner, so the assertion now waits for the visible settled relay state before requiring one total hero. The refined regression passed 20/20 repeated Chromium runs under eight workers, all four homepage layout cases in parallel, and the full 36-test Playwright suite.
-    - Publication is now limited to obtaining a fully green replacement run on PR #1312, squash-merging, confirming #1295 closes, and synchronizing local `main`.
+    - CI run 29552998448 passed every applicable job. PR #1312 was marked ready and squash-merged as `385b0c9e559a4162e79b060a25d77ac29fbdd790`; issue #1295 closed automatically, and local `main` was fast-forwarded to the same commit with unrelated worktree changes preserved and unstaged.
 
 ### Execution log
 - Task 1 analysis:

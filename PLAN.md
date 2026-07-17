@@ -46,3 +46,7 @@
 - Do not combine the runtime migration with viewer/admin route consolidation or a visual redesign.
 - Do not remove the offline test mirrors until a replacement local-development contract is separately approved.
 - Do not stage or modify unrelated local deployment-guide and diagnostics files.
+
+## Completion
+- CI run 29552998448 passed every applicable job for PR #1312, including the Ubuntu unified gate, image scan, Windows/macOS Go tests, cross-platform quickstart checks, and viewer integration/build/audit.
+- PR #1312 was squash-merged as `385b0c9e`, issue #1295 closed automatically, and local `main` was fast-forwarded to the merge commit while unrelated worktree changes remained unstaged.
