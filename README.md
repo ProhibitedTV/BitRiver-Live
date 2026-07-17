@@ -25,9 +25,9 @@ BitRiver Live is aimed at teams who want one reproducible stack and are willing 
 
 ### What is planned next
 
-- Complete the v1.2.3 production blockers and qualification evidence for the first stable operator release.
-- Stabilize the supported single-host baseline through repeatable install, upgrade, rollback, restore, canary, and release-verification workflows.
-- Expand operator and creator features only after the supported baseline is dependable. See [`docs/roadmap.md`](docs/roadmap.md) for the ordered delivery plan.
+- Continued hardening of the install, packaging, and release story around the supported single-host baseline.
+- Better public release discipline through changelog updates, release notes, and contributor workflow polish.
+- Evaluation of broader deployment topologies only after the supported baseline stays clear and dependable.
 
 ### What is not supported
 
@@ -129,7 +129,6 @@ flowchart LR
 
 ## Key docs
 
-- Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
 - Quickstart: [`docs/quickstart.md`](docs/quickstart.md)
 - Architecture: [`docs/architecture.md`](docs/architecture.md)
 - Deployment contract: [`docs/contract.md`](docs/contract.md)
