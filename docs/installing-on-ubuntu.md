@@ -191,7 +191,7 @@ Rerun `./deploy/check-env.sh` until it reports the environment file is ready. Th
 
 All long-running services in the compose file specify `restart: unless-stopped`, ensuring Docker automatically restarts containers after crashes or reboots. Override the policy per service if your operations model requires different behaviour.
 
-The manifest now includes a short-lived `postgres-migrations` helper that waits for the bundled Postgres container to pass its health check, applies every SQL file in `deploy/migrations/` with `psql`, and exits. The `bitriver-live` API depends on that service with `condition: service_completed_successfully`, so the API will only start after migrations finish cleanly. Re-running `docker compose up -d` during upgrades triggers the helper again, applying any new migrations before the refreshed containers come online.
+The manifest includes a short-lived `postgres-migrations` helper that waits a bounded time for the bundled Postgres container, validates the durable `schema_migrations` ledger, applies only pending canonical SQL transactionally, prints non-sensitive history, and exits. The `bitriver-live` API depends on that service with `condition: service_completed_successfully`, so checksum drift, a failed migration, or ambiguous interrupted state blocks API startup. Re-running `docker compose up -d` becomes a no-op when the current release is already recorded. Before an upgrade, run `go run ./cmd/bitriver migrations --mode plan --compose-file deploy/docker-compose.yml --env-file .env`; use the recovery procedure in [`docs/upgrades.md`](upgrades.md#failed-or-interrupted-migration-recovery) instead of editing applied SQL or bypassing the job.
 
 ```bash
 cd /opt/bitriver-live

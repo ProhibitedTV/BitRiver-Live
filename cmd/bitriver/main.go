@@ -48,6 +48,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "migrations":
+		if err := runMigrationCommand(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "release":
 		if err := runRelease(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -100,6 +105,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  smoke     Run fast post-install smoke checks against Docker Compose")
 	fmt.Fprintln(os.Stderr, "  verify    Run doctor + compose config + smoke checks for backend/deploy health")
 	fmt.Fprintln(os.Stderr, "  upgrade-plan  Print a best-effort upgrade checklist for a target tag")
+	fmt.Fprintln(os.Stderr, "  migrations  Plan, inspect, apply, or repair PostgreSQL migrations")
 	fmt.Fprintln(os.Stderr, "  release   Generate or compare release contract evidence")
 	fmt.Fprintln(os.Stderr, "  env       Initialize, validate, or inspect environment files")
 	fmt.Fprintln(os.Stderr, "  compose   Run docker compose up/down with defaults")

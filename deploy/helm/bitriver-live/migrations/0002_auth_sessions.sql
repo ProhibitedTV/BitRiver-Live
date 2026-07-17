@@ -1,7 +1,3 @@
--- GENERATED FILE: DO NOT EDIT DIRECTLY
--- Canonical source: deploy/migrations/0002_auth_sessions.sql
--- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
-
 CREATE TABLE IF NOT EXISTS auth_sessions (
     token TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

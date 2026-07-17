@@ -165,7 +165,7 @@ while IFS='|' read -r pkg imports; do
       violations+=("$pkg -> $imp (layer violation: $from_layer must not import $to_layer)")
     fi
   done
-done < <(GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}|{{join .Imports ","}}{{end}}' ./...)
+done < <(GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}|{{join .Imports ","}}{{end}}' ./cmd/... ./internal/... ./scripts/... ./web)
 
 if ((${#violations[@]} > 0)); then
   {

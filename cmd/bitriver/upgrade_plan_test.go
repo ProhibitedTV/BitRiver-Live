@@ -80,6 +80,9 @@ func TestRunUpgradePlanFallsBackToEnvTags(t *testing.T) {
 	if !strings.Contains(output, "Operator checklist:") {
 		t.Fatalf("expected checklist output, got %q", output)
 	}
+	if !strings.Contains(output, "migrations --mode plan") {
+		t.Fatalf("expected read-only migration preflight guidance, got %q", output)
+	}
 }
 
 func TestRunUpgradePlanWarnsWhenCurrentVersionUnknown(t *testing.T) {

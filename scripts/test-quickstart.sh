@@ -9,6 +9,9 @@ ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 COMPOSE_SMOKE_OVERRIDE=""
+OME_CONFIG="$REPO_ROOT/deploy/ome/Server.generated.xml"
+OME_CONFIG_BACKUP=""
+OME_CONFIG_EXISTED=false
 BITRIVER_DATA_DIR="$REPO_ROOT/deploy/data"
 TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
 CREATED_ENV_FILE=false
@@ -55,6 +58,15 @@ cleanup() {
 
   if [[ -n "$COMPOSE_SMOKE_OVERRIDE" ]]; then
     rm -f "$COMPOSE_SMOKE_OVERRIDE"
+  fi
+
+  if [[ -n "$OME_CONFIG_BACKUP" ]]; then
+    if [[ "$OME_CONFIG_EXISTED" == true ]]; then
+      cp "$OME_CONFIG_BACKUP" "$OME_CONFIG"
+    else
+      rm -f "$OME_CONFIG"
+    fi
+    rm -f "$OME_CONFIG_BACKUP"
   fi
 
   if [ "$CREATED_ENV_FILE" = true ]; then
@@ -154,11 +166,6 @@ mkdir -p "$TRANSCODER_DATA_DIR/live" "$TRANSCODER_DATA_DIR/uploads" "$TRANSCODER
 echo "Rendering docker compose config..."
 docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" config >"$COMPOSE_CONFIG_OUTPUT"
 
-if ! command -v go >/dev/null 2>&1; then
-  echo "error: go is required to render the OME config" >&2
-  exit 1
-fi
-
 if python3 -c 'import sys' >/dev/null 2>&1; then
   PYTHON_RUNNER=(python3)
 elif py -3 -c 'import sys' >/dev/null 2>&1; then
@@ -170,14 +177,17 @@ else
   exit 1
 fi
 
-echo "Rendering OME config from template..."
-(
-  cd "$REPO_ROOT" &&
-  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
-    go run ./cmd/bitriver ome render --force --env-file "$ENV_FILE" --quiet
-)
+echo "Building the canonical OME config helper image..."
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build ome-config
 
-OME_CONFIG="$REPO_ROOT/deploy/ome/Server.generated.xml"
+OME_CONFIG_BACKUP="$(mktemp)"
+if [[ -f "$OME_CONFIG" ]]; then
+  OME_CONFIG_EXISTED=true
+  cp "$OME_CONFIG" "$OME_CONFIG_BACKUP"
+fi
+
+echo "Rendering OME config from template..."
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" run --rm --no-deps -T ome-config >/dev/null
 
 if [ ! -f "$OME_CONFIG" ]; then
   echo "error: OME config missing at $OME_CONFIG after render" >&2

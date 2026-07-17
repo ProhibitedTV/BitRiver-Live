@@ -31,7 +31,7 @@ Every release must include:
 
 1. **Upgrade notes**: supported source versions, required prechecks, and ordered commands.
 2. **Breaking changes** section (or explicit `None`).
-3. **Migration notes**: irreversible operations, data backfills, and estimated impact.
+3. **Migration notes**: new forward-migration filenames, irreversible operations, data backfills, estimated impact, supported source versions, validation, and whether rollback requires restoring the pre-upgrade database backup. Applied migration files must never be edited or renamed.
 4. **Rollback notes**: safe/unsafe criteria and required backups.
 
 Use `.github/RELEASE_NOTES_TEMPLATE.md` as the baseline format.

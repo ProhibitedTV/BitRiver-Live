@@ -33,40 +33,23 @@ spec:
                   key: BITRIVER_POSTGRES_USER
             - name: POSTGRES_DB
               value: {{ .Values.env.BITRIVER_POSTGRES_DB | quote }}
+            - name: PGHOST
+              value: {{ printf "%s-postgres" (include "bitriver-live.fullname" .) | quote }}
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_POSTGRES_USER
+            - name: PGDATABASE
+              value: {{ .Values.env.BITRIVER_POSTGRES_DB | quote }}
+            - name: BITRIVER_MIGRATION_RELEASE
+              value: {{ .Values.tags.api | quote }}
+            - name: BITRIVER_MIGRATION_COMMIT
+              value: {{ .Values.releaseCommit | default "unknown" | quote }}
           command:
-            - sh
-            - -c
-            - |
-              set -e
-              until pg_isready -h {{ include "bitriver-live.fullname" . }}-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
-                echo "Waiting for Postgres..."
-                sleep 2
-              done
-
-              if ! ls /migrations/*.sql >/dev/null 2>&1; then
-                echo "No Postgres migrations found; exiting."
-                exit 1
-              fi
-
-              for file in /migrations/*.sql; do
-                echo "Applying $file"
-                psql \
-                  -h {{ include "bitriver-live.fullname" . }}-postgres \
-                  -U "$POSTGRES_USER" \
-                  -d "$POSTGRES_DB" \
-                  -v ON_ERROR_STOP=1 \
-                  -f "$file"
-              done
-
-              echo "Running post-migration sanity check"
-              psql \
-                -h {{ include "bitriver-live.fullname" . }}-postgres \
-                -U "$POSTGRES_USER" \
-                -d "$POSTGRES_DB" \
-                -v ON_ERROR_STOP=1 \
-                -c "SELECT 1 FROM users LIMIT 1;"
-
-              echo "Postgres migrations completed."
+            - /bin/sh
+            - /migrations/runner.sh
+            - apply
           volumeMounts:
             - name: migrations
               mountPath: /migrations
@@ -75,3 +58,4 @@ spec:
         - name: migrations
           configMap:
             name: {{ include "bitriver-live.fullname" . }}-migrations
+            defaultMode: 0555

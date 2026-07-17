@@ -63,7 +63,7 @@ The Helm chart under `deploy/helm/bitriver-live` mirrors the Compose stack (API,
    kubectl get pods
    ```
 
-The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, and it runs Postgres migrations as a pre-install/upgrade hook using generated SQL copies under `deploy/helm/bitriver-live/migrations`. Canonical migration sources remain in `deploy/migrations`, and canonical SRS config remains in `deploy/srs/conf/srs.conf`.
+The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, and it runs Postgres migrations as a pre-install/upgrade hook using the generated runner and SQL copies in the chart. Canonical sources are `deploy/postgres-migrate.sh` and `deploy/migrations/*.sql`; canonical SRS config remains `deploy/srs/conf/srs.conf`.
 
 After changing either canonical source set, run:
 
@@ -77,7 +77,7 @@ Then validate there is no drift before shipping:
 ./scripts/check-helm-deploy-assets-drift.sh
 ```
 
-Do not edit generated Helm files directly (`deploy/helm/bitriver-live/migrations/*.sql` and `deploy/helm/bitriver-live/files/srs.conf`); the sync step rewrites them and adds provenance headers automatically.
+Do not edit generated Helm files directly (`deploy/helm/bitriver-live/files/postgres-migrate.sh`, `deploy/helm/bitriver-live/migrations/*.sql`, and `deploy/helm/bitriver-live/files/srs.conf`). Migration SQL and the runner are byte-for-byte copies so their recorded checksums remain identical across Compose and Helm; the generated SRS copy retains its provenance header.
 
 Persistent volumes mirror Compose mounts: the API stores state under `/var/lib/bitriver-live`, Redis under `/data`, Postgres under `/var/lib/postgresql/data`, and the transcoder workspace under `/work`. Adjust `values.persistence.*` sizes and storage classes for your cluster.
 
@@ -368,12 +368,16 @@ Override the policy when you need to embed the admin panel or viewer inside a tr
 
 ## Postgres backend
 
-BitRiver Live now boots directly against Postgres once the schema is migrated. The Docker Compose bundle ships with a short-lived `postgres-migrations` service that waits for the database, applies every SQL file in `deploy/migrations/`, and exits; `bitriver-live` depends on that helper and will not start until migrations succeed. For bespoke deployments, apply the SQL files with your preferred migration tool or straight through `psql`:
+BitRiver Live now boots directly against Postgres once the schema is migrated. The Docker Compose bundle ships with a short-lived `postgres-migrations` service that waits a bounded time for the database, validates the `schema_migrations` ledger, applies only pending SQL in deterministic filename order, prints sanitized history, and exits. `bitriver-live` depends on that helper and will not start after checksum drift, failure, or ambiguous interrupted state.
+
+Use the focused CLI for preflight and application:
 
 ```bash
-psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
-  --file deploy/migrations/0001_initial.sql
+go run ./cmd/bitriver migrations --mode plan --compose-file deploy/docker-compose.yml --env-file .env
+go run ./cmd/bitriver migrations --mode apply --compose-file deploy/docker-compose.yml --env-file .env
 ```
+
+For bespoke Postgres deployments, run `deploy/postgres-migrate.sh` with standard `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, and `PGPASSWORD` variables plus `BITRIVER_MIGRATIONS_DIR`. Preserve this ledger mechanism rather than piping files through `psql`, or the deployment will lose checksum drift and interruption protection. Recovery and forward-only rollback boundaries are documented in `docs/upgrades.md`.
 
 The local Compose Postgres container does not ship with TLS certificates, so `sslmode=disable` is acceptable for `localhost` or the Compose service. When you target an external or managed database, require TLS by switching to `sslmode=require` or `sslmode=verify-full` and supply `sslrootcert=/certs/postgres-ca.pem` (or another mounted CA path) in the DSN.
 

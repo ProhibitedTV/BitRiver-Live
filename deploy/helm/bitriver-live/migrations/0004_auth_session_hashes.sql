@@ -1,7 +1,3 @@
--- GENERATED FILE: DO NOT EDIT DIRECTLY
--- Canonical source: deploy/migrations/0004_auth_session_hashes.sql
--- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS hashed_token text;

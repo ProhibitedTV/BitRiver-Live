@@ -35,9 +35,11 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 canonical_migrations_dir="$repo_root/deploy/migrations"
 canonical_srs_conf="$repo_root/deploy/srs/conf/srs.conf"
+canonical_migration_runner="$repo_root/deploy/postgres-migrate.sh"
 helm_chart_dir="$repo_root/deploy/helm/bitriver-live"
 helm_migrations_dir="$helm_chart_dir/migrations"
 helm_srs_conf="$helm_chart_dir/files/srs.conf"
+helm_migration_runner="$helm_chart_dir/files/postgres-migrate.sh"
 
 if [[ ! -d "$canonical_migrations_dir" ]]; then
   echo "Missing canonical migrations directory: $canonical_migrations_dir" >&2
@@ -45,6 +47,10 @@ if [[ ! -d "$canonical_migrations_dir" ]]; then
 fi
 if [[ ! -f "$canonical_srs_conf" ]]; then
   echo "Missing canonical SRS config: $canonical_srs_conf" >&2
+  exit 1
+fi
+if [[ ! -f "$canonical_migration_runner" ]]; then
+  echo "Missing canonical migration runner: $canonical_migration_runner" >&2
   exit 1
 fi
 
@@ -69,19 +75,19 @@ if [[ ${#migration_files[@]} -eq 0 ]]; then
 fi
 for src in "${migration_files[@]}"; do
   base="$(basename "$src")"
-  {
-    echo "-- GENERATED FILE: DO NOT EDIT DIRECTLY"
-    echo "-- Canonical source: deploy/migrations/$base"
-    echo "-- Regenerate with: ./scripts/sync-helm-deploy-assets.sh"
-    echo
-    cat "$src"
-  } > "$workdir/migrations/$base"
+  cp "$src" "$workdir/migrations/$base"
 done
 shopt -u nullglob
+cp "$canonical_migration_runner" "$workdir/postgres-migrate.sh"
 
 if [[ $check_mode -eq 1 ]]; then
   if ! cmp -s "$workdir/srs.conf" "$helm_srs_conf"; then
     echo "Drift detected: $helm_srs_conf does not match canonical source." >&2
+    echo "Run ./scripts/sync-helm-deploy-assets.sh" >&2
+    exit 1
+  fi
+  if ! cmp -s "$workdir/postgres-migrate.sh" "$helm_migration_runner"; then
+    echo "Drift detected: $helm_migration_runner does not match the canonical migration runner." >&2
     echo "Run ./scripts/sync-helm-deploy-assets.sh" >&2
     exit 1
   fi
@@ -112,6 +118,7 @@ fi
 
 mkdir -p "$helm_chart_dir/files" "$helm_migrations_dir"
 cp "$workdir/srs.conf" "$helm_srs_conf"
+cp "$workdir/postgres-migrate.sh" "$helm_migration_runner"
 
 find "$helm_migrations_dir" -maxdepth 1 -type f -name '*.sql' -delete
 cp "$workdir/migrations"/*.sql "$helm_migrations_dir/"
