@@ -1,6 +1,6 @@
 # BitRiver Live Quickstart
 
-This guide is the fastest honest path from a fresh checkout or release asset to a working BitRiver Live stack.
+This guide is the fastest honest path from a fresh source checkout to a working BitRiver Live stack.
 
 If you are evaluating the project, start here. If you are preparing a production rollout, get through one successful local run first, then continue with [`docs/production-single-host.md`](production-single-host.md), [`docs/security.md`](security.md), and [`docs/production-release.md`](production-release.md).
 
@@ -16,13 +16,12 @@ If you are evaluating the project, start here. If you are preparing a production
 | Path | Use this when | Entry point |
 | --- | --- | --- |
 | Source checkout (recommended for evaluation and contribution) | You want the quickest path from a clone to a working local stack, or you expect to inspect/change code. | `go run ./cmd/bitriver quickstart` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart"`) |
-| macOS release launcher | You want to validate the packaged launcher experience from a tagged release. | `brew install --formula https://github.com/ProhibitedTV/BitRiver-Live/releases/latest/download/bitriver-live.rb && bitriver-live` |
-| Linux release package | You want the packaged CLI/launcher on a Linux host. | Install the `.deb` or `.rpm` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then run `bitriver-live`. |
-| Windows release installer | You want the packaged Windows entry point. | Install `bitriver-live-<version>.msi` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then launch **Start BitRiver Live** or run `bitriver-live.ps1`. |
+
+There is no published GitHub Release, `.deb`, `.rpm`, Homebrew formula, or Windows installer at this time. Packaging code in the repository is development work, not an available download path.
 
 The control centre's browser-based Home Server Installer now mirrors the Ubuntu helper with a seven-step flow: Welcome, System Check, Install Mode, Core Settings, Review, Installing, and Success. Quick Install is the default path, while Advanced Install opens the lower-level storage, network, and service controls only when you explicitly ask for them.
 
-## Shared backend pipeline (all launchers)
+## Shared backend pipeline
 
 All entrypoints above execute one canonical deployment contract: `deploy/docker-compose.yml` plus the root `.env`.
 
@@ -36,7 +35,7 @@ All entrypoints above execute one canonical deployment contract: `deploy/docker-
 | Readiness | Poll `/readyz` until core services are healthy. |
 | Bootstrap | Seed or print admin credentials when required. |
 
-Choose the entry point based on packaging preference and operating system, not because you expect a different deployment model.
+The source wrappers and Go CLI converge on this same pipeline.
 
 ## First successful run
 
@@ -60,6 +59,28 @@ Remove-Item Env:BITRIVER_LIVE_MODE
 go run ./cmd/bitriver smoke --env-file ./.env
 ```
 
+On Windows 11 with Docker Desktop, the repository includes a native proof
+command. The default run checks the Windows client, Docker Desktop's Linux
+engine, Compose V2, and the canonical Compose render without starting services:
+
+```powershell
+.\scripts\verify-windows-docker.ps1
+```
+
+Add `-Start` to compile the CLI with the pinned local Go contract, build the
+first-party images from this checkout, run migrations, wait for service health,
+bootstrap the administrator, and require `200` responses from `/healthz`,
+`/readyz`, `/viewer`, and `/admin`:
+
+```powershell
+.\scripts\verify-windows-docker.ps1 -Start
+```
+
+The full proof derives a temporary development/build environment from `.env`
+and deletes that temporary file afterward. It does not rewrite the saved
+production mode in `.env`. The running stack remains available for inspection;
+use the cleanup command printed at the end when you are finished.
+
 Success looks like:
 
 - `http://localhost:8080/viewer` serves the viewer
@@ -81,9 +102,7 @@ If your local scripts still include that override filename or env toggle, remove
 | Windows 11 (WSL 2 backend) | Docker Desktop | Run the quickstart inside WSL with the WSL 2 backend enabled; check `docker-desktop` has 15GB free. |
 | Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Use the Go CLI or `.\scripts\quickstart.ps1`; do not rely on `bash` unless it is Git Bash or a healthy WSL shell. |
 
-Install Go 1.26+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. CI and production
-containers pin Go 1.26.5 through `.go-version` and their builder images. Installer-backed
-launchers ship a bundled CLI and do not require Go on the host.
+Install Go 1.26+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. CI and production containers pin Go 1.26.5 through `.go-version` and their builder images.
 
 ### Minimum host requirements (safe defaults)
 
@@ -116,7 +135,7 @@ Result levels:
 
 ### Tier 1 coverage
 
-The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms: Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. For the supported operator baseline, see [`docs/production-status.md`](production-status.md) and [`docs/production-single-host.md`](production-single-host.md).
+The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms: Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Source wrappers forward into the same Compose + `.env` pipeline. For the supported operator baseline, see [`docs/production-status.md`](production-status.md) and [`docs/production-single-host.md`](production-single-host.md).
 
 ## First step: run environment preflight
 
@@ -140,17 +159,11 @@ you have already reviewed doctor output separately.
 
 ## Run the quickstart command
 
-Installer path (recommended for operators):
-
-```bash
-bitriver-live
-```
-
-The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows), stores runtime settings in `<launcher-root>/.env`, and bootstraps that file from `deploy/.env.example` on first run. On first run, the Windows launcher fills in `BITRIVER_REDIS_PASSWORD` (and keeps `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` in sync) if the file still uses the sample placeholder so Docker Compose can interpolate the Redis credentials.
+Source-checkout path (the currently available operator path):
 
 ### Desktop/system-tray control panel
 
-Run `bitriver-live ui` (or `./scripts/bitriver-live-wrapper.sh ui` / `./scripts/bitriver-live-wrapper.ps1 -Command ui` from a cloned repository) to open the desktop control panel. It keeps a tray icon handy, polls `docker compose ps` for service state/health, tails recent logs, and exposes Start/Stop/Restart/Refresh logs buttons that shell out to Docker Compose. The **Open health dashboard** link jumps straight to the control centre overview. Contributors can keep using the CLI directly when they need to rebuild images or run migrations from source.
+From a source checkout, `./scripts/bitriver-live-wrapper.sh ui` or `./scripts/bitriver-live-wrapper.ps1 -Command ui` opens the development desktop control panel. It polls `docker compose ps`, tails recent logs, and shells out to the same Compose contract. This is not currently distributed as an installer.
 
 
 ```bash
@@ -197,6 +210,8 @@ Compose/quickstart now supports an explicit image-source switch:
   - Requires local source build prerequisites and checks Dockerfiles before startup.
   - Runs compose in intentional build mode (`docker compose up --build --pull never`).
 
+Until a tagged release and its images are actually published, use `build`. Pull mode is the intended immutable production path once those artifacts exist; its registry preflight is expected to fail if the requested image tag is unavailable.
+
 You can set the mode in `.env`, export it in the shell, or override per-run:
 
 ```bash
@@ -226,14 +241,14 @@ Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` 
 ### Quickstart profiles
 
 - **quickstart-dev (demo/local):** Run with a temporary shell override (`BITRIVER_LIVE_MODE=development`) when you intentionally want localhost/demo values. This keeps demo-only warnings available without mutating your committed `.env` defaults.
-- **quickstart-prod (strict):** Keep `BITRIVER_LIVE_MODE=production` in `.env` and provide routable/public values for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`. The quickstart now fails fast with one actionable error block when these are empty, localhost, or `0.0.0.0`.
+- **quickstart-prod (strict):** Keep `BITRIVER_LIVE_MODE=production` in `.env` and provide routable/public values for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`, `BITRIVER_SRS_PUBLIC_RTMP_BASE_URL`, and `NEXT_PUBLIC_VIEWER_URL`. The quickstart fails fast with one actionable error block when these are empty or loopback. OME's local listener values remain wildcard inside Compose.
 
 ### Production deployment contract
 
 Before any containers are started (`deploy/check-env.sh`, `go run ./cmd/bitriver env validate`, `go run ./cmd/bitriver quickstart`, and `go run ./cmd/bitriver compose up`), production deployments must satisfy this contract:
 
 - **Real pgx + Postgres storage only:** `BITRIVER_LIVE_STORAGE_DRIVER=postgres`, and release artifacts must be built with the non-stub pgx module path (verify with `./scripts/check-postgres-pgx.sh`).
-- **Routable/public networking values:** `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `NEXT_PUBLIC_VIEWER_URL`, `BITRIVER_OME_BIND`, and `BITRIVER_OME_IP` must be explicit non-loopback production values.
+- **Routable/public networking values:** `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`, `BITRIVER_SRS_PUBLIC_RTMP_BASE_URL`, and `NEXT_PUBLIC_VIEWER_URL` must be explicit non-loopback production values.
 - **Authenticated registry pulls:** production bootstrap runs in pull mode and validates each required GHCR image reference with `docker manifest inspect`, which fails fast with `docker login ghcr.io` guidance when auth is missing.
 - **Pinned images:** each production image must include both tag and digest in `.env` (`BITRIVER_*_IMAGE_TAG` + `BITRIVER_*_IMAGE_DIGEST`) so deployments are immutable and reproducible.
 
@@ -242,7 +257,7 @@ Use explicit development settings when intentionally running local-only workflow
 ### What the command configures
 
 1. Verifies that both Docker and Docker Compose V2 are available and warns when disk space under the Docker data root is below 15GB.
-2. Generates `.env` with the same defaults baked into `deploy/docker-compose.yml`, defaults `BITRIVER_LIVE_MODE` to `production` when the key is missing, empty, or still at the example placeholder, and rotates required credentials (admin password, Postgres/Redis, SRS, OME, transcoder, metrics) to strong random values unless the file already exists. By default the helper only prompts for the administrator email when it is missing or still set to the example value; with `--wizard`, it also collects the main first-run controls (viewer/API URLs, API port, OME bind/public host, transcoder public URL, and self-signup) before writing the file. Fresh clones still need production-safe routable/public values for the quickstart-prod networking keys before `env validate`/`quickstart` will pass (`BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`). When a pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password and the `BITRIVER_OME_BIND` listener address for the control listener) so Compose can start once production networking values are in place.
+2. Generates `.env` with the same defaults baked into `deploy/docker-compose.yml`, defaults `BITRIVER_LIVE_MODE` to `production` when the key is missing, empty, or still at the example placeholder, and rotates required credentials (admin password, Postgres/Redis, SRS, OME, transcoder, metrics) to strong random values unless the file already exists. By default the helper only prompts for the administrator email when it is missing or still set to the example value; with `--wizard`, it also collects the main first-run controls (viewer/API URLs, API port, OME listeners, transcoder public URL, and self-signup) before writing the file. Fresh clones still need production-safe public viewer, LL-HLS, RTMP, and transcoder URLs before `env validate`/`quickstart` will pass. When a pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password and wildcard listener values) so Compose can start once production networking values are in place.
 3. Launches the containers with `docker compose up --pull always --no-build -d` using the compose file in `deploy/`. Production quickstart expects authenticated GHCR access (`docker login ghcr.io`) and pinned tag+digest image references for API, viewer, SRS controller, and transcoder. The manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots. The `bitriver-live` API service intentionally waits for `srs-controller` and `transcoder` health checks (`/healthz`) before startup, so first boot can take slightly longer but avoids early dependency races.
 4. Renders `deploy/ome/Server.generated.xml` from the bundled template via the Go renderer, mapping `BITRIVER_OME_BIND` to the control listener fields, stamping WebRTC signalling ports from `BITRIVER_OME_SERVER_PORT` / `BITRIVER_OME_SERVER_TLS_PORT`, and stamping Managers API listener ports from `BITRIVER_OME_HTTP_PORT` / `BITRIVER_OME_HTTP_TLS_PORT` while mirroring the OME API token from `.env` so health checks see the same `<Managers><API><AccessToken>` value the compose preflight expects. If the template or token drifts, the generator stops Compose before OME starts. The only supported render path is `go run ./cmd/bitriver ome render` (or the `./scripts/render-ome-config.sh` wrapper). Compose also renders `deploy/srs/conf/srs.generated.conf`, replacing `${BITRIVER_SRS_TOKEN}` from `.env` so SRS ingest hooks stay aligned with the API token.
 5. Waits for the API readiness check to pass (`/readyz`), then invokes the `bootstrap-admin` helper to seed the admin account. After a successful run, the CLI prints any newly generated credentials once so you can store them securely. When the viewer proxy is configured (the default quickstart shape), opening the host root lands in the public viewer flow and administrators should head to `/admin` to sign in to the control centre. Once you sign in, use the control centre **System status** card (powered by `/api/status`) as the primary health view. The raw `/readyz` and `/healthz` endpoints remain available for automation and deep debugging.
@@ -309,7 +324,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml -f 
 
 Alternatively, keep the existing port mappings and enforce the same restrictions using host firewall rules or security groups.
 
-Running the Go env validator (`go run ./cmd/bitriver env validate --env-file ./.env`, or the `deploy/check-env.sh` wrapper) against the quickstart `.env` errors if `BITRIVER_LIVE_MODE` is missing or left at `development`; keep the saved file at production and rely on an inline override or Compose override file for HTTP-only demos. The validator still warns when loopback values remain for the viewer URL, OME bind/IP, or the transcoder public base URL so production deployments replace placeholders with routable hosts before re-running.
+Running the Go env validator (`go run ./cmd/bitriver env validate --env-file ./.env`, or the `deploy/check-env.sh` wrapper) against the quickstart `.env` errors if `BITRIVER_LIVE_MODE` is missing or left at `development`; keep the saved file at production and rely on an inline override or Compose override file for HTTP-only demos. The validator rejects loopback public viewer, LL-HLS, RTMP-ingest, and transcoder URLs in production. OME's server IP is a listener inside the container and should normally remain wildcard (`0.0.0.0`/`*`).
 
 The control centre now exposes a **Setup wizard** under **Settings**. Use it as the default path for production-ready configuration instead of hand-editing `.env`: it prompts for the admin email, viewer domain, API port, TLS certificate paths, and required secrets (Postgres, Redis, SRS, OME, transcoder, metrics) then writes them to the environment file and schedules a safe restart. When you provide certificate paths the wizard copies them into `deploy/certs/` (next to the compose bundle) and updates `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` automatically so HTTPS is ready on the next restart. The wizard keeps Docker/systemd installs aligned without risking partial writes.
 
@@ -327,6 +342,7 @@ The health payload still expects the ingest services to be reachable from the AP
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration. To expose the SRS HTTP API on the host for debugging, enable the `srs-api` profile (`docker compose --profile srs-api up -d`) so `BITRIVER_SRS_API_PORT` is published—leave it disabled in production and never expose the port publicly. The SRS webhook callbacks in `deploy/srs/conf/srs.conf` always read their token from `BITRIVER_SRS_TOKEN` in `.env`, so update the environment file instead of hardcoding query strings. The Compose stack runs the `srs-config` helper to render `deploy/srs/conf/srs.generated.conf` before SRS starts; if you operate SRS outside Compose or rotate `BITRIVER_SRS_TOKEN`, rerun `./scripts/render-srs-config.sh --force --env-file ./.env` so the mounted config stays current.
 - **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and expects `BITRIVER_OME_API_TOKEN` from `.env`. A short-lived `ome-config` helper in the compose file renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` before OME starts, keeping the API token aligned with `.env` for authenticated control-plane calls. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind fields from `BITRIVER_OME_BIND` (default `0.0.0.0`), maps `<Bind><Managers><API><Port>/<TLSPort>` from `BITRIVER_OME_HTTP_PORT` / `BITRIVER_OME_HTTP_TLS_PORT`, maps WebRTC signalling `<Port>/<TLSPort>` from `BITRIVER_OME_SERVER_PORT` / `BITRIVER_OME_SERVER_TLS_PORT`, keeps the root `<Bind>` container focused on provider/publisher protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root `<Bind><IP>`/`<Bind><Address>` host tags, and fills top-level `<Server><IP>` with `BITRIVER_OME_IP` (defaulting to `BITRIVER_OME_BIND`) as the canonical server bind host field—update both the template and `BITRIVER_OME_API` together if you customize the control API port. The liveness/readiness probe now targets OME's unauthenticated local root endpoint (`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/`) so container health does not depend on control-plane auth headers. A probe is considered healthy when curl can connect and returns any non-`000` status below `500`; this tolerates auth redirects/`401`/`404` while still failing on transport errors and `5xx`. Render-time validation still fails fast when `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}` does not match the rendered top-level `<Managers><API><AccessToken>` value. For OME application outputs, keep profiles directly under `<Application><OutputProfiles>`; do not wrap them in deprecated `<Application><Outputs>`. Keep LL-HLS configuration at publisher scope (`<Bind><Publishers><LLHLS>`) only and avoid defining `<Application><LLHLS>`. Leave `BITRIVER_OME_SIGNALLING_PORT` empty to reuse `BITRIVER_OME_SERVER_PORT` for the host binding; set it explicitly only when the host-facing WebRTC port must differ from the value rendered into `Server.xml` so the API and browsers connect to the expected port.
   Edit `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, `BITRIVER_OME_HTTP_PORT`, `BITRIVER_OME_HTTP_TLS_PORT`, `BITRIVER_OME_SERVER_PORT`, or `BITRIVER_OME_SERVER_TLS_PORT` in `.env`? Re-render `deploy/ome/Server.generated.xml` with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or the `./scripts/render-ome-config.sh` wrapper) before running `docker compose up -d` when you operate OME outside Compose so the API access token and canonical server host settings stay aligned with the health check. Override `BITRIVER_OME_ACCESS_TOKEN` only if your deployment needs a different health probe token; by default it mirrors `BITRIVER_OME_API_TOKEN`. The quickstart helper reruns the Go renderer automatically so template changes picked up via `git pull` land in the generated config before Compose starts.
+- OME listener and public address fields are intentionally separate: keep `BITRIVER_OME_BIND`/`BITRIVER_OME_IP` wildcard inside Compose, advertise viewer playback with `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`, and advertise WebRTC relays only through the ICE/TCP relay settings. Boot validates the static `default/live` application through the authenticated manager API; streams do not create or delete that application. The supported browser path is same-origin `/live/`, and direct OME diagnostics remain CORS-compatible through `<Application><Publishers><LLHLS><CrossDomains>`.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the generated credentials block (the quickstart rotates secrets only when needed and prints them once), rotate the `BITRIVER_POSTGRES_USER`/`BITRIVER_POSTGRES_PASSWORD` pair (and update `BITRIVER_LIVE_POSTGRES_DSN` to match), change the Redis credentials (`BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`), and point `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` at the HTTP origin your viewers can actually reach instead of the default `http://localhost:9080`. Update the public viewer URL to match your domain or reverse proxy as well. Log in immediately at `/admin` and rotate the admin password from the control center settings page. Viewer self-registration stays disabled by default to keep new accounts admin-controlled; set `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in `.env` and rerun `docker compose up -d` to reopen public signups, or leave it false to require manual invites.
@@ -378,7 +394,7 @@ All commands assume you are still in the repository root (where `.env` lives) so
   ```bash
   docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never
   ```
-`docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env`, the current control-listener bind value from `BITRIVER_OME_BIND`, and the top-level `<Server><IP>` host from `BITRIVER_OME_IP` without requiring an extra compose override.
+`docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials and local listener values from `.env` without requiring an extra compose override.
 - Running `git pull` followed by the quickstart keeps OME in a predictable state:
   - The helper preserves your `.env` while backfilling any new variables introduced upstream so you avoid silent crashes from missing credentials, including the OME managers token.
   - `deploy/ome/Server.generated.xml` is always re-rendered from `deploy/ome/Server.xml` and the refreshed `.env`, eliminating drift between the template and the live config mounted into the container.

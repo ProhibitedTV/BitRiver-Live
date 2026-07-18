@@ -13,7 +13,6 @@ func TestHTTPControllerStreamLifecycleIntegration(t *testing.T) {
 		PrimaryIngest:   "rtmp://primary",
 		BackupIngest:    "rtmp://backup",
 		OriginURL:       "http://origin",
-		PlaybackURL:     "https://playback",
 		LiveJobIDs:      []string{"job-live-1", "job-live-2"},
 		SRSToken:        "srs-token",
 		TranscoderToken: "transcoder-token",
@@ -24,16 +23,17 @@ func TestHTTPControllerStreamLifecycleIntegration(t *testing.T) {
 
 	controller := HTTPController{
 		config: Config{
-			SRSBaseURL:        stub.BaseURL(),
-			SRSToken:          "srs-token",
-			OMEBaseURL:        stub.BaseURL(),
-			OMEUsername:       "ome-user",
-			OMEPassword:       "ome-pass",
-			JobBaseURL:        stub.BaseURL(),
-			JobToken:          "transcoder-token",
-			LadderProfiles:    []Rendition{{Name: "720p", Bitrate: 2400}},
-			HTTPRetryInterval: 5 * time.Millisecond,
-			HTTPMaxAttempts:   2,
+			SRSBaseURL:         stub.BaseURL(),
+			SRSToken:           "srs-token",
+			OMEBaseURL:         stub.BaseURL(),
+			OMEPlaybackBaseURL: "https://playback.example/live",
+			OMEUsername:        "ome-user",
+			OMEPassword:        "ome-pass",
+			JobBaseURL:         stub.BaseURL(),
+			JobToken:           "transcoder-token",
+			LadderProfiles:     []Rendition{{Name: "720p", Bitrate: 2400}},
+			HTTPRetryInterval:  5 * time.Millisecond,
+			HTTPMaxAttempts:    2,
 		},
 	}
 
@@ -52,7 +52,7 @@ func TestHTTPControllerStreamLifecycleIntegration(t *testing.T) {
 	if result.PrimaryIngest != "rtmp://primary" || result.BackupIngest != "rtmp://backup" {
 		t.Fatalf("unexpected ingest endpoints: %+v", result)
 	}
-	if result.OriginURL != "http://origin" || result.PlaybackURL != "https://playback" {
+	if result.OriginURL != "http://origin" || result.PlaybackURL != "https://playback.example/live/channel-lifecycle/llhls.m3u8" {
 		t.Fatalf("unexpected playback URLs: %+v", result)
 	}
 	if len(result.JobIDs) != 2 {
@@ -72,11 +72,10 @@ func TestHTTPControllerStreamLifecycleIntegration(t *testing.T) {
 
 	expectedOrder := []string{
 		"channel-create",
-		"application-create",
+		"application-validate",
 		"job-start",
 		"job-stop",
 		"job-stop",
-		"application-delete",
 		"channel-delete",
 	}
 	if len(kinds) != len(expectedOrder) {
@@ -115,16 +114,17 @@ func TestHTTPControllerRetriesAndRollsBackOnFailures(t *testing.T) {
 
 	controller := HTTPController{
 		config: Config{
-			SRSBaseURL:        stub.BaseURL(),
-			SRSToken:          "srs-token",
-			OMEBaseURL:        stub.BaseURL(),
-			OMEUsername:       "ome-user",
-			OMEPassword:       "ome-pass",
-			JobBaseURL:        stub.BaseURL(),
-			JobToken:          "transcoder-token",
-			LadderProfiles:    []Rendition{{Name: "1080p", Bitrate: 4200}},
-			HTTPRetryInterval: retryInterval,
-			HTTPMaxAttempts:   2,
+			SRSBaseURL:         stub.BaseURL(),
+			SRSToken:           "srs-token",
+			OMEBaseURL:         stub.BaseURL(),
+			OMEPlaybackBaseURL: "https://playback.example/live",
+			OMEUsername:        "ome-user",
+			OMEPassword:        "ome-pass",
+			JobBaseURL:         stub.BaseURL(),
+			JobToken:           "transcoder-token",
+			LadderProfiles:     []Rendition{{Name: "1080p", Bitrate: 4200}},
+			HTTPRetryInterval:  retryInterval,
+			HTTPMaxAttempts:    2,
 		},
 	}
 
@@ -152,11 +152,8 @@ func TestHTTPControllerRetriesAndRollsBackOnFailures(t *testing.T) {
 		t.Fatalf("expected transcoder retry backoff >= %v, got %v", retryInterval, gap)
 	}
 
-	if len(filterOps(ops, "application-create")) != 1 {
-		t.Fatalf("expected application create to run once, got %d", len(filterOps(ops, "application-create")))
-	}
-	if len(filterOps(ops, "application-delete")) != 1 {
-		t.Fatalf("expected rollback application delete, got %d", len(filterOps(ops, "application-delete")))
+	if len(filterOps(ops, "application-validate")) != 1 {
+		t.Fatalf("expected application validation to run once, got %d", len(filterOps(ops, "application-validate")))
 	}
 	if len(filterOps(ops, "channel-delete")) != 1 {
 		t.Fatalf("expected rollback channel delete, got %d", len(filterOps(ops, "channel-delete")))

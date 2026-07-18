@@ -2470,6 +2470,86 @@ func TestSRSHookRejectsMissingToken(t *testing.T) {
 	}
 }
 
+func TestSRSHookCanonicalConnectRouteRequiresOnlyHookToken(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs/connect?token=secret", strings.NewReader(`{"action":"on_connect","client_id":"publisher"}`))
+	rec := httptest.NewRecorder()
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected connect status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response srsHookResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode connect response: %v", err)
+	}
+	if response.Code != 0 || response.Action != "on_connect" {
+		t.Fatalf("unexpected connect response: %+v", response)
+	}
+}
+
+func TestSRSHookInfersActionFromCanonicalRoute(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Streamer", Email: "canonical-hook@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	channel, err := store.CreateChannel(creator.ID, "Canonical Hook", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs/publish?token=secret&stream="+channel.StreamKey, nil)
+	rec := httptest.NewRecorder()
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected publish status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response srsHookResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode publish response: %v", err)
+	}
+	if response.Code != 0 || response.Action != "on_publish" || response.ChannelID != channel.ID {
+		t.Fatalf("unexpected publish response: %+v", response)
+	}
+}
+
+func TestSRSHookForwardMapsPrivateStreamKeyToPublicChannelID(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Streamer", Email: "forward-hook@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	channel, err := store.CreateChannel(creator.ID, "Forwarded", "technology", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs/forward?token=secret&stream="+channel.StreamKey, nil)
+	rec := httptest.NewRecorder()
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected forward status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response srsForwardResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode forward response: %v", err)
+	}
+	want := "rtmp://ome:1935/live/" + channel.ID
+	if response.Code != 0 || len(response.Data.URLs) != 1 || response.Data.URLs[0] != want {
+		t.Fatalf("unexpected forward response: %+v", response)
+	}
+	if strings.Contains(rec.Body.String(), channel.StreamKey) {
+		t.Fatal("forward response must not expose the private stream key")
+	}
+}
+
 func TestSRSHookPublishAndUnpublish(t *testing.T) {
 	store, err := storage.NewStorage(t.TempDir()+"/store.json", storage.WithIngestController(ingest.NoopController{}), storage.WithIngestRetries(1, 0))
 	if err != nil {

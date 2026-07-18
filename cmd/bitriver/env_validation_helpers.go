@@ -205,6 +205,8 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = normalizedOMEHealthcheckAuthMode(existing["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
 	existing["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]
 	generated["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = defaultIfPlaceholder("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", existing, "http://localhost:9001/hls")
+	generated["BITRIVER_SRS_PUBLIC_RTMP_BASE_URL"] = defaultIfPlaceholder("BITRIVER_SRS_PUBLIC_RTMP_BASE_URL", existing, "rtmp://localhost:1935/live")
+	generated["BITRIVER_OME_PUBLIC_LLHLS_BASE_URL"] = defaultIfPlaceholder("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", existing, "http://localhost:8080/live")
 	generated["NEXT_PUBLIC_VIEWER_URL"] = defaultIfPlaceholder("NEXT_PUBLIC_VIEWER_URL", existing, "http://localhost:8080/viewer")
 
 	for key := range defaultEnvSecrets.secrets {
@@ -331,14 +333,14 @@ func promptForQuickstartWizard(existing map[string]string, envPath string) error
 	if err != nil {
 		return err
 	}
-	omeBind, err := promptRequiredWizardValue(reader, "OME bind host or IP", wizardHostDefault(existing, "BITRIVER_OME_BIND"), func(value string) error {
-		return validateWizardHostValue("OME bind host or IP", value)
+	omeBind, err := promptRequiredWizardValue(reader, "OME listener IP", wizardHostDefault(existing, "BITRIVER_OME_BIND"), func(value string) error {
+		return validateWizardHostValue("OME listener IP", value)
 	})
 	if err != nil {
 		return err
 	}
-	omeIP, err := promptRequiredWizardValue(reader, "OME public host or IP", wizardHostDefault(existing, "BITRIVER_OME_IP"), func(value string) error {
-		return validateWizardHostValue("OME public host or IP", value)
+	omeIP, err := promptRequiredWizardValue(reader, "OME server listener IP", wizardHostDefault(existing, "BITRIVER_OME_IP"), func(value string) error {
+		return validateWizardHostValue("OME server listener IP", value)
 	})
 	if err != nil {
 		return err
@@ -375,7 +377,7 @@ func promptForQuickstartWizard(existing map[string]string, envPath string) error
 	}
 	fmt.Fprintf(interactivePromptOutput, "  API/control port: %s\n", apiPort)
 	fmt.Fprintf(interactivePromptOutput, "  OME bind host/IP: %s\n", omeBind)
-	fmt.Fprintf(interactivePromptOutput, "  OME public host/IP: %s\n", omeIP)
+	fmt.Fprintf(interactivePromptOutput, "  OME server listener IP: %s\n", omeIP)
 	fmt.Fprintf(interactivePromptOutput, "  Transcoder public base URL: %s\n", transcoderURL)
 	fmt.Fprintf(interactivePromptOutput, "  Self-signup: %t\n", allowSelfSignup)
 	fmt.Fprintln(interactivePromptOutput, "  Secrets: existing values stay in place; any missing required secrets will still be generated during env init.")
@@ -697,11 +699,16 @@ func resolveEnvValue(values map[string]string, key string) envFileResolution {
 }
 
 func validateEnv(values map[string]string) envValidatorResult {
+	return validateEnvWithRuntimeMode(values, "")
+}
+
+func validateEnvWithRuntimeMode(values map[string]string, runtimeMode string) envValidatorResult {
 	requiredVars := []string{
 		"BITRIVER_POSTGRES_USER",
 		"BITRIVER_POSTGRES_PASSWORD",
 		"BITRIVER_REDIS_PASSWORD",
 		"BITRIVER_OME_API",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL",
 		"BITRIVER_OME_BIND",
 		"BITRIVER_OME_IP",
 		"BITRIVER_OME_SERVER_PORT",
@@ -711,6 +718,7 @@ func validateEnv(values map[string]string) envValidatorResult {
 		"BITRIVER_LIVE_SESSION_TTL",
 		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP",
 		"BITRIVER_SRS_TOKEN",
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL",
 		"BITRIVER_OME_USERNAME",
 		"BITRIVER_OME_PASSWORD",
 		"BITRIVER_OME_API_TOKEN",
@@ -731,9 +739,18 @@ func validateEnv(values map[string]string) envValidatorResult {
 
 	modeRaw := strings.TrimSpace(values["BITRIVER_LIVE_MODE"])
 	mode := strings.ToLower(modeRaw)
-	production := mode == "production"
 
 	res := envValidatorResult{}
+	effectiveMode := mode
+	if override := strings.ToLower(strings.TrimSpace(runtimeMode)); override != "" {
+		switch override {
+		case "production", "development":
+			effectiveMode = override
+		default:
+			res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_LIVE_MODE runtime override must be production or development (current: %s)", strings.TrimSpace(runtimeMode)))
+		}
+	}
+	production := effectiveMode == "production"
 	effectiveValues := make(map[string]string, len(values))
 	for key, value := range values {
 		effectiveValues[key] = value
@@ -935,10 +952,12 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	loopback := regexp.MustCompile(`^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$)`)
-	loopbackHost := regexp.MustCompile(`^(localhost|127\.[0-9.]*|::1|\[::1\]|0\.0\.0\.0|::)$`)
+	loopbackRTMP := regexp.MustCompile(`^rtmp://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$)`)
 	localQuickstart := !production &&
 		loopback.MatchString(strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"])) &&
-		loopback.MatchString(strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]))
+		loopback.MatchString(strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"])) &&
+		loopback.MatchString(strings.TrimSpace(values["BITRIVER_OME_PUBLIC_LLHLS_BASE_URL"])) &&
+		loopbackRTMP.MatchString(strings.TrimSpace(values["BITRIVER_SRS_PUBLIC_RTMP_BASE_URL"]))
 	localQuickstartMessage := " This is expected for first-run Docker Desktop quickstart demos and remains a non-fatal warning, but you must replace it with a public/routable value before any internet-facing or production deployment."
 
 	flagEnvIssue := func(message string) {
@@ -951,18 +970,6 @@ func validateEnv(values map[string]string) envValidatorResult {
 		} else {
 			res.Warnings = append(res.Warnings, message)
 		}
-	}
-
-	flagOMEIssue := func(message string) {
-		if localQuickstart {
-			res.Warnings = append(res.Warnings, message+localQuickstartMessage)
-			return
-		}
-		if production {
-			res.Errors = append(res.Errors, message)
-			return
-		}
-		res.Warnings = append(res.Warnings, message)
 	}
 
 	if val := strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]); val != "" {
@@ -978,12 +985,12 @@ func validateEnv(values map[string]string) envValidatorResult {
 		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_API points at loopback (%s). Use the ome hostname from docker-compose.yml or another reachable host/IP.", val))
 	}
 
-	if val := strings.TrimSpace(values["BITRIVER_OME_BIND"]); val != "" && loopbackHost.MatchString(val) {
-		flagOMEIssue(fmt.Sprintf("BITRIVER_OME_BIND is set to %s. Bind OvenMediaEngine to a routable interface instead of loopback.", val))
+	if val := strings.TrimSpace(values["BITRIVER_OME_PUBLIC_LLHLS_BASE_URL"]); val != "" && loopback.MatchString(val) {
+		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL points at loopback (%s). Configure the HTTPS LL-HLS path viewers can reach.", val))
 	}
 
-	if val := strings.TrimSpace(values["BITRIVER_OME_IP"]); val != "" && loopbackHost.MatchString(val) {
-		flagOMEIssue(fmt.Sprintf("BITRIVER_OME_IP is set to %s. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value.", val))
+	if val := strings.TrimSpace(values["BITRIVER_SRS_PUBLIC_RTMP_BASE_URL"]); val != "" && loopbackRTMP.MatchString(val) {
+		flagEnvIssue(fmt.Sprintf("BITRIVER_SRS_PUBLIC_RTMP_BASE_URL points at loopback (%s). Configure the RTMP hostname or IP creators can reach.", val))
 	}
 
 	if val := strings.TrimSpace(values["NEXT_PUBLIC_API_BASE_URL"]); val != "" {

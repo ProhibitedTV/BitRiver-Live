@@ -59,6 +59,8 @@ func buildValidProductionEnv(t *testing.T) map[string]string {
 		"BITRIVER_TRANSCODER_TOKEN":               "transcodertoken",
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
 		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "http://cdn.edge/hls",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL":      "https://stream.edge/live",
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL":       "rtmp://ingest.edge:1935/live",
 		"NEXT_PUBLIC_VIEWER_URL":                  "http://viewer.internal/viewer",
 		"NEXT_PUBLIC_API_BASE_URL":                "http://api.internal",
 		"BITRIVER_LIVE_MODE":                      "production",
@@ -929,6 +931,28 @@ func TestValidateComposeEffectiveEnvironmentAllowsMatchingHostOverride(t *testin
 	}
 }
 
+func TestValidateComposeEffectiveEnvironmentAllowsDevelopmentModeOverride(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_MODE"] = "production"
+	values["BITRIVER_OME_BIND"] = "0.0.0.0"
+	values["BITRIVER_OME_IP"] = "0.0.0.0"
+	values["NEXT_PUBLIC_VIEWER_URL"] = "http://localhost:8080/viewer"
+	values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = "http://localhost:9080/hls"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	t.Setenv("BITRIVER_LIVE_MODE", "development")
+
+	if err := validateComposeEffectiveEnvironment(envPath); err != nil {
+		t.Fatalf("expected documented inline development mode to allow local Compose values, got %v", err)
+	}
+}
+
 func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
@@ -1597,6 +1621,16 @@ func TestRunQuickstartFirstRunFailsUntilProductionOverridesAreSet(t *testing.T) 
 	}
 }
 
+func TestValidateQuickstartProductionAllowsOMEWildcardListeners(t *testing.T) {
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_OME_BIND"] = "0.0.0.0"
+	values["BITRIVER_OME_IP"] = "0.0.0.0"
+
+	if err := validateQuickstartProductionRequirements(".env", values); err != nil {
+		t.Fatalf("production quickstart must allow OME to bind all container interfaces: %v", err)
+	}
+}
+
 func TestRunQuickstartRejectsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 	restored := map[string]string{}
 	for _, entry := range os.Environ() {
@@ -1869,9 +1903,7 @@ func TestRunQuickstartFirstRunInitValidateFailsFastWithActionableProductionBlock
 	res := validateEnv(values)
 	joinedErrors := strings.Join(res.Errors, " ")
 	if !strings.Contains(joinedErrors, "BITRIVER_TRANSCODER_PUBLIC_BASE_URL") ||
-		!strings.Contains(joinedErrors, "NEXT_PUBLIC_VIEWER_URL") ||
-		!strings.Contains(joinedErrors, "BITRIVER_OME_BIND") ||
-		!strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		!strings.Contains(joinedErrors, "NEXT_PUBLIC_VIEWER_URL") {
 		t.Fatalf("expected strict production errors after first-run env init, got errors=%v warnings=%v", res.Errors, res.Warnings)
 	}
 }
@@ -2414,6 +2446,15 @@ func TestRunComposeUpRejectsBuildModeInProduction(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "image source mode must be \"pull\"") {
 		t.Fatalf("expected pull-mode contract error, got %v", err)
+	}
+}
+
+func TestProductionContractHonorsInlineDevelopmentOverride(t *testing.T) {
+	values := buildValidProductionEnv(t)
+	t.Setenv("BITRIVER_LIVE_MODE", "development")
+
+	if err := validateProductionDeploymentContract(".env", values, deployImageSourceBuild); err != nil {
+		t.Fatalf("inline development override should permit local build mode without rewriting the saved production env: %v", err)
 	}
 }
 

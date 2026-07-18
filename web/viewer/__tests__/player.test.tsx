@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import Hls from "hls.js";
 import { Player } from "../components/Player";
 
 jest.mock("../lib/viewer-api", () => ({
@@ -18,13 +19,42 @@ jest.mock("next/link", () => ({
 
 jest.mock("hls.js", () => ({
   __esModule: true,
-  default: {
-    isSupported: () => false,
-    Events: {}
-  }
+  default: (() => {
+    const loadSource = jest.fn();
+    const attachMedia = jest.fn();
+    const destroy = jest.fn();
+    const on = jest.fn();
+    const constructor = jest.fn(() => ({ loadSource, attachMedia, destroy, on, levels: [] }));
+    return Object.assign(constructor, {
+      supported: false,
+      loadSource,
+      attachMedia,
+      destroy,
+      on,
+      isSupported: () => constructor.supported,
+      Events: { LEVEL_SWITCHED: "levelSwitched", ERROR: "error" }
+    });
+  })()
 }));
 
+const mockHlsConstructor = Hls as unknown as jest.Mock & {
+  supported: boolean;
+  loadSource: jest.Mock;
+  attachMedia: jest.Mock;
+  destroy: jest.Mock;
+  on: jest.Mock;
+};
+
 describe("Player", () => {
+	beforeEach(() => {
+		mockHlsConstructor.supported = false;
+		mockHlsConstructor.mockClear();
+		mockHlsConstructor.loadSource.mockClear();
+		mockHlsConstructor.attachMedia.mockClear();
+		mockHlsConstructor.destroy.mockClear();
+		mockHlsConstructor.on.mockClear();
+	});
+
   test("renders loading state copy", () => {
     render(<Player channelId="chan-1" loading />);
 
@@ -136,6 +166,34 @@ describe("Player", () => {
       expect(container.querySelector("video")).toBeInTheDocument();
     });
     expect(screen.queryByRole("heading", { name: "Stream unavailable" })).not.toBeInTheDocument();
+  });
+
+  test("prefers hls.js over an unreliable native HLS capability signal", async () => {
+    mockHlsConstructor.supported = true;
+    const nativeCapability = jest.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
+
+    render(
+      <Player
+        channelId="chan-1"
+        playback={{
+          sessionId: "session-1",
+          startedAt: new Date().toISOString(),
+          protocol: "ll-hls",
+          latencyMode: "low-latency",
+          playbackUrl: "https://stream.example.test/live/channel/llhls.m3u8"
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockHlsConstructor.loadSource).toHaveBeenCalledWith(
+        "https://stream.example.test/live/channel/llhls.m3u8"
+      );
+    });
+    expect(mockHlsConstructor).toHaveBeenCalledWith({ lowLatencyMode: true });
+    expect(mockHlsConstructor.attachMedia).toHaveBeenCalledWith(expect.any(HTMLVideoElement));
+
+    nativeCapability.mockRestore();
   });
 
   test("delays stream unavailable to allow reconnect attempts", async () => {

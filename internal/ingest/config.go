@@ -23,22 +23,23 @@ func (e MissingConfigError) Error() string {
 
 // Config stores connectivity information for the ingest controller.
 type Config struct {
-	SRSBaseURL        string
-	SRSToken          string
-	OMEBaseURL        string
-	OMEAccessToken    string
-	OMEUsername       string
-	OMEPassword       string
-	JobBaseURL        string
-	JobToken          string
-	LadderProfiles    []Rendition
-	HTTPClient        *http.Client
-	HealthEndpoint    string
-	HealthTimeout     time.Duration
-	MaxBootAttempts   int
-	RetryInterval     time.Duration
-	HTTPMaxAttempts   int
-	HTTPRetryInterval time.Duration
+	SRSBaseURL         string
+	SRSToken           string
+	OMEBaseURL         string
+	OMEPlaybackBaseURL string
+	OMEAccessToken     string
+	OMEUsername        string
+	OMEPassword        string
+	JobBaseURL         string
+	JobToken           string
+	LadderProfiles     []Rendition
+	HTTPClient         *http.Client
+	HealthEndpoint     string
+	HealthTimeout      time.Duration
+	MaxBootAttempts    int
+	RetryInterval      time.Duration
+	HTTPMaxAttempts    int
+	HTTPRetryInterval  time.Duration
 }
 
 // LoadConfigFromEnv initialises a Config from environment variables.
@@ -62,7 +63,7 @@ func fromConfig(parsed config.IngestConfig) Config {
 	for _, profile := range parsed.LadderProfiles {
 		profiles = append(profiles, Rendition{Name: profile.Name, Bitrate: profile.Bitrate})
 	}
-	return Config{SRSBaseURL: parsed.SRSBaseURL, SRSToken: parsed.SRSToken, OMEBaseURL: parsed.OMEBaseURL, OMEAccessToken: parsed.OMEAccessToken, OMEUsername: parsed.OMEUsername, OMEPassword: parsed.OMEPassword, JobBaseURL: parsed.JobBaseURL, JobToken: parsed.JobToken, LadderProfiles: profiles, HealthEndpoint: parsed.HealthEndpoint, HealthTimeout: parsed.HealthTimeout, MaxBootAttempts: parsed.MaxBootAttempts, RetryInterval: parsed.RetryInterval, HTTPMaxAttempts: parsed.HTTPMaxAttempts, HTTPRetryInterval: parsed.HTTPRetryInterval}
+	return Config{SRSBaseURL: parsed.SRSBaseURL, SRSToken: parsed.SRSToken, OMEBaseURL: parsed.OMEBaseURL, OMEPlaybackBaseURL: parsed.OMEPlaybackBaseURL, OMEAccessToken: parsed.OMEAccessToken, OMEUsername: parsed.OMEUsername, OMEPassword: parsed.OMEPassword, JobBaseURL: parsed.JobBaseURL, JobToken: parsed.JobToken, LadderProfiles: profiles, HealthEndpoint: parsed.HealthEndpoint, HealthTimeout: parsed.HealthTimeout, MaxBootAttempts: parsed.MaxBootAttempts, RetryInterval: parsed.RetryInterval, HTTPMaxAttempts: parsed.HTTPMaxAttempts, HTTPRetryInterval: parsed.HTTPRetryInterval}
 }
 
 // Enabled reports whether enough configuration has been provided to talk to
@@ -102,7 +103,7 @@ func (c Config) Validate() error {
 
 func (c Config) hasAnyConfig() bool {
 	return c.SRSBaseURL != "" || c.SRSToken != "" ||
-		c.OMEBaseURL != "" || c.OMEAccessToken != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
+		c.OMEBaseURL != "" || c.OMEPlaybackBaseURL != "" || c.OMEAccessToken != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
 		c.JobBaseURL != "" || c.JobToken != ""
 }
 
@@ -116,6 +117,9 @@ func (c Config) missingRequiredFields() []string {
 	}
 	if c.OMEBaseURL == "" {
 		missing = append(missing, "BITRIVER_OME_API")
+	}
+	if c.OMEPlaybackBaseURL == "" {
+		missing = append(missing, "BITRIVER_OME_PUBLIC_LLHLS_BASE_URL")
 	}
 	if c.OMEAccessToken == "" && (c.OMEUsername == "" || c.OMEPassword == "") {
 		missing = append(missing, "BITRIVER_OME_API_TOKEN")

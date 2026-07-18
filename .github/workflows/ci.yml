@@ -236,7 +236,8 @@ jobs:
             'Ensure-Go',
             'Invoke-Cli',
             '$goPath = (Get-Command go -ErrorAction Stop).Source',
-            'Start-Process -FilePath $goPath',
+            '$buildOutput = @(& $goPath @buildArgs 2>&1)',
+            '$cliOutput = @(& $tempBinary @CliArgs 2>&1)',
             'bitriver-live-go-build-cache',
             'SetEnvironmentVariable(''GOCACHE'', $goCacheRoot, ''Process'')',
             'if ($ValidateOnly)',
@@ -405,6 +406,8 @@ jobs:
           BITRIVER_POSTGRES_USER=ci-postgres
           BITRIVER_POSTGRES_PASSWORD=ci-postgres-password
           BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://example.com/hls
+          BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://example.com/live
+          BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://example.com/live
           ENV
 
       - name: Build local images from the Compose stack

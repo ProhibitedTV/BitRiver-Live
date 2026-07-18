@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate CI quickstart smoke env fixture satisfies deployment requirements."""
+"""Validate the CI quickstart smoke env fixture satisfies deployment requirements."""
 from __future__ import annotations
 
 import pathlib
@@ -79,6 +79,23 @@ def main() -> int:
             print(f"  {key}", file=sys.stderr)
         return 1
 
+    required_runtime_keys = {
+        "BITRIVER_SRS_PUBLIC_RTMP_BASE_URL",
+        "BITRIVER_OME_PUBLIC_LLHLS_BASE_URL",
+        "BITRIVER_TRANSCODER_PUBLIC_BASE_URL",
+    }
+    missing_runtime = sorted(
+        key for key in required_runtime_keys if not seed_env.get(key, "").strip()
+    )
+    if missing_runtime:
+        print(
+            "quickstart smoke env fixture is missing required public media URLs:",
+            file=sys.stderr,
+        )
+        for key in missing_runtime:
+            print(f"  {key}", file=sys.stderr)
+        return 1
+
     api_token = seed_env.get("BITRIVER_OME_API_TOKEN", "").strip()
     access_token = seed_env.get("BITRIVER_OME_ACCESS_TOKEN", "").strip()
     if not api_token:
@@ -99,9 +116,9 @@ def main() -> int:
         return 1
 
     mode = seed_env.get("BITRIVER_LIVE_MODE", "").strip().lower()
-    if mode != "production":
+    if mode != "development":
         print(
-            "quickstart smoke env fixture must set BITRIVER_LIVE_MODE=production to match deploy/check-env.sh validation",
+            "quickstart smoke env fixture must set BITRIVER_LIVE_MODE=development for loopback media URLs",
             file=sys.stderr,
         )
         return 1

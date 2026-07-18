@@ -112,28 +112,6 @@ export function Player({
       return;
     }
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = playback.playbackUrl;
-      void video.play().catch(() => {
-        scheduleUnavailableWithGrace();
-      });
-      void reportViewerQoE({
-        channelId,
-        sessionId: playback.sessionId,
-        event: "player_init",
-        player: "native",
-        protocol: playback.protocol ?? "hls",
-        latencyMode: playback.latencyMode,
-        playbackUrl: playback.playbackUrl
-      });
-      return () => {
-        clearErrorTimeout();
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-      };
-    }
-
     if (Hls.isSupported()) {
       const hls = new Hls({ lowLatencyMode: playback.latencyMode === "low-latency" });
       hls.loadSource(playback.playbackUrl);
@@ -178,6 +156,28 @@ export function Player({
       return () => {
         clearErrorTimeout();
         hls.destroy();
+      };
+    }
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playback.playbackUrl;
+      void video.play().catch(() => {
+        scheduleUnavailableWithGrace();
+      });
+      void reportViewerQoE({
+        channelId,
+        sessionId: playback.sessionId,
+        event: "player_init",
+        player: "native",
+        protocol: playback.protocol ?? "hls",
+        latencyMode: playback.latencyMode,
+        playbackUrl: playback.playbackUrl
+      });
+      return () => {
+        clearErrorTimeout();
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
       };
     }
 

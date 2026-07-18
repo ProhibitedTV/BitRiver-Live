@@ -1,4 +1,4 @@
-// Command srs-controller proxies SRS raw API calls and enforces bearer auth.
+// Command srs-controller exposes authenticated ingest endpoints and probes SRS.
 package main
 
 import (
@@ -29,10 +29,12 @@ const (
 )
 
 type controller struct {
-	token   string
-	client  *http.Client
-	baseURL *url.URL
-	logger  *slog.Logger
+	token            string
+	client           *http.Client
+	baseURL          *url.URL
+	publicRTMPBase   *url.URL
+	internalRTMPBase *url.URL
+	logger           *slog.Logger
 
 	mu               sync.Mutex
 	lastUpstreamErr  error
@@ -59,16 +61,17 @@ func main() {
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		baseURL: runtimeCfg.Upstream,
-		logger:  logger,
+		baseURL:          runtimeCfg.Upstream,
+		publicRTMPBase:   runtimeCfg.PublicRTMPBaseURL,
+		internalRTMPBase: runtimeCfg.InternalRTMPBaseURL,
+		logger:           logger,
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", registry.Handler())
 	mux.HandleFunc("/healthz", ctrl.healthz)
-	proxyHandler := http.HandlerFunc(ctrl.proxyRequest)
-	mux.Handle("/v1/channels", proxyHandler)
-	mux.Handle("/v1/channels/", proxyHandler)
+	mux.HandleFunc("/v1/channels", ctrl.handleChannels)
+	mux.HandleFunc("/v1/channels/", ctrl.handleChannels)
 
 	handler := http.Handler(mux)
 	handler = registry.Middleware(handler)
@@ -89,6 +92,61 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("srs controller stopped")
+}
+
+type channelRequest struct {
+	ChannelID string `json:"channelId"`
+	StreamKey string `json:"streamKey"`
+}
+
+type channelResponse struct {
+	PrimaryIngest string `json:"primaryIngest"`
+	BackupIngest  string `json:"backupIngest,omitempty"`
+	OriginIngest  string `json:"originIngest"`
+}
+
+func (c *controller) handleChannels(w http.ResponseWriter, r *http.Request) {
+	if !c.authorized(r) {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/channels":
+		var request channelRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&request); err != nil {
+			http.Error(w, "invalid channel payload", http.StatusBadRequest)
+			return
+		}
+		request.ChannelID = strings.TrimSpace(request.ChannelID)
+		request.StreamKey = strings.TrimSpace(request.StreamKey)
+		if request.ChannelID == "" || request.StreamKey == "" {
+			http.Error(w, "channelId and streamKey are required", http.StatusBadRequest)
+			return
+		}
+		response := channelResponse{
+			PrimaryIngest: streamURL(c.publicRTMPBase, request.StreamKey),
+			OriginIngest:  streamURL(c.internalRTMPBase, request.StreamKey),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(response)
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/channels/"):
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.Header().Set("Allow", "POST, DELETE")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func streamURL(base *url.URL, streamKey string) string {
+	if base == nil {
+		return ""
+	}
+	copyURL := *base
+	copyURL.Path = strings.TrimRight(copyURL.Path, "/") + "/" + url.PathEscape(streamKey)
+	return copyURL.String()
 }
 
 func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {

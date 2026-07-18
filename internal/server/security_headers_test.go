@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -39,6 +40,33 @@ func TestSecurityHeadersMiddlewareSkipsCSPOnViewerRoutes(t *testing.T) {
 	assertHeaderEquals(t, res, "Referrer-Policy", defaultReferrerPolicy)
 	assertHeaderEquals(t, res, "Permissions-Policy", defaultPermissionsPolicy)
 	assertHeaderEquals(t, res, "X-Content-Type-Options", defaultContentTypeOptions)
+}
+
+func TestDefaultViewerContentSecurityPolicyAllowsConfiguredMediaOrigins(t *testing.T) {
+	t.Parallel()
+
+	policy := defaultViewerContentSecurityPolicy(
+		defaultFrameAncestors,
+		"https://stream.example.com/live",
+		"http://media.example.com:9080/hls",
+		"https://stream.example.com/duplicate",
+		"https://user:secret@example.com/private",
+		"ftp://ignored.example.com/files",
+	)
+
+	for _, expected := range []string{
+		"connect-src 'self' https://stream.example.com http://media.example.com:9080;",
+		"media-src 'self' https://stream.example.com http://media.example.com:9080;",
+	} {
+		if !strings.Contains(policy, expected) {
+			t.Fatalf("expected viewer policy to contain %q, got %q", expected, policy)
+		}
+	}
+	for _, forbidden := range []string{"/live", "/hls", "user:secret", "ignored.example.com"} {
+		if strings.Contains(policy, forbidden) {
+			t.Fatalf("expected viewer policy to exclude %q, got %q", forbidden, policy)
+		}
+	}
 }
 
 func TestSecurityHeadersCanBeOverridden(t *testing.T) {
