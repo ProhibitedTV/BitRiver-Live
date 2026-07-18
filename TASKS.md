@@ -62,11 +62,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Fixed the production OME listener validator discovered during documentation: `BITRIVER_OME_BIND`/`BITRIVER_OME_IP` may remain wildcard inside Docker, while public LL-HLS, RTMP, transcoder, and viewer URLs remain strict. Focused `cmd/bitriver` and `internal/ingest` tests passed.
     - Generated contract index, installer-language guard, README image existence checks, and `git diff --check` passed.
 
-- [-] Task 6 - Run release-quality validation and publish separately
+- [x] Task 6 - Run release-quality validation and publish separately
   - Acceptance criteria:
     - Focused Windows/runtime/viewer/docs checks and `./scripts/verify.sh --viewer` pass or exact blockers are recorded.
     - Diff and staged-file review exclude `.env`, credentials, runtime output, and unrelated untracked helpers.
     - Work is committed and proposed separately from PR #1325 with remote CI status reported accurately.
   - Check:
     - The first full gate exposed a Windows junction-fallback defect: the transcoder depended on `cmd.exe` being discoverable through `PATH`, while the release gate intentionally narrows `PATH`. It now resolves the interpreter through `ComSpec`/`SystemRoot`; the interpreter-selection and complete job lifecycle/health regressions pass under that narrowed environment.
-    - Full repository verification, clean Windows startup proof, diff audit, and publication are still in progress.
+    - Final `./scripts/verify.sh --viewer` passed all Go packages, architecture/dependency/contract checks, the Postgres migration lifecycle, Compose rendering, clean quickstart smoke, viewer lint, and 25 Jest suites / 215 tests / 4 snapshots.
+    - Final `.\scripts\verify-windows-docker.ps1 -Start` passed on Docker Desktop 4.82.0 with Linux/amd64 engine 29.6.1 and Compose 5.3.0; migrations, critical service health, admin bootstrap, and `200` responses from `/healthz`, `/readyz`, `/viewer`, and `/admin` all passed. Its printed cleanup command was executed successfully.
+    - The staged audit included 64 intended files with no root `.env`, runtime data, unrelated deployment helpers, or detected secret patterns; `git diff --cached --check` passed and the generated OME config retained its placeholder token.
+    - Committed and pushed on `feat/windows-docker-readme`; opened draft PR [#1326](https://github.com/ProhibitedTV/BitRiver-Live/pull/1326) against `main`, separate from Ubuntu installer PR #1325. Remote CI is reported from the final pushed head rather than assumed from local proof.
