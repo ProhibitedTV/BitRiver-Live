@@ -21,6 +21,7 @@
 - Windows directory mirrors fall back from symlinks to `mklink /J`. Resolve the Windows command interpreter from `ComSpec`/`SystemRoot` instead of relying on `cmd.exe` being present in a caller-modified `PATH`; the release gate intentionally narrows `PATH` and exposed that hidden dependency.
 - The Windows proof deletes its temporary evaluation env after startup, so its printed cleanup command must provide the two evaluation-only public media URL overrides explicitly; older root `.env` files should not strand the proof stack because they predate those required keys.
 - Remote CI showed that the inline and standalone image-scan Compose fixtures, plus the future tagged-release validation input, must evolve with required deployment variables. Add the public SRS RTMP and OME LL-HLS URLs to all three workflow contracts and lock them with a static regression.
+- The Ubuntu aggregate gate uses the generated env in `scripts/test-quickstart.sh`, independently of the image-scan fixtures. Keep that smoke seed complete as required Compose variables evolve, and align `scripts/test-quickstart-env.py` with the intentional development-mode smoke contract.
 
 ## Risks
 - An attractive README can overstate runtime maturity; pair every workflow claim with a command, route, or supporting document and label planned release paths clearly.
@@ -51,6 +52,7 @@
 - A Windows command-interpreter regression that proves the junction fallback honors `ComSpec`, followed by the full transcoder lifecycle test under the same narrowed `PATH` used by the repository gate.
 - PowerShell parser/static-contract checks for the Windows proof's self-contained cleanup command, plus live execution of that command against the proof stack.
 - Extract each image-scan `.ci.env` fixture and require `docker compose config --quiet` to render with it; statically require the tagged-release workflow to forward both public media URLs before pushing the CI repair.
+- Run `scripts/test-quickstart-env.py` against the smoke heredoc, then render the extracted seed with root `.env` disabled before re-running the Ubuntu gate remotely.
 - Viewer lint, Jest, production build, and browser inspection at desktop and mobile widths for changed README-visible surfaces.
 - Markdown/image-link validation, `git diff --check`, and full `./scripts/verify.sh --viewer` before publication.
 
