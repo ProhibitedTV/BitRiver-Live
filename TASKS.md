@@ -77,7 +77,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `scripts/test-linux-packages.sh` generated and inspected amd64/arm64 `.deb` and `.rpm` payloads with nFPM v2.47.0. Compose rendering, YAML parsing, PowerShell parsing, shell syntax, installer-language consistency, and `git diff --check` also passed.
     - Post-smoke `docker compose --env-file .env -f deploy/docker-compose.yml ps --all` returned an empty service table; generated OME/SRS config and root `.env` have no diff.
     - GitHub authentication was restored; commit `c3dd9c65` was pushed and draft PR #1325 opened without closing #1297. The first CI pass caught ShellCheck SC2016 in two intentional literal workflow assertions; escaped fixed-string patterns now preserve the contract without suppressions, and Linux `bash -n` plus `scripts/test-release-bundle.sh` pass locally.
-    - Pull-request CI is rerunning after the shell-lint repair. No merge or production-release claim is permitted until required CI is green and the external release gates below pass.
+    - The repaired CI run then exposed a stale `bitriver-live/ome-config:local` Trivy target duplicated in `ci.yml`, even though Compose built `ghcr.io/bitriver-live/bitriver-ome-config:ci`. Both scan workflows now select exactly one OME helper from the collected Compose image list; YAML parsing, CI contract validation, rendered image selection, and the focused Go 1.26.5 regression test pass.
+    - Pull-request CI must rerun from the OME scan repair. No merge or production-release claim is permitted until required CI is green and the external release gates below pass.
     - Unrelated deployment helpers/data remain untracked and are explicitly excluded from the intended change set; the temporary `.gomodcache/` was removed after verification.
     - Tagged Ubuntu/XOA reboot, authenticated OME control-plane, and real ingest/playback acceptance remain external release evidence owned by #1297/#1300/#1304 and are not claimed by this local candidate.
 
@@ -109,4 +110,5 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Passed literal repository verification in the pinned Go 1.26.5 environment, real PostgreSQL migration acceptance, real nFPM package generation, and a rebuilt Compose quickstart smoke through OME/API/viewer health; confirmed clean teardown afterward.
   - Hardened verification against implicit VCS stamping and unbounded mounted-workspace traversal after the complete gate exposed both portability defects.
   - Published the local candidate as draft PR #1325. The initial CI run's sole early failure was ShellCheck SC2016 on intentional literal variables; corrected it with escaped fixed-string assertions and passed the focused Linux syntax/bundle checks before republishing.
+  - The next vulnerability job found the main CI workflow still scanned the retired local OME helper tag. Unified both scan workflows around the image rendered by Compose and added a regression guard against missing, ambiguous, or legacy targets.
   - Kept the task open while required pull-request CI reruns; tagged XOA/reboot/media-path evidence necessarily remains pending.

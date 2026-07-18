@@ -55,6 +55,30 @@ func TestGoRuntimeBaselineIsAligned(t *testing.T) {
 	}
 }
 
+func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	for _, path := range []string{
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".github", "workflows", "image-scan.yml"),
+	} {
+		workflow := readRepoFile(t, repoRoot, path)
+		if strings.Contains(workflow, "bitriver-live/ome-config:local") {
+			t.Errorf("%s must not scan the retired local-only OME helper tag", path)
+		}
+		for _, required := range []string{
+			"BITRIVER_OME_CONFIG_IMAGE_TAG=ci",
+			"mapfile -t ome_config_images",
+			"grep -E '^ghcr\\.io/bitriver-live/bitriver-ome-config:' /tmp/compose-images.txt",
+			"((${#ome_config_images[@]} != 1))",
+			`"${ome_config_images[0]}"`,
+		} {
+			if !strings.Contains(workflow, required) {
+				t.Errorf("%s missing Compose-derived OME scan invariant %q", path, required)
+			}
+		}
+	}
+}
+
 func TestProductionBuildsUseCompleteUpstreamModuleGraph(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	releaseWorkflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "release.yml"))
