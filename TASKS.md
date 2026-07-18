@@ -65,7 +65,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - OME language explicitly requires authenticated control plus real ingest/playback/recovery against the tagged VM; an unauthenticated root health probe is not release approval.
     - Generated contract environment index and installer-language consistency checks passed.
 
-- [-] Task 6 - Run full verification and prepare publication evidence
+- [x] Task 6 - Run full verification and prepare publication evidence
   - Acceptance criteria:
     - Full repository verification, release/package tests, Compose rendering, and quickstart smoke pass or exact environment blockers are recorded.
     - Diff review excludes credentials, generated runtime output, and unrelated deployment helpers/data.
@@ -80,7 +80,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The repaired CI run then exposed a stale `bitriver-live/ome-config:local` Trivy target duplicated in `ci.yml`, even though Compose built `ghcr.io/bitriver-live/bitriver-ome-config:ci`. Both scan workflows now select exactly one OME helper from the collected Compose image list; YAML parsing, CI contract validation, rendered image selection, and the focused Go 1.26.5 regression test pass.
     - The next image scan passed, but the Ubuntu gate exposed `compose pull --ignore-buildable` contacting GHCR for the non-buildable `ome-health-token-check` sibling after its shared helper image had already been built locally. Quickstart now enumerates rendered image references, retains locally inspectable images, and pulls only genuinely absent images.
     - Linux syntax and the focused Go 1.26.5 quickstart regression passed. A full host smoke then reused the local OME helper, passed OME render/token/process health, migrations, API health, and viewer retry, and cleaned down to an empty Compose project.
-    - Pull-request CI must rerun from the quickstart image-reuse repair. No merge or production-release claim is permitted until required CI is green and the external release gates below pass.
+    - Final CI run 29628820507 passed on implementation head `de869492`: Ubuntu test-all, image vulnerability scan, ShellCheck, docs/workflow consistency, committed-secret guard, viewer integration, Windows/macOS Go tests, and Ubuntu/macOS/Windows entrypoint checks are green.
+    - Draft PR #1325 remains unmerged. No production-release claim is permitted until the external release gates below pass.
     - Unrelated deployment helpers/data remain untracked and are explicitly excluded from the intended change set; the temporary `.gomodcache/` was removed after verification.
     - Tagged Ubuntu/XOA reboot, authenticated OME control-plane, and real ingest/playback acceptance remain external release evidence owned by #1297/#1300/#1304 and are not claimed by this local candidate.
 
@@ -114,4 +115,4 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Published the local candidate as draft PR #1325. The initial CI run's sole early failure was ShellCheck SC2016 on intentional literal variables; corrected it with escaped fixed-string assertions and passed the focused Linux syntax/bundle checks before republishing.
   - The next vulnerability job found the main CI workflow still scanned the retired local OME helper tag. Unified both scan workflows around the image rendered by Compose and added a regression guard against missing, ambiguous, or legacy targets.
   - After the image gate passed, the Ubuntu gate found quickstart's blanket non-buildable pull tried to fetch the locally built helper through its health-token sibling. Switched to local-first rendered-image inspection and passed the full host smoke plus clean teardown.
-  - Kept the task open while required pull-request CI reruns; tagged XOA/reboot/media-path evidence necessarily remains pending.
+  - Completed the local/publication task with required PR CI green. Kept PR #1325 draft and #1297 open because tagged XOA/reboot/media-path evidence necessarily remains pending.
