@@ -66,6 +66,7 @@ func TestLoadIngestConfigCarriesOMEAccessToken(t *testing.T) {
 	t.Setenv("BITRIVER_SRS_API", "http://srs:1985")
 	t.Setenv("BITRIVER_SRS_TOKEN", "srs-token")
 	t.Setenv("BITRIVER_OME_API", "http://ome:8081")
+	t.Setenv("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "https://stream.example.com/live")
 	t.Setenv("BITRIVER_OME_API_TOKEN", "api-token")
 	t.Setenv("BITRIVER_OME_HEALTHCHECK_TOKEN", "rendered-token")
 	t.Setenv("BITRIVER_OME_USERNAME", "legacy-user")
@@ -79,6 +80,28 @@ func TestLoadIngestConfigCarriesOMEAccessToken(t *testing.T) {
 	}
 	if cfg.OMEAccessToken != "rendered-token" {
 		t.Fatalf("expected rendered OME token to be carried into runtime config, got %q", cfg.OMEAccessToken)
+	}
+	if cfg.OMEPlaybackBaseURL != "https://stream.example.com/live" {
+		t.Fatalf("expected public OME LL-HLS base to be carried into runtime config, got %q", cfg.OMEPlaybackBaseURL)
+	}
+}
+
+func TestViewerMediaOriginsNormalizesAndDeduplicatesPublicHTTPOrigins(t *testing.T) {
+	origins := viewerMediaOrigins(
+		"https://stream.example.com/live",
+		"http://media.example.com:9080/hls",
+		"https://stream.example.com/other",
+		"https://user:secret@example.com/private",
+		"rtmp://stream.example.com/live",
+	)
+	want := []string{"https://stream.example.com", "http://media.example.com:9080"}
+	if len(origins) != len(want) {
+		t.Fatalf("expected %v, got %v", want, origins)
+	}
+	for i := range want {
+		if origins[i] != want[i] {
+			t.Fatalf("expected %v, got %v", want, origins)
+		}
 	}
 }
 

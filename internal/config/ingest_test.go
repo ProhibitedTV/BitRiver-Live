@@ -23,7 +23,7 @@ func TestLoadIngestFromEnvMissingFields(t *testing.T) {
 	if err == nil || !errors.As(err, &missing) {
 		t.Fatalf("expected missing error, got %v", err)
 	}
-	want := []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_API_TOKEN", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}
+	want := []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "BITRIVER_OME_API_TOKEN", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}
 	if !slices.Equal(missing.Missing, want) {
 		t.Fatalf("missing mismatch: got %v want %v", missing.Missing, want)
 	}
@@ -37,6 +37,7 @@ func TestLoadIngestFromEnvDefaultsAndOverrides(t *testing.T) {
 		"BITRIVER_SRS_API":                    "http://srs:1985",
 		"BITRIVER_SRS_TOKEN":                  "secret",
 		"BITRIVER_OME_API":                    "http://ome:8081",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL":  "https://stream.example.test/live",
 		"BITRIVER_OME_API_TOKEN":              "ome-access-token",
 		"BITRIVER_TRANSCODER_API":             "http://transcoder:9000",
 		"BITRIVER_TRANSCODER_TOKEN":           "job-secret",
@@ -63,13 +64,14 @@ func TestLoadIngestFromEnvDefaultsAndOverrides(t *testing.T) {
 
 func TestLoadIngestFromEnvPrefersOMEHealthcheckTokenOverride(t *testing.T) {
 	env := Environment{values: map[string]string{
-		"BITRIVER_SRS_API":               "http://srs:1985",
-		"BITRIVER_SRS_TOKEN":             "secret",
-		"BITRIVER_OME_API":               "http://ome:8081",
-		"BITRIVER_OME_API_TOKEN":         "ome-api-token",
-		"BITRIVER_OME_HEALTHCHECK_TOKEN": "ome-rendered-token",
-		"BITRIVER_TRANSCODER_API":        "http://transcoder:9000",
-		"BITRIVER_TRANSCODER_TOKEN":      "job-secret",
+		"BITRIVER_SRS_API":                   "http://srs:1985",
+		"BITRIVER_SRS_TOKEN":                 "secret",
+		"BITRIVER_OME_API":                   "http://ome:8081",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL": "https://stream.example.test/live",
+		"BITRIVER_OME_API_TOKEN":             "ome-api-token",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN":     "ome-rendered-token",
+		"BITRIVER_TRANSCODER_API":            "http://transcoder:9000",
+		"BITRIVER_TRANSCODER_TOKEN":          "job-secret",
 	}}
 
 	cfg, err := LoadIngestFromEnv(env)
@@ -83,13 +85,14 @@ func TestLoadIngestFromEnvPrefersOMEHealthcheckTokenOverride(t *testing.T) {
 
 func TestLoadIngestFromEnvValidationErrors(t *testing.T) {
 	_, err := LoadIngestFromEnv(Environment{values: map[string]string{
-		"BITRIVER_SRS_API":                  "http://srs:1985",
-		"BITRIVER_SRS_TOKEN":                "secret",
-		"BITRIVER_OME_API":                  "http://ome:8081",
-		"BITRIVER_OME_API_TOKEN":            "ome-access-token",
-		"BITRIVER_TRANSCODER_API":           "http://transcoder:9000",
-		"BITRIVER_TRANSCODER_TOKEN":         "job-secret",
-		"BITRIVER_INGEST_MAX_BOOT_ATTEMPTS": "oops",
+		"BITRIVER_SRS_API":                   "http://srs:1985",
+		"BITRIVER_SRS_TOKEN":                 "secret",
+		"BITRIVER_OME_API":                   "http://ome:8081",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL": "https://stream.example.test/live",
+		"BITRIVER_OME_API_TOKEN":             "ome-access-token",
+		"BITRIVER_TRANSCODER_API":            "http://transcoder:9000",
+		"BITRIVER_TRANSCODER_TOKEN":          "job-secret",
+		"BITRIVER_INGEST_MAX_BOOT_ATTEMPTS":  "oops",
 	}})
 	if err == nil || err.Error() != "parse BITRIVER_INGEST_MAX_BOOT_ATTEMPTS: strconv.Atoi: parsing \"oops\": invalid syntax" {
 		t.Fatalf("expected parse error, got %v", err)

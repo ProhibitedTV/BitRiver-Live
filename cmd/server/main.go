@@ -149,6 +149,7 @@ func main() {
 	chatRedisTLSServerName := flag.String("chat-queue-redis-tls-server-name", "", "override Redis TLS server name for chat queue")
 	chatRedisTLSSkipVerify := flag.Bool("chat-queue-redis-tls-skip-verify", false, "skip Redis TLS verification for chat queue")
 	viewerOrigin := flag.String("viewer-origin", "", "URL of the Next.js viewer runtime to proxy (e.g. http://127.0.0.1:3000)")
+	omeLLHLSOrigin := flag.String("ome-llhls-origin", "", "internal OvenMediaEngine LL-HLS origin proxied at /live (e.g. http://ome:8080)")
 	objectEndpoint := flag.String("object-endpoint", "", "object storage endpoint (e.g. http://127.0.0.1:9000)")
 	objectRegion := flag.String("object-region", "", "object storage region")
 	objectAccessKey := flag.String("object-access-key", "", "object storage access key")
@@ -240,6 +241,11 @@ func main() {
 		logger.Error("invalid viewer origin", "error", err)
 		os.Exit(1)
 	}
+	omeLLHLSOriginURL, err := resolveOMEPlaybackOrigin(*omeLLHLSOrigin, envGet("BITRIVER_OME_LLHLS_ORIGIN"))
+	if err != nil {
+		logger.Error("invalid OME LL-HLS origin", "error", err)
+		os.Exit(1)
+	}
 	uploadMediaBaseURLValue, err := resolveUploadMediaBaseURL(*uploadMediaBaseURL, envGet("BITRIVER_LIVE_UPLOAD_MEDIA_BASE_URL"))
 	if err != nil {
 		logger.Error("invalid upload media base URL", "error", err)
@@ -298,6 +304,7 @@ func main() {
 		MetricsAccess:                 server.MetricsAccessConfig{Token: stringsutil.FirstNonEmpty(*metricsToken, envGet("BITRIVER_LIVE_METRICS_TOKEN")), AllowedNetworks: splitAndTrim(stringsutil.FirstNonEmpty(*metricsAllowNetworks, envGet("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")))},
 		RequireMetricsProtection:      requiresMetricsProtection(serverMode),
 		ViewerOrigin:                  viewerURL,
+		ViewerMediaProxyOrigin:        omeLLHLSOriginURL,
 		OAuth:                         oauthManager,
 		SessionCookieSecureMode:       app.ResolveSessionCookieSecureMode(serverMode),
 		SessionCookieCrossSite:        sessionCookieCrossSiteValue,
@@ -534,6 +541,25 @@ func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return nil, fmt.Errorf("viewer origin must include scheme and host")
 	}
+	return parsed, nil
+}
+
+func resolveOMEPlaybackOrigin(flagValue, envValue string) (*url.URL, error) {
+	raw := strings.TrimSpace(stringsutil.FirstNonEmpty(flagValue, envValue))
+	if raw == "" {
+		return nil, nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse OME LL-HLS origin: %w", err)
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return nil, fmt.Errorf("OME LL-HLS origin must use http or https and include a host")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return nil, fmt.Errorf("OME LL-HLS origin must be an origin URL without credentials, path, query, or fragment")
+	}
+	parsed.Path = ""
 	return parsed, nil
 }
 

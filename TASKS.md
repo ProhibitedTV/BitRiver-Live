@@ -1,107 +1,72 @@
 # TASKS
 
-## Scoped change: deterministic PostgreSQL migration ledger (#1296)
+## Scoped change: Windows Docker Desktop proof and evidence-led README
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Inventory migration paths and establish the safety design
+- [x] Task 1 - Inventory current claims and reproducible proof paths
   - Acceptance criteria:
-    - `SPEC.md` and `PLAN.md` describe the ledger, checksum, transaction, recovery, parity, documentation, and test contract.
-    - Compose, Helm, CLI, release diagnostics, docs, tests, and existing migration files are inventoried before implementation.
-    - Existing unrelated working-tree changes and downstream installer/OME scope are recorded as boundaries.
+    - README art, release/package links, Windows entrypoints, runtime routes, demo-data options, and screenshot locations are mapped before implementation.
+    - The GitHub remote release state and local Docker Desktop client/server state are checked without exposing credentials.
+    - Existing unrelated work and the Ubuntu installer PR remain explicit boundaries.
   - Check:
-    - Read-only inventory found Compose and Helm blindly replay every SQL file, no ledger exists, duplicate `0002_*` prefixes require filename identity, and Helm is missing canonical migrations `0008` through `0011`.
-    - Existing `schema_migrations` exclusion in PostgreSQL test cleanup confirms the intended ledger table name.
-    - `docs/contract.md` and generated OME config differences are line-ending-only; untracked deployment helpers remain out of scope.
+    - Confirmed the README uses the 2.4 MB concept-art `bitriver-live-banner-text.png` and claims packaged launcher availability despite zero published GitHub Releases.
+    - Confirmed native `scripts/quickstart.ps1`, the canonical CLI, `/viewer`, `/admin`, `/healthz`, `/readyz`, self-signup, first-channel creation, and authenticated admin seeding provide supported proof/demo paths.
+    - Confirmed Docker Desktop 4.82.0 is running on Windows with client/engine 29.6.1, Compose 5.3.0, the `desktop-linux` context, and a Linux/amd64 server.
+    - Updated `SPEC.md` and `PLAN.md` before runtime/code changes; kept PR #1325, root `.env`, and the user's untracked deployment helpers out of scope.
 
-- [x] Task 2 - Implement the canonical ledger-aware migration runner
+- [x] Task 2 - Make the native Windows Docker Desktop proof reproducible
   - Acceptance criteria:
-    - Runner validates inputs/tools, creates the ledger, orders filenames deterministically, records provenance/status, and applies only pending SQL.
-    - Applied checksum drift and `applying`/`failed` state stop with actionable, non-sensitive errors.
-    - Plan, status, retry, and mark-applied modes are explicit and checksum-confirmed.
-    - Every migration is executed transactionally and final ledger history is printed without credentials or SQL payloads.
+    - A documented PowerShell command validates Docker Desktop Linux-container mode, Compose, canonical config, source-build startup, and bounded health checks.
+    - Failures distinguish Docker-not-running/permission problems from repository defects.
+    - Focused parser and behavior tests pass.
   - Check:
-    - Added `deploy/postgres-migrate.sh` with ledger creation, deterministic raw SHA-256 checksums, pending-only apply, transaction execution, drift/ambiguous-state refusal, sanitized history, and checksum-confirmed recovery.
-    - `C:\Program Files\Git\bin\bash.exe -n deploy/postgres-migrate.sh` passed.
-    - `git diff --check -- PLAN.md SPEC.md TASKS.md deploy/postgres-migrate.sh` passed.
+    - Added `scripts/verify-windows-docker.ps1`; its lightweight path proved Docker Desktop 4.82.0, Linux/amd64 engine 29.6.1, Compose 5.3.0, `desktop-linux`, and canonical config rendering.
+    - The `-Start` path uses an isolated temporary evaluation env, delegates startup to the canonical CLI, and passed migrations, all critical service health checks, admin bootstrap, and `200` responses for `/healthz`, `/readyz`, `/viewer`, and `/admin` on this Windows host.
+    - Real execution exposed and fixed two PowerShell wrapper defects: case-insensitive `Path`/`PATH` handling hid Docker from the CLI, and offline Go build variables leaked into Docker build args. The wrapper now compiles the CLI under isolated Go settings, restores the operator environment, and then runs it.
+    - Aligned quickstart/env/Compose validation with the documented inline `BITRIVER_LIVE_MODE=development` override while keeping the saved env required to remain production mode.
+    - PowerShell parsing, validate-only execution, focused `cmd/bitriver` and `scripts` Go tests under Go 1.26.5, workflow static contracts, and `git diff --check` passed.
 
-- [x] Task 3 - Wire Compose, Helm, and CLI to one canonical mechanism
+- [x] Task 3 - Prove the running product and prepare safe demo state
   - Acceptance criteria:
-    - Compose and Helm use the shared runner and pass release/commit metadata.
-    - Helm migration SQL and runner copies are generated from canonical assets and SQL parity is byte-for-byte.
-    - `bitriver migrations` exposes plan/status/apply/recovery without printing credentials.
-    - Upgrade planning points operators to the read-only migration preflight.
+    - Canonical Compose boots from this Windows source checkout and core HTTP endpoints pass.
+    - Any screenshot data is deterministic, non-sensitive, and created through supported interfaces.
+    - The canonical SRS callback routes bypass browser-session middleware but still require the independent shared hook token, and a synthetic RTMP publish no longer fails at `on_connect`.
+    - OME evidence is described at the level actually exercised, including LL-HLS CORS, the same-origin `/live/` route, and browser playback rather than process health alone.
   - Check:
-    - Compose config renders quietly with the shared runner mounted read-only, explicit connection/provenance env, and `apply` as the default command.
-    - The Helm job invokes the generated runner; all 12 SQL files and the runner match canonical SHA-256 bytes, and `./scripts/sync-helm-deploy-assets.sh --check` passed.
-    - Focused Go 1.26.5 container tests passed for CLI validation, repair invocation, quickstart no-TTY behavior, and upgrade-plan output.
-    - `git diff --check` passed for the CLI, Compose, Helm, env example, and sync changes.
+    - The canonical Windows proof completed migrations, started the source-built Compose stack, reported every critical service healthy, bootstrapped an administrator, and returned `200` from `/healthz`, `/readyz`, `/viewer`, and `/admin`.
+    - Created a local-only channel through supported authenticated interfaces, published a synthetic audio/video RTMP source through SRS, and fixed the callback, dynamic-forward, static OME application, transcoder job, and public playback contracts exposed by that run.
+    - Verified all three transcoder manifests (`1080p`, `720p`, and `480p`) returned `200`; verified OME LL-HLS returned `Access-Control-Allow-Origin: *`; and decoded five seconds of video and audio from the same-origin `/live/<channel>/llhls.m3u8` route with FFmpeg.
+    - Added focused callback-auth, orchestration, OME application, transcoder recovery, proxy, CSP, and player-selection tests. The controlled browser backend blocked `.m3u8` requests with `ERR_BLOCKED_BY_CLIENT` before they reached the application, so automated visual playback is not claimed; the direct decode and hls.js path are the bounded evidence.
 
-- [x] Task 4 - Add migration lifecycle and recovery evidence
+- [x] Task 4 - Capture real product screenshots and remove concept art
   - Acceptance criteria:
-    - Tests cover fresh database, representative previous schema, no-op rerun, checksum drift, failed retry, interrupted mark-applied recovery, and sanitized history.
-    - CLI invocation/validation and generated Helm parity are covered.
-    - Relevant focused checks pass before documentation work proceeds.
+    - A small screenshot set is captured from the live application at a stable desktop viewport and visually inspected; responsive behavior is inspected separately.
+    - Images contain no secrets, broken states, browser chrome, or private host details.
+    - The old banner is removed from the README and repository if no longer referenced.
   - Check:
-    - `./scripts/test-postgres-migrations.sh` passed against disposable `postgres:15-alpine` and is now part of the Docker-enabled `./scripts/verify.sh` gate.
-    - Fresh apply recorded one migration; adding a second file produced one pending upgrade and then a two-row applied history; the next apply was a no-op.
-    - Editing the first applied SQL caused read-only plan failure with both recorded and current SHA-256 values.
-    - A transactional missing-table failure recorded `failed` with no partial table; checksum-confirmed retry succeeded after the dependency was restored.
-    - A simulated post-commit/pre-ledger-update interruption remained `applying`, blocked plan, and required checksum-confirmed mark-applied after schema verification.
-    - Sanitized status included filename/version/checksum/status/timestamp/release/commit and did not contain the test database credential.
-    - Focused Go 1.26.5 CLI/upgrade tests and generated Helm parity check passed after the final runner fix.
+    - Captured the running viewer home and live directory without browser chrome at a stable desktop viewport, then visually inspected both files and the responsive route state.
+    - Confirmed the images contain only intentional local demo content and no credentials, private hosts, error states, or operator-only details.
+    - Added the two product screenshots under `docs/assets/screenshots/`, replaced README concept art with those images, and removed the unreferenced 2.4 MB banner from the repository.
 
-- [x] Task 5 - Update deployment, upgrade, rollback, and testing docs
+- [x] Task 5 - Rewrite README and Windows quickstart guidance
   - Acceptance criteria:
-    - Contract and operator docs describe ledger behavior, preflight, forward-only policy, destructive-change release notes, backups, and recovery.
-    - Compose/Helm parity and first ledger-aware upgrade behavior are explicit.
-    - Downstream Ubuntu/XOA/Nginx Proxy Manager and OME readiness goals stay assigned to #1297/#1300/#1304.
+    - README leads with the real product, shows accurate operator/viewer workflows, and gives a copyable native PowerShell path.
+    - Current source-checkout availability is clearly separated from planned tagged installers/packages.
+    - Ubuntu/XOA/Nginx Proxy Manager and OME production gates remain accurate and linked to deeper docs.
+    - Production validation treats OME's server IP as a container-local listener and does not require the VM's public address inside the container.
   - Check:
-    - Updated the deployment contract, upgrade/recovery runbook, advanced deployment and Ubuntu guidance, release/versioning policy, deployment asset map, and testing guide.
-    - `scripts/generate-contract-doc.sh --check` passed with `BITRIVER_RELEASE_COMMIT` in the generated environment index.
-    - `scripts/check-env-example-placeholders.sh` passed.
-    - Documentation `git diff --check` passed; the pre-existing OME generated config remains untouched and line-ending-only.
+    - Replaced the README with an evidence-led product/operator narrative using the two real application screenshots, an accurate media-flow diagram, source-checkout quickstarts, native Windows proof, first-stream workflow, support boundary, and operational acceptance gate.
+    - Removed dead package/installer download instructions from the quickstart and replaced the Ubuntu guide with the current Ubuntu 24.04 source-build path for XOA/NPM home hosting; added explicit same-origin `/live/`, `/hls/`, websocket, firewall, RTMP/TCP, backup, reboot, and recovery guidance.
+    - Corrected contract, lifecycle, failure-model, and advanced-deployment docs to reflect authenticated SRS callbacks/forwarding, static OME `default/live` validation, LL-HLS CORS, and public/private URL boundaries.
+    - Fixed the production OME listener validator discovered during documentation: `BITRIVER_OME_BIND`/`BITRIVER_OME_IP` may remain wildcard inside Docker, while public LL-HLS, RTMP, transcoder, and viewer URLs remain strict. Focused `cmd/bitriver` and `internal/ingest` tests passed.
+    - Generated contract index, installer-language guard, README image existence checks, and `git diff --check` passed.
 
-- [x] Task 6 - Run full verification and prepare the issue for publication
+- [-] Task 6 - Run release-quality validation and publish separately
   - Acceptance criteria:
-    - Full repository verification, Compose rendering, quickstart smoke, and migration integration evidence pass or exact blockers are recorded.
-    - Diff review confirms no credentials, generated runtime output, or unrelated deployment helpers are included.
-    - `PLAN.md` and `TASKS.md` contain final evidence and remaining downstream work.
+    - Focused Windows/runtime/viewer/docs checks and `./scripts/verify.sh --viewer` pass or exact blockers are recorded.
+    - Diff and staged-file review exclude `.env`, credentials, runtime output, and unrelated untracked helpers.
+    - Work is committed and proposed separately from PR #1325 with remote CI status reported accurately.
   - Check:
-    - Pinned Go 1.26.5 passed all module package zones: `./cmd/... ./internal/... ./scripts/... ./web`; focused CLI, architecture, and script packages also passed after the final harness edits.
-    - `./scripts/test-postgres-migrations.sh`, Docker Compose config rendering, contract snapshot generation (12 migrations), contract invariants, env placeholder hygiene, Helm generated-asset parity, shell syntax, and `git diff --check` passed.
-    - `./scripts/test-quickstart.sh` built the production dependency graph and all first-party images, then reported Postgres, Redis, SRS, SRS controller, OME, transcoder, and API healthy; the migration job completed and API/viewer endpoints were reachable.
-    - The quickstart harness restored `deploy/ome/Server.generated.xml` to the exact pre-run SHA-256 and removed all Compose containers/volumes.
-    - The literal `./scripts/verify.sh` wrapper passed its first three checks then stopped at Go because host Go 1.25.6 cannot satisfy the repository's Go 1.26 local-toolchain contract; its remaining constituents passed with pinned Go 1.26.5 and host Docker.
-    - Viewer sources were unchanged, so viewer lint/Jest were not required; the quickstart image build still completed the Next.js 16 production build and TypeScript/static generation.
-    - Diff scope review excludes the user's OME line-ending change, deployment assurance/guide files, diagnostics/startup/validation helpers, and transcoder runtime data.
-
-### Execution log
-- Task 1 analysis:
-  - Confirmed the current Compose and Helm jobs execute every SQL file on every run with no durable audit state.
-  - Confirmed canonical ordering must use complete filenames because two historical migrations share version prefix `0002`.
-  - Confirmed Helm generated SQL is stale at `0007` while canonical migrations continue through `0011`.
-  - Selected raw SHA-256 checksums plus byte-for-byte generated SQL parity so Compose and Helm cannot record different history for the same migration.
-  - Selected explicit `applying`, `applied`, and `failed` states with checksum-confirmed retry/mark-applied recovery for the commit-to-ledger interruption window.
-- Task 2 implementation:
-  - Added a POSIX runner suitable for the pinned Postgres Alpine image; it validates required tools and connection inputs without echoing credentials.
-  - The runner records a claim before SQL execution, forces a single transaction, records success/failure afterward, and leaves interruption state visible rather than silently retrying.
-  - Read-only plan/status modes do not create the ledger; repair requires the exact current and recorded checksum.
-- Task 3 implementation:
-  - Replaced Compose and Helm's inline replay loops with the same generated runner and bounded Postgres readiness wait.
-  - Added `bitriver migrations` with safe plan default plus status, apply, retry, and mark-applied modes; quickstart now delegates to the same apply path.
-  - Changed generated Helm SQL to exact canonical copies and regenerated the previously missing `0008` through `0011` migrations.
-  - Upgrade planning now requires a read-only migration preflight before image changes and uses the focused CLI for application.
-- Task 4 implementation:
-  - Added an isolated real-Postgres lifecycle test and wired it into the Docker-enabled repository verification sequence.
-  - Made the test portable across Linux and Git Bash by disabling MSYS path conversion only for container-side `docker exec` paths.
-  - Replaced the runner's only `psql -c` variable-substitution call with stdin SQL after real PostgreSQL proved `-c` does not expand psql variables.
-- Task 5 implementation:
-  - Defined complete-filename identity, raw SHA-256 history, pending-only application, and migration failure as a deployment-health blocker in the canonical contract.
-  - Added exact plan/status/retry/mark-applied commands with the validation required before either recovery action.
-  - Established forward-only migrations, immutable applied files, and mandatory release notes plus restore evidence for destructive or rollback-incompatible schema changes.
-  - Documented byte-identical Compose/Helm migration assets and the new real-Postgres verification gate without claiming the downstream Ubuntu installer or OME readiness work is complete.
-- Task 6 verification and hardening:
-  - Tightened the architecture import test and check script to their actual Go package zones so large untracked deployment runtime data cannot time out an unrelated source contract.
-  - Made quickstart smoke render OME through the canonical Compose helper image instead of requiring a host Go toolchain, then added byte-for-byte backup/restore of the tracked generated OME config to prevent local credentials or smoke values from leaking into a diff.
-  - A full clean Compose smoke proved the new ledger job against all 12 canonical migrations; the second dependency evaluation completed as a no-op and did not block API health.
+    - The first full gate exposed a Windows junction-fallback defect: the transcoder depended on `cmd.exe` being discoverable through `PATH`, while the release gate intentionally narrows `PATH`. It now resolves the interpreter through `ComSpec`/`SystemRoot`; the interpreter-selection and complete job lifecycle/health regressions pass under that narrowed environment.
+    - Full repository verification, clean Windows startup proof, diff audit, and publication are still in progress.

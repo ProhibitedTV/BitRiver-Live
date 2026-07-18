@@ -32,11 +32,11 @@ It is intentionally conservative: transitions are listed only when they are alre
 ### 2) `INGESTING -> LIVE`
 - **Trigger:** `BootStream` succeeds end-to-end.
 - **Owner by sub-step:**
-  - SRS adapter provisions channel (`CreateChannel`).
-  - OME adapter provisions application (`CreateApplication`).
+  - SRS adapter resolves the creator-facing RTMP URL and private stream-key origin (`CreateChannel`).
+  - OME adapter validates the static `default/live` application and derives the public LL-HLS URL (`CreateApplication`; retained interface name).
   - Transcoder starts live jobs (`StartJobs`).
   - Control plane persists session and flips channel to `live`.
-- **What happens:** Session metadata (job IDs, ingest endpoints, playback/origin URLs) is stored and surfaced by API.
+- **What happens:** SRS maps the private key to the public channel ID for forwarding into OME. Session metadata (job IDs, ingest endpoints, playback/origin URLs) is stored and surfaced by API.
 
 ### 3) `INGESTING -> ERROR`
 - **Trigger:** Any boot stage fails or ingest controller is unavailable.
@@ -65,8 +65,8 @@ It is intentionally conservative: transitions are listed only when they are alre
 - **Owner:** Control plane coordinates shutdown; transcoder/OME/SRS execute teardown.
 - **What happens:**
   - Transcoder jobs are stopped.
-  - OME app is deleted.
-  - SRS channel is deleted.
+  - The per-stream SRS channel mapping/forward ends.
+  - The static OME `default/live` application remains configured; its input stream disappears when SRS stops forwarding.
   - Session gets `endedAt`, optional peak concurrency update, and channel returns to `offline`.
 
 ### 7) `LIVE -> ERROR`
@@ -88,7 +88,7 @@ It is intentionally conservative: transitions are listed only when they are alre
 - **Lifecycle downgrade does not exist as a persisted stream state:** `DEGRADED` is operationally observed, not written as channel/session lifecycle state.
 
 ### Terminate
-- **Terminate on explicit stop/unpublish:** normal path tears down transcoder -> OME -> SRS and closes session.
+- **Terminate on explicit stop/unpublish:** normal path stops transcoder jobs, ends the SRS mapping/forward, and closes the session. OME's declared application is intentionally retained.
 - **Terminate on boot failure:** control plane rolls back partial resources and reverts to offline.
 - **No automatic terminate on health degradation alone:** currently requires operator or upstream event intervention.
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 
@@ -127,6 +128,9 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	if req.Action == "" {
 		req.Action = r.URL.Query().Get("action")
 	}
+	if req.Action == "" {
+		req.Action = path.Base(r.URL.Path)
+	}
 	if req.Stream == "" {
 		req.Stream = r.URL.Query().Get("stream")
 	}
@@ -134,6 +138,10 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	action := normalizeSRSAction(req.Action)
 	if action == "" {
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("action is required"))
+		return
+	}
+	if action == "connect" {
+		WriteJSON(w, http.StatusOK, srsHookResponse{Code: 0, Status: "ok", Action: "on_connect"})
 		return
 	}
 
@@ -159,13 +167,18 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		h.handleSRSPublish(channel, w, r)
 	case "play":
 		counts := tracker.increment(channel.ID)
-		WriteJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+		WriteJSON(w, http.StatusOK, map[string]int{"code": 0, "currentViewers": counts.current})
 	case "stop":
 		counts := tracker.decrement(channel.ID)
-		WriteJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+		WriteJSON(w, http.StatusOK, map[string]int{"code": 0, "currentViewers": counts.current})
 	case "unpublish":
 		peak := tracker.peak(channel.ID)
 		h.handleSRSUnpublish(channel, peak, tracker, w)
+	case "forward":
+		WriteJSON(w, http.StatusOK, srsForwardResponse{
+			Code: 0,
+			Data: srsForwardData{URLs: []string{fmt.Sprintf("rtmp://ome:1935/live/%s", channel.ID)}},
+		})
 	default:
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
 	}
@@ -174,7 +187,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 // handleSRSPublish routes and serves srspublish requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleSRSPublish(channel domain.Channel, w http.ResponseWriter, r *http.Request) {
 	if current, ok := h.streamsService().CurrentStreamSession(channel.ID); ok {
-		WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
+		WriteJSON(w, http.StatusOK, srsHookResponse{Code: 0, Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
 		return
 	}
 
@@ -188,7 +201,7 @@ func (h *Handler) handleSRSPublish(channel domain.Channel, w http.ResponseWriter
 		return
 	}
 	metrics.StreamStarted()
-	WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
+	WriteJSON(w, http.StatusOK, srsHookResponse{Code: 0, Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
 }
 
 // handleSRSUnpublish routes and serves srsunpublish requests, writing HTTP errors for invalid input or backend failures.
@@ -207,7 +220,7 @@ func (h *Handler) handleSRSUnpublish(channel domain.Channel, peak int, tracker *
 			tracker.clear(channel.ID)
 		}
 		metrics.StreamStopped()
-		WriteJSON(w, http.StatusOK, newSessionResponse(session))
+		WriteJSON(w, http.StatusOK, srsSessionResponse{Code: 0, sessionResponse: newSessionResponse(session)})
 		return
 	}
 
@@ -220,7 +233,7 @@ func (h *Handler) handleSRSUnpublish(channel domain.Channel, peak int, tracker *
 		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	WriteJSON(w, http.StatusOK, srsHookResponse{Code: 0, Status: "ok", Action: "on_unpublish", ChannelID: channel.ID})
 }
 
 type startStreamRequest struct {
@@ -232,10 +245,25 @@ type stopStreamRequest struct {
 }
 
 type srsHookResponse struct {
+	Code      int    `json:"code"`
 	Status    string `json:"status"`
 	Action    string `json:"action"`
 	ChannelID string `json:"channelId,omitempty"`
 	SessionID string `json:"sessionId,omitempty"`
+}
+
+type srsSessionResponse struct {
+	Code int `json:"code"`
+	sessionResponse
+}
+
+type srsForwardResponse struct {
+	Code int            `json:"code"`
+	Data srsForwardData `json:"data"`
+}
+
+type srsForwardData struct {
+	URLs []string `json:"urls"`
 }
 
 type renditionManifestResponse struct {

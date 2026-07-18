@@ -532,11 +532,15 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 
 | Variable | Description |
 | --- | --- |
-| `BITRIVER_SRS_API` | Base URL (including port, e.g. `http://srs-controller:1985`) for the SRS management API proxy. |
-| `BITRIVER_SRS_TOKEN` | Bearer token used when creating/deleting SRS channels. |
+| `BITRIVER_SRS_API` | Internal URL (including port, e.g. `http://srs-controller:1985`) for BitRiver's authenticated SRS channel controller. |
+| `BITRIVER_SRS_TOKEN` | Shared bearer token used by the API/controller and by SRS callbacks. |
+| `BITRIVER_SRS_PUBLIC_RTMP_BASE_URL` | Creator-facing RTMP base, for example `rtmp://ingest.example.com:1935/live`. This must be reachable outside the Compose network. |
+| `SRS_CONTROLLER_INTERNAL_RTMP_BASE_URL` | Private RTMP base used by the control plane and transcoder, normally `rtmp://srs:1935/live`. |
 | `BITRIVER_OME_API` | Base URL for the OvenMediaEngine REST API (defaults to port `8081`). |
-| `BITRIVER_OME_BIND` | Address written to control-listener bind fields in `Server.xml` (defaults to `0.0.0.0`). The top-level `<Server><IP>` remains the canonical server bind host field, and root `<Bind><IP>`/`<Bind><Address>` host tags are not rendered. |
-| `BITRIVER_OME_IP` | Public IP rendered into the `<Server><IP>` block for signalling (defaults to `BITRIVER_OME_BIND`). |
+| `BITRIVER_OME_LLHLS_ORIGIN` | Private OME publisher origin used by BitRiver's `/live/` reverse proxy, normally `http://ome:8080`. |
+| `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL` | Viewer-facing LL-HLS base. For the supported same-origin edge, use `https://stream.example.com/live`. |
+| `BITRIVER_OME_BIND` | Legacy/local listener address used while rendering `Server.xml` (defaults to `0.0.0.0`). Wildcard is correct inside the canonical container. |
+| `BITRIVER_OME_IP` | Local interface rendered into the top-level `<Server><IP>` listener field (defaults to `BITRIVER_OME_BIND`). This is not the public playback address; use LL-HLS and ICE/relay variables for advertised endpoints. |
 | `BITRIVER_OME_SERVER_PORT` | Port rendered into the top-level `<Bind><Port>` entry for WebRTC signalling (defaults to `9000`). |
 | `BITRIVER_OME_SERVER_TLS_PORT` | Port rendered into `<Bind><TLSPort>` for TLS signalling (defaults to `9443`). |
 | `BITRIVER_OME_RELAY_PORT` / `BITRIVER_OME_RELAY_PROTOCOL` | Host port and protocol published for the TURN relay (Compose exposes `3478/udp` plus `3478/<protocol>`; set the protocol to `tcp` when your network blocks UDP). |
@@ -553,18 +557,18 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_INGEST_HTTP_RETRY_INTERVAL` | Backoff between HTTP retries (default `500ms`). |
 | `BITRIVER_INGEST_HEALTH` | Path that exposes dependency health (default `/healthz`). |
 
-The SRS controller proxy accepts two optional environment variables of its own: `SRS_CONTROLLER_BIND` to override the listen address (default `:1985`) and `SRS_CONTROLLER_UPSTREAM` to point at the actual SRS raw API endpoint (default `http://srs:1985/api/`).
+The SRS controller accepts `SRS_CONTROLLER_BIND` to override its listen address (default `:1985`). `SRS_CONTROLLER_UPSTREAM` points at the SRS raw API for bounded health probes, and `SRS_CONTROLLER_INTERNAL_RTMP_BASE_URL` supplies the private origin URL returned to the control plane.
 
 Leaving all of the ingest variables empty disables the controller and produces a startup warning so deployments without ingest can proceed. Supplying only part of the configuration is treated as an error: the API process will exit and log the specific `BITRIVER_*` variables still required. A complete setup requires:
 
-- An **SRS API proxy** (the `srs-controller` service) reachable on port `1985` (or your custom management port). The proxy validates `BITRIVER_SRS_TOKEN` on every request and forwards authenticated calls to the upstream SRS raw API.
-- An **SRS** instance the proxy can reach on port `1985` (or your custom management port) with `raw_api` enabled.
-- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the control-plane API token through `BITRIVER_OME_API_TOKEN`. If you set `BITRIVER_OME_HEALTHCHECK_TOKEN`, keep it equal to `BITRIVER_OME_API_TOKEN` except during short migration/rotation windows, then remove the override.
+- An **SRS channel controller** (`srs-controller`) reachable by the API. It validates `BITRIVER_SRS_TOKEN`, returns separate public/private ingest URLs, and probes the upstream SRS API.
+- An **SRS** instance with `raw_api` enabled and the repository's authenticated callback/forward configuration. Accepted private stream keys are forwarded to OME under their public channel IDs.
+- An **OvenMediaEngine** API listener (default `8081`) whose declared `default/live` application is readable with the configured manager credential. The application is static configuration and is not created or deleted per stream. Provide the control-plane API token through `BITRIVER_OME_API_TOKEN`. If you set `BITRIVER_OME_HEALTHCHECK_TOKEN`, keep it equal to `BITRIVER_OME_API_TOKEN` except during short migration/rotation windows, then remove the override.
 - A **transcoder job controller** (such as an FFmpeg fleet manager) exposed over HTTP—commonly on port `9000`—secured with a bearer token supplied in `BITRIVER_TRANSCODER_TOKEN`.
 
-Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
+Keep management ports on the private network and allow only the BitRiver API/service network to reach them. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
-Compose liveness/readiness for the `ome` service is intentionally unauthenticated and targets `http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/`. The probe is healthy for any HTTP status that is not `000` and is `<500`; it is unhealthy only on transport failures (curl `000`) or `5xx` responses. Keep this distinct from control-plane API auth. For API calls (for example `/v1/...` routes), operators should send HTTP Basic auth where the raw rendered access token is the full pre-base64 credential string (not `AccessToken: <token>` and not `Authorization: Bearer <token>`), and keep `BITRIVER_OME_HEALTHCHECK_TOKEN` consistent with `BITRIVER_OME_API_TOKEN` whenever the override is configured. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind values from `BITRIVER_OME_BIND`, keeps root `<Bind>` focused on protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root bind host child tags, and uses top-level `<Server><IP>` (derived from `BITRIVER_OME_IP`) as the canonical server bind host field. Application output profiles must remain direct children of `<Application><OutputProfiles>` to stay schema-compatible; avoid deprecated `<Application><Outputs>` wrappers. Keep LL-HLS in `<Bind><Publishers><LLHLS>` only and do not add `<Application><LLHLS>`.
+Compose liveness/readiness for the `ome` service is intentionally unauthenticated and targets `http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/`. The probe is healthy for any HTTP status that is not `000` and is `<500`; it is unhealthy only on transport failures (curl `000`) or `5xx` responses. Keep this distinct from control-plane API auth. For API calls (for example `/v1/...` routes), operators should send HTTP Basic auth where the raw rendered access token is the full pre-base64 credential string (not `AccessToken: <token>` and not `Authorization: Bearer <token>`), and keep `BITRIVER_OME_HEALTHCHECK_TOKEN` consistent with `BITRIVER_OME_API_TOKEN` whenever the override is configured. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind values from `BITRIVER_OME_BIND`, keeps root `<Bind>` focused on protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root bind host child tags, and uses top-level `<Server><IP>` (derived from `BITRIVER_OME_IP`) as the canonical server bind host field. Application output profiles must remain direct children of `<Application><OutputProfiles>` to stay schema-compatible; avoid deprecated `<Application><Outputs>` wrappers. Keep listener settings under `<Bind><Publishers><LLHLS>`. Browser-origin policy belongs under `<Application><Publishers><LLHLS><CrossDomains>`; the supported `/live/` edge remains same-origin, while the shipped wildcard also keeps direct diagnostic playback CORS-compatible.
 
 Source of truth: when this guidance and behavior diverge, trust the `ome` service `healthcheck:` block in `deploy/docker-compose.yml`.
 
@@ -591,11 +595,11 @@ Mount the generated file into the container at `/opt/ovenmediaengine/bin/origin_
 
 When these variables are set the API will:
 
-1. POST to `SRS /v1/channels` to allocate RTMP/SRT ingest keys for the channel.
-2. POST to `OvenMediaEngine /v1/applications` to configure the playback application.
-3. POST to the FFmpeg controller `/v1/jobs` endpoint to launch the adaptive bitrate ladder.
+1. POST to the SRS controller `/v1/channels` endpoint to resolve creator-facing and private-origin ingest URLs.
+2. Validate the static OME `default/live` application through `/v1/vhosts/default/apps/live` and derive `<public-LLHLS-base>/<channel-id>/llhls.m3u8`.
+3. POST to the FFmpeg controller `/v1/jobs` endpoint to launch the adaptive bitrate ladder from the private SRS origin.
 
-Stopping a stream reverses the process with DELETE calls to `/v1/jobs/{id}`, `/v1/applications/{channelId}`, and `/v1/channels/{channelId}`.
+SRS forwards an accepted private stream key to OME as `live/<channel-id>`. Stopping a stream stops the FFmpeg jobs and removes the SRS channel mapping; the declared OME application remains in place for the next stream.
 
 The `/healthz` endpoint returns JSON that includes the status of these external services so dashboards and probes can surface degraded dependencies early, while HTTP 200/503 status codes are reserved for core API dependencies.
 
@@ -622,9 +626,9 @@ Local and single-node installs can rely on the `transcoder-public` Nginx sidecar
 
 - **`postgres repository unavailable: pgx driver stubbed in this build`** – This indicates a stub-only API binary/image was deployed without Postgres support linked in. Follow one action path only: rebuild and redeploy from artifacts that are verified to include the `postgres` build tag and the non-stub pgx driver, then roll the deployment forward with those artifacts. Validate artifact provenance (tag + digest/workflow outputs) using the release checks in [`docs/production-release.md`](production-release.md).
 
-Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For host-managed installs, the BitRiver CLI ships installers today for systemd (Linux), launchd (macOS), and Windows Service definitions alongside the [Installing BitRiver Live on Ubuntu guide](installing-on-ubuntu.md).
+Operators can use the manifests under `deploy/` as a reference architecture for production or staging hosts. There is currently no published installer or package; use the source-checkout Compose workflow in the [Ubuntu guide](installing-on-ubuntu.md) until immutable release artifacts are actually available.
 
-1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe so you can validate readiness with `docker compose ps` or an external probe before the API starts (`/healthz` for BitRiver API, SRS controller, SRS proxy, and transcoder; `http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/` for OME with no auth header, where any non-`000` and `<500` status is healthy).
+1. **Provision ingest dependencies first.** Bring up SRS, the SRS channel controller, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe so you can validate readiness with `docker compose ps` or an external probe before the API starts (`/healthz` for BitRiver API, SRS controller, and transcoder; `http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/` for OME with no auth header, where any non-`000` and `<500` status is healthy).
 2. **Render and verify the OME config before each launch.** Run `go run ./cmd/bitriver ome render --force --env-file /opt/bitriver-live/.env` (or the `./scripts/render-ome-config.sh` wrapper) immediately before starting OME (the `ome.service` unit performs the same preflight). The render step stamps `deploy/ome/Server.generated.xml` with the image tag marker and exits non-zero when the template is missing or stale, preventing Docker from booting with an outdated control listener or credentials. The only supported render path is the Go renderer and its wrapper script.
    - The wrapper accepts `--check` when you want a CI guard that compares `BITRIVER_OME_IMAGE_TAG` in `.env` with the stamped marker in `deploy/ome/Server.generated.xml`, failing if they diverge so Compose reloads a freshly rendered config.
    - Use the version/token matrix below to line up your `.env` before rendering:

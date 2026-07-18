@@ -12,8 +12,8 @@
 //     - Exposed through the channelAdapter interface.
 //
 //  2. OvenMediaEngine (OME) application API
-//     - Creates per-channel applications containing playback endpoints and
-//     origin pull URLs consumed by the transcoding layer.
+//     - Validates the static default/live application and derives a
+//     per-channel playback endpoint.
 //     - Authenticated with OME Basic auth using the rendered AccessToken as
 //     the raw credential string, with user/password Basic auth kept only for
 //     legacy-compatible endpoints.
@@ -36,8 +36,8 @@
 //     caller as the endpoints the client encoder should publish to.
 //
 //   - CreateApplication:
-//     The applicationAdapter contacts OvenMediaEngine (OME) and creates a
-//     per-channel application. This returns:
+//     The applicationAdapter contacts OvenMediaEngine (OME), validates the
+//     declared application, and derives:
 //
 //   - OriginURL: Pull URL for the transcoder.
 //
@@ -48,10 +48,10 @@
 //     applying the requested rendition ladder. It returns job IDs and the
 //     effective renditions used.
 //
-// When a user ends their stream, the reverse happens:
+// When a user ends their stream, per-stream resources are released:
 //
 //   - StopJob
-//   - DeleteApplication
+//   - DeleteApplication (a compatibility no-op for the static OME app)
 //   - DeleteChannel
 //
 // VOD uploads follow a similar pattern via StartUpload on the

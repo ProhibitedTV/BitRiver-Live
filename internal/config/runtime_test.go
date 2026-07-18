@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLoadTranscoderFromEnvDefaults(t *testing.T) {
 	env := Environment{values: map[string]string{
@@ -30,6 +33,33 @@ func TestLoadSRSControllerFromEnvValidation(t *testing.T) {
 	_, err := LoadSRSControllerFromEnv(Environment{values: map[string]string{"BITRIVER_SRS_TOKEN": "tok", "SRS_CONTROLLER_UPSTREAM": "localhost"}})
 	if err == nil || err.Error() != "SRS_CONTROLLER_UPSTREAM must include scheme and host" {
 		t.Fatalf("expected upstream validation error, got %v", err)
+	}
+}
+
+func TestLoadSRSControllerFromEnvResolvesPublicAndInternalRTMPBases(t *testing.T) {
+	cfg, err := LoadSRSControllerFromEnv(Environment{values: map[string]string{
+		"BITRIVER_SRS_TOKEN":                    "tok",
+		"SRS_CONTROLLER_PUBLIC_RTMP_BASE_URL":   "rtmp://ingest.example.com:1935/live/",
+		"SRS_CONTROLLER_INTERNAL_RTMP_BASE_URL": "rtmp://srs:1935/live/",
+	}})
+	if err != nil {
+		t.Fatalf("LoadSRSControllerFromEnv: %v", err)
+	}
+	if got := cfg.PublicRTMPBaseURL.String(); got != "rtmp://ingest.example.com:1935/live" {
+		t.Fatalf("unexpected public RTMP base: %q", got)
+	}
+	if got := cfg.InternalRTMPBaseURL.String(); got != "rtmp://srs:1935/live" {
+		t.Fatalf("unexpected internal RTMP base: %q", got)
+	}
+}
+
+func TestLoadSRSControllerFromEnvRejectsNonRTMPBase(t *testing.T) {
+	_, err := LoadSRSControllerFromEnv(Environment{values: map[string]string{
+		"BITRIVER_SRS_TOKEN":                  "tok",
+		"SRS_CONTROLLER_PUBLIC_RTMP_BASE_URL": "https://ingest.example.com/live",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "SRS_CONTROLLER_PUBLIC_RTMP_BASE_URL") {
+		t.Fatalf("expected public RTMP validation error, got %v", err)
 	}
 }
 

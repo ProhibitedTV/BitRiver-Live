@@ -28,10 +28,9 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
-- PostgreSQL schema changes are recorded in a durable, queryable ledger with stable filenames, checksums, status, timestamps, and release provenance.
-- Startup applies only pending migrations and refuses edited history, failed migrations, or ambiguous interrupted state.
-- Operators can inspect a read-only migration plan/history and recover only through explicit checksum-confirmed commands and documented validation steps.
-- Docker Compose and Helm execute the same canonical migration bytes in the same deterministic order.
-- Fresh installs, upgrades from a representative previous schema, no-op reruns, drift refusal, and failure/interruption recovery have automated evidence.
-- Upgrade and rollback docs define the forward-only policy and require backups plus release notes for destructive or rollback-incompatible changes.
-- This work preserves the roadmap toward an Ubuntu 24.04 XOA VM installer behind Nginx Proxy Manager without claiming installer or OvenMediaEngine readiness is complete.
+- A Windows 11 operator can evaluate the source checkout with Docker Desktop's Linux-container backend and native PowerShell using copyable, tested commands.
+- Docker/Compose prerequisites, canonical config rendering, startup, and health failures produce enough context to distinguish host setup problems from application failures.
+- The README shows the real public viewer and operator surfaces captured from a running BitRiver Live stack, with no generated concept art or private data.
+- README workflows accurately explain local evaluation, creator ingest, viewer playback, administration, and the single-host deployment boundary.
+- GitHub Releases and downloadable packages are described as unavailable until a tag is actually published; the current source-checkout path is never hidden behind dead release links.
+- Ubuntu 24.04 on an XOA VM behind Nginx Proxy Manager remains the production target without claiming clean-host, real ingest/playback, or OME recovery acceptance before those gates pass.

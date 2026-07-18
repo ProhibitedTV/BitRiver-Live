@@ -265,6 +265,7 @@ func TestHTTPControllerHealthChecksAggregatesErrorsByComponent(t *testing.T) {
 type fakeChannelAdapter struct {
 	createPrimary string
 	createBackup  string
+	createOrigin  string
 	createErr     error
 
 	deleteErr error
@@ -274,13 +275,17 @@ type fakeChannelAdapter struct {
 	lastDeleteChannelID string
 }
 
-func (f *fakeChannelAdapter) CreateChannel(ctx context.Context, channelID, streamKey string) (string, string, error) {
+func (f *fakeChannelAdapter) CreateChannel(ctx context.Context, channelID, streamKey string) (string, string, string, error) {
 	f.lastCreateChannelID = channelID
 	f.lastCreateStreamKey = streamKey
 	if f.createErr != nil {
-		return "", "", f.createErr
+		return "", "", "", f.createErr
 	}
-	return f.createPrimary, f.createBackup, nil
+	origin := f.createOrigin
+	if origin == "" {
+		origin = f.createPrimary
+	}
+	return f.createPrimary, f.createBackup, origin, nil
 }
 
 func (f *fakeChannelAdapter) DeleteChannel(ctx context.Context, channelID string) error {
@@ -295,12 +300,14 @@ type fakeApplicationAdapter struct {
 	deleteErr error
 
 	lastCreateChannelID  string
+	lastCreateOriginURL  string
 	lastCreateRenditions []string
 	lastDeleteChannelID  string
 }
 
-func (f *fakeApplicationAdapter) CreateApplication(ctx context.Context, channelID string, renditions []string) (string, string, error) {
+func (f *fakeApplicationAdapter) CreateApplication(ctx context.Context, channelID, originURL string, renditions []string) (string, string, error) {
 	f.lastCreateChannelID = channelID
+	f.lastCreateOriginURL = originURL
 	f.lastCreateRenditions = append([]string{}, renditions...)
 	if f.createErr != nil {
 		return "", "", f.createErr
@@ -567,7 +574,7 @@ func TestHTTPControllerShutdownStreamAggregatesErrors(t *testing.T) {
 		t.Fatal("expected ShutdownStream error, got nil")
 	}
 	msg := err.Error()
-	for _, substr := range []string{"stop job job-1", "stop job job-2", "delete OME app", "delete SRS channel"} {
+	for _, substr := range []string{"stop job job-1", "stop job job-2", "release OME stream state", "delete SRS channel"} {
 		if !strings.Contains(msg, substr) {
 			t.Fatalf("expected error message to contain %q, got %q", substr, msg)
 		}

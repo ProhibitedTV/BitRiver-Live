@@ -140,6 +140,9 @@
                             <PartHoldBack>1.5</PartHoldBack>
                             <SegmentDuration>6</SegmentDuration>
                             <SegmentCount>10</SegmentCount>
+                            <CrossDomains>
+                                <Url>*</Url>
+                            </CrossDomains>
                         </LLHLS>
                     </Publishers>
 

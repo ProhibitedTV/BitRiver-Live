@@ -71,6 +71,8 @@ type Config struct {
 	RateLimit                RateLimitConfig
 	CORS                     CORSConfig
 	Security                 SecurityConfig
+	ViewerMediaOrigins       []string
+	ViewerMediaProxyOrigin   *url.URL
 	Logger                   *slog.Logger
 	AuditLogger              *slog.Logger
 	Metrics                  *metrics.Recorder
@@ -253,7 +255,19 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	mux.HandleFunc("/api/legal/data-subject", handler.LegalDataSubject)
 	mux.HandleFunc("/api/legal/data-subject/", handler.LegalDataSubjectByID)
 	mux.HandleFunc("/api/ingest/srs-hook", handler.SRSHook)
+	mux.HandleFunc("/api/ingest/srs/", handler.SRSHook)
 	mux.HandleFunc("/api/payments/webhooks/", handler.PaymentWebhook)
+	if cfg.ViewerMediaProxyOrigin != nil {
+		mediaProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerMediaProxyOrigin)
+		mediaProxy.FlushInterval = -1
+		mediaProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			if requestLogger := loggingWithRequest(cfg.Logger, ipResolver, r); requestLogger != nil {
+				requestLogger.Error("OME LL-HLS proxy error", "error", err)
+			}
+			writeMiddlewareError(w, http.StatusBadGateway, "live playback temporarily unavailable")
+		}
+		mux.Handle("/live/", mediaProxy)
+	}
 
 	staticFS, err := web.Static()
 	if err != nil {
@@ -285,7 +299,7 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 		viewerSecurity := cfg.Security.withDefaults()
 		viewerContentSecurityPolicy := viewerSecurity.ContentSecurityPolicy
 		if cfg.Security.ContentSecurityPolicy == "" {
-			viewerContentSecurityPolicy = defaultViewerContentSecurityPolicy(viewerSecurity.FrameAncestors)
+			viewerContentSecurityPolicy = defaultViewerContentSecurityPolicy(viewerSecurity.FrameAncestors, cfg.ViewerMediaOrigins...)
 		}
 		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
 		viewerProxy.ModifyResponse = func(resp *http.Response) error {
@@ -702,7 +716,7 @@ func clientIP(remoteAddr string) string {
 func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/healthz" || path == "/metrics" || path == "/api/ingest/srs-hook" || path == "/api/metrics/qoe" || strings.HasPrefix(path, "/api/auth/") || (path == "/api/legal/dmca" && r.Method == http.MethodPost) || !strings.HasPrefix(path, "/api/") {
+		if path == "/healthz" || path == "/metrics" || isSRSHookPath(path) || path == "/api/metrics/qoe" || strings.HasPrefix(path, "/api/auth/") || (path == "/api/legal/dmca" && r.Method == http.MethodPost) || !strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -749,6 +763,10 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 		ctx := api.ContextWithUser(r.Context(), user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func isSRSHookPath(path string) bool {
+	return path == "/api/ingest/srs-hook" || strings.HasPrefix(path, "/api/ingest/srs/")
 }
 
 func isPublicDirectoryPath(path string) bool {

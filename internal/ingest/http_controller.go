@@ -69,6 +69,7 @@ func (c *HTTPController) ensureAdapters() {
 	if c.applications == nil {
 		c.applications = newHTTPApplicationAdapter(
 			c.config.OMEBaseURL,
+			c.config.OMEPlaybackBaseURL,
 			c.config.OMEAccessToken,
 			c.config.OMEUsername,
 			c.config.OMEPassword,
@@ -126,12 +127,11 @@ func (c *HTTPController) SetLogger(logger *slog.Logger) {
 //
 // The operation:
 //  1. Provisions a channel in SRS (primary/backup ingest endpoints).
-//  2. Creates an OME application (origin + playback URLs).
+//  2. Validates the static OME application and derives its playback URL.
 //  3. Starts transcoding jobs using the configured rendition ladder.
 //
 // On failure, BootStream attempts to roll back previously created
-// resources (e.g., deleting the OME application if transcoder startup
-// fails).
+// resources. The canonical OME application is static and remains configured.
 //
 // Callers should provide a context with an appropriate deadline to bound
 // the overall latency of the operation.
@@ -149,7 +149,7 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 		"session_id", params.SessionID,
 	)
 
-	primary, backup, err := c.channels.CreateChannel(ctx, params.ChannelID, params.StreamKey)
+	primary, backup, originSource, err := c.channels.CreateChannel(ctx, params.ChannelID, params.StreamKey)
 	if err != nil {
 		c.logger.Error("failed to create SRS channel",
 			"channel_id", params.ChannelID,
@@ -159,9 +159,9 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 		return BootResult{}, err
 	}
 
-	origin, playback, err := c.applications.CreateApplication(ctx, params.ChannelID, params.Renditions)
+	origin, playback, err := c.applications.CreateApplication(ctx, params.ChannelID, originSource, params.Renditions)
 	if err != nil {
-		c.logger.Error("failed to create OME application",
+		c.logger.Error("failed to validate OME application",
 			"channel_id", params.ChannelID,
 			"error", err,
 		)
@@ -202,9 +202,10 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 // ShutdownStream tears down an ingest pipeline that was previously
 // initialized with BootStream.
 //
-// It best-effort stops each transcoder job, removes the OME application,
-// and deletes the SRS channel. All errors are aggregated and returned
-// as a single error if any step fails.
+// It best-effort stops each transcoder job, releases any per-stream OME adapter
+// state, and deletes the SRS channel. The canonical static OME application is
+// retained. All errors are aggregated and returned as a single error if any
+// step fails.
 func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
 	metrics.ObserveIngestAttempt("shutdown_stream")
 	c.ensureAdapters()
@@ -228,11 +229,11 @@ func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionI
 	}
 
 	if err := c.applications.DeleteApplication(ctx, channelID); err != nil {
-		c.logger.Error("failed to delete OME application",
+		c.logger.Error("failed to release OME stream state",
 			"channel_id", channelID,
 			"error", err,
 		)
-		errs = append(errs, fmt.Sprintf("delete OME app: %v", err))
+		errs = append(errs, fmt.Sprintf("release OME stream state: %v", err))
 	}
 
 	if err := c.channels.DeleteChannel(ctx, channelID); err != nil {
