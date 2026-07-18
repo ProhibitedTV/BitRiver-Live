@@ -1,50 +1,54 @@
 # PLAN
 
 ## Scope
-- Resolve production blocker #1296 with one canonical PostgreSQL migration runner shared by Docker Compose and Helm.
-- Add a durable `schema_migrations` ledger containing filename, numeric version prefix, SHA-256 checksum, lifecycle status, timestamps, and release/commit metadata.
-- Apply only pending migrations in byte-sorted filename order; refuse checksum drift and ambiguous `applying`/`failed` states.
-- Provide read-only plan/status output plus checksum-confirmed retry and mark-applied recovery commands through the `bitriver` CLI.
-- Include non-sensitive migration history in the one-shot job logs already captured by release diagnostics.
-- Document forward-only schema policy, rollback boundaries, backups, and recovery.
+- Advance production blocker #1297 with a clean-host Linux Compose installer that consumes release artifacts only and targets Ubuntu 24.04 LTS x86_64 first.
+- Make launcher archives plus `.deb`/`.rpm` packages self-contained for the canonical pull-only stack: CLI/wrapper, Compose/env contract, migrations, renderers/templates, proxy config, systemd integration, and operator docs.
+- Install immutable program assets separately from operator-owned configuration and data; provide idempotent install/status/log/upgrade entrypoints plus a safe uninstall that retains data unless destruction is explicitly requested.
+- Publish the OME config helper as a multi-architecture release image so a source-free host never needs `ome-config:local` or a Go toolchain.
+- Add repeatable artifact-only acceptance that proves package contents, non-root/sudo operation, paths containing spaces, restart semantics, diagnostics, and data-preserving uninstall.
+- Document the XOA/XCP-ng VM and Nginx Proxy Manager topology, including public HTTP(S), WebSocket forwarding, trusted proxies, media/firewall ports, and internal-only control services.
 
 ## Design Decisions
-- Filename is the ledger identity because the canonical set intentionally contains both `0002_auth_sessions.sql` and `0002_chat_filters.sql`; the numeric prefix remains queryable metadata.
-- Canonical checksums are raw SHA-256 digests. Generated Helm SQL files must therefore be byte-for-byte copies of `deploy/migrations/*.sql`.
-- Each migration runs through `psql --single-transaction`. A durable `applying` row is written first, then changed to `applied` only after SQL success; failures become `failed` and stop startup.
-- A process interruption leaves an explicit `applying` record. Recovery requires the exact recorded checksum and an operator choice to retry a known-rolled-back migration or mark a manually verified migration applied.
-- The Compose job derives release metadata from the API image tag and accepts optional `BITRIVER_RELEASE_COMMIT`; Helm uses its API tag and optional release commit value.
-- The migration runner prints the final sanitized ledger, so existing release log collection captures applied history without credentials or SQL payloads.
+- The production install root is `/opt/bitriver-live`; configuration lives under `/etc/bitriver-live`; durable application/transcoder data lives under `/var/lib/bitriver-live`. Release assets remain replaceable and operator data remains outside package ownership.
+- A single systemd unit wraps the canonical Docker Compose stack. Docker retains container restart behavior; systemd provides boot ordering, status, bounded startup, and an operator-visible failure boundary.
+- The installer stages but does not silently weaken or bypass production validation. First activation uses the existing `bitriver env init --wizard`, `doctor`, `env validate`, pull preflight, migration runner, quickstart, and health checks.
+- Linux packages install the same bundle layout as the launcher archive. Package installation may create directories and the disabled unit, but it must not start with sample credentials.
+- `bitriver-ome-config` is a version-matched GHCR image for `linux/amd64` and `linux/arm64`; Compose and image preflight use its release tag/digest just like other first-party services.
+- Ubuntu 24.04 amd64 is the declared production target for this change. Debian 12 and Linux arm64 remain provisional until their clean-host evidence passes; release docs must not overclaim them.
+- Installer completion means files and service integration are installed. Production readiness additionally requires successful quickstart, OME process health, authenticated OME control-plane access, aggregate API health, and the basic ingest/playback acceptance owned by #1300.
 
 ## Assumptions
-- Existing installations have run the historical idempotent SQL set but have no ledger. The first ledger-aware run safely replays the canonical set once, records it, and future runs become no-ops.
-- PostgreSQL 15 Alpine provides `psql` and `sha256sum`; the runner verifies its required tools before touching the ledger.
-- Migration filenames remain restricted and deterministic. Duplicate numeric prefixes are allowed, but duplicate filenames are impossible.
-- The user's Ubuntu/XOA/Nginx Proxy Manager target remains assigned to clean-host installer issue #1297 after migration safety lands.
-- Real OvenMediaEngine playback proof and restart/readiness recovery remain scoped to #1300 and #1304; this change must not claim OME deployment readiness.
+- Docker Engine and the Compose v2 plugin are installed from Docker's supported repository, or the installer may install them only after explicit operator confirmation.
+- The VM has at least 4 vCPU, 8 GiB RAM, 20 GiB free disk, working DNS, and outbound access to GHCR plus pinned third-party registries.
+- Nginx Proxy Manager terminates TLS on a separate trusted host or VM and proxies the viewer/API HTTP origin to the BitRiver VM. RTMP, LL-HLS/WebRTC, TURN/relay, and ICE traffic are forwarded directly rather than tunneled through the HTTP proxy host.
+- The tagged release publishes all first-party multi-architecture images before clean-host acceptance runs.
 
 ## Risks
-- A crash after schema commit but before the ledger update is inherently ambiguous; preserve `applying` and require checksum-confirmed manual verification instead of guessing.
-- A failed non-transactional migration could leave partial state; force the runner's single transaction and document that future migrations must not opt out or embed irreversible work without release notes.
-- Editing generated Helm SQL headers would create topology-specific checksums; remove migration headers and verify exact byte parity automatically.
-- The existing Helm generated set is missing migrations `0008` through `0011`; regenerate it from canonical sources and test the complete set.
-- Compose, Helm, CLI, docs, and verification all consume the migration contract; keep the implementation focused on this behavior and avoid unrelated installer, proxy, or OME changes.
-- `docs/contract.md` and `deploy/ome/Server.generated.xml` already have line-ending-only working-tree changes; modify only the necessary contract lines and leave the OME file untouched.
+- Existing launcher packages omit runtime assets and resolve repo-relative paths from the current directory; add an explicit installed asset root and verify the bundle outside the source checkout.
+- Compose currently uses local-only OME render images in pull mode; publishing and pinning this helper changes the deployment contract and release workflow together.
+- SRS/OME render jobs write generated files into the installed asset tree; use an operator-owned runtime workspace or deliberately writable generated paths without making immutable package files credential-bearing.
+- A systemd timeout that is too short can kill a valid first image pull; make it bounded but generous and preserve redacted logs plus exact recovery commands.
+- Nginx Proxy Manager handles HTTP/WebSocket traffic but not the full media port surface. Documentation must distinguish proxy routes from XOA/firewall/NAT rules.
+- GitHub-hosted CI cannot prove an actual XOA VM reboot. Automate everything repeatable, then leave final tagged-release reboot evidence explicitly pending rather than claiming it.
+- Read-only Go dependency and verification checks must stay inside first-party Go roots and must not request VCS build stamping: on Windows-mounted Linux workspaces, an implicit `git status`, `go test ./...`, or a blanket `find .` can livelock on frontend dependencies and media before test timeouts start. Set `GOFLAGS=-buildvcs=false`, scope default Go verification and models-import scans to `cmd`, `internal`, `scripts`, and `web`, and guard these contracts in tests.
 
 ## Test Plan
-- Shell syntax and focused Go tests for CLI argument validation and Docker Compose invocation.
-- Isolated PostgreSQL integration evidence for fresh apply, previous-schema upgrade, no-op rerun, checksum-drift refusal, failed migration retry, interrupted-state mark-applied recovery, and sanitized status output.
-- Helm asset sync `--check`, Helm template/lint when available, generated contract invariants, and Docker Compose config rendering.
-- Canonical quickstart smoke proving a failed/ambiguous migration blocks API startup and a healthy no-op migration job completes.
-- Full `./scripts/verify.sh`, `git diff --check`, and pull-request CI before merge.
+- Shell syntax, installer unit tests, and focused Go tests for installed-root discovery, image preflight, Compose invocation, and OME helper image selection.
+- Assemble launcher bundles in temporary paths containing spaces and verify every Compose bind mount plus required executable/document exists without reading the checkout.
+- Exercise install twice, disabled-before-configuration behavior, status/log commands, upgrade staging, service enablement, and safe uninstall/data purge using isolated filesystem roots.
+- Extract `.deb` and `.rpm` payloads and compare them to the canonical bundle manifest; run package install checks in Ubuntu 24.04 and Debian 12 containers where possible.
+- Render Compose in pull-only mode, run the existing quickstart smoke with the release-shaped bundle, and require bounded OME/aggregate health diagnostics.
+- Run `./scripts/verify.sh`, release workflow contract tests, `git diff --check`, and pull-request CI before publication.
+- Re-run default Go verification, architecture, and models-import checks in the pinned Linux toolchain; assert VCS stamping is disabled and package/filesystem traversal is limited to first-party Go roots so mounted-workspace verification remains bounded.
 
 ## Boundaries
-- The user explicitly authorized roadmap and deployment-contract work for the Ubuntu home-hosting target; modify Compose and its matching contract docs only as required by #1296.
-- Do not edit root `.env`, generated OME credentials/config, or the user's untracked deployment helper files.
-- Do not build the Ubuntu installer, Nginx Proxy Manager integration, or OME readiness changes in this PR; carry those requirements into #1297, #1300, and #1304.
-- Do not provide automatic down migrations or claim arbitrary destructive downgrades are supported.
+- The user explicitly authorized installer, deployment-contract, and roadmap work for the Ubuntu/XOA/Nginx Proxy Manager target, including the necessary release workflow changes.
+- Do not edit root `.env`, stage generated OME credentials/config, or include the user's untracked deployment helper files/runtime data.
+- Do not expose PostgreSQL, Redis, SRS control, OME Managers API, or transcoder control ports through Nginx Proxy Manager.
+- Do not claim Debian, ARM64, host reboot, or real playback acceptance until direct evidence exists.
+- Do not automatically delete operator configuration, database volumes, recordings, or transcoder data during package removal.
 
 ## Completion
-- Implemented and locally verified on 2026-07-17. The exact `./scripts/verify.sh` wrapper reached its Go step and stopped because the Windows host has Go 1.25.6 while the repository requires 1.26 with `GOTOOLCHAIN=local`; every constituent gate was then run with the pinned Go 1.26.5 container plus host Docker/Git Bash.
-- Real PostgreSQL lifecycle evidence, all Go package zones, architecture/dependency checks, generated contract/Helm parity, Compose rendering, and the full quickstart smoke passed. OME reported healthy in the smoke, and the pre-existing generated OME file was restored byte-for-byte afterward.
-- This proves the migration safety change and basic OME process health only. Clean Ubuntu/XOA/Nginx Proxy Manager install proof remains #1297; real OME playback remains #1300; OME restart/unavailable recovery remains #1304.
+- Local implementation and acceptance are complete: pinned-toolchain repository verification, package generation, PostgreSQL migration acceptance, release-shaped Compose/OME smoke, and clean teardown passed.
+- Publication and pull-request CI are pending valid GitHub CLI authentication.
+- Tagged Ubuntu/XOA reboot, authenticated OME control-plane access, and real ingest/playback/recovery remain required external release evidence for #1297/#1300/#1304; this local candidate does not claim them.

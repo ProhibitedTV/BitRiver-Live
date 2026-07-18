@@ -29,6 +29,26 @@ The planner prints a checklist with current-image detection, migration expectati
 
 The command is best-effort: if Docker is unavailable or the stack is stopped, it warns and falls back to `.env` tags when possible.
 
+### Ubuntu artifact installations
+
+Boot-managed Ubuntu installs use the same Compose contract with these host paths:
+
+- program/workspace: `/opt/bitriver-live`
+- environment and generated OME/SRS config: `/etc/bitriver-live`
+- durable state: `/var/lib/bitriver-live`
+
+After completing the backup checklist, install/extract the new published artifact and stage it through the host manager:
+
+```bash
+# From a newly extracted launcher archive:
+sudo ./install.sh upgrade --operator-user "$USER"
+
+# Or after installing the new .deb:
+sudo bitriver-host upgrade --operator-user "$USER"
+```
+
+The host manager preserves configuration/data and restarts only when the unit was already active. Run `sudo bitriver-host status`, authenticated OME control, real ingest, and playback checks after every upgrade. Follow [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md) for reboot and Nginx Proxy Manager acceptance.
+
 Before changing images, query the database-backed plan. This command is read-only and does not create the ledger on an uninitialized database:
 
 ```bash

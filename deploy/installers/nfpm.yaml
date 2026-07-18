@@ -1,31 +1,39 @@
 name: bitriver-live
-arch: "{{ .Env.NFPM_ARCH }}"
+arch: ${NFPM_ARCH}
 platform: linux
-version: "{{ .Env.NFPM_VERSION }}"
+version: ${NFPM_VERSION}
 section: misc
 priority: optional
 maintainer: BitRiver Live Team <dev@bitriver.live>
 description: BitRiver Live launcher and CLI
 homepage: https://github.com/ProhibitedTV/BitRiver-Live
 license: MIT
-bindir: /usr/local/bin
 contents:
-  - src: "{{ .Env.LAUNCHER_ROOT }}/bin/bitriver"
+  - src: "${LAUNCHER_ROOT}/bin/bitriver"
     dst: /usr/local/bin/bitriver
+    expand: true
     file_info:
       mode: 0755
-  - src: "{{ .Env.LAUNCHER_ROOT }}/bin/bitriver-live"
+  - src: "${LAUNCHER_ROOT}/bin/bitriver-live"
     dst: /usr/local/bin/bitriver-live
+    expand: true
     file_info:
       mode: 0755
-  - src: "{{ .Env.LAUNCHER_ROOT }}/share"
+  - src: "${LAUNCHER_ROOT}/share/bitriver-live/"
     dst: /usr/local/share/bitriver-live
-  - src: deploy/installers/bitriver-live.desktop
+    expand: true
+  - src: "${LAUNCHER_ROOT}/share/bitriver-live/deploy/install/compose-host.sh"
+    dst: /usr/local/sbin/bitriver-host
+    expand: true
+    file_info:
+      mode: 0755
+  - src: "${LAUNCHER_ROOT}/share/bitriver-live/deploy/installers/bitriver-live.desktop"
     dst: /usr/share/applications/bitriver-live.desktop
+    expand: true
     file_info:
       mode: 0644
 rpm:
   summary: BitRiver Live launcher and CLI
-  compression: zstd
+  compression: gzip
 deb:
-  compression: zstd
+  compression: gzip

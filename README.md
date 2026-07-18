@@ -7,6 +7,7 @@ It is built for operators who are comfortable managing a single host. It is not 
 ## At a glance
 
 - Supported baseline: operator-managed single-host deployment.
+- Production installation target: Ubuntu Server 24.04 LTS on amd64, using tagged release artifacts and Docker Compose.
 - Includes: Go control plane, Next.js viewer, SRS ingest, OvenMediaEngine playback, FFmpeg-based transcoding, Postgres, and Redis.
 - Fastest honest evaluation path: source checkout plus `go run ./cmd/bitriver quickstart`.
 - Before production: read [`docs/production-single-host.md`](docs/production-single-host.md), [`docs/security.md`](docs/security.md), and [`docs/production-release.md`](docs/production-release.md).
@@ -21,6 +22,7 @@ BitRiver Live is aimed at teams who want one reproducible stack and are willing 
 
 - Single-host Docker Compose deployment of the Go API and admin control plane, Next.js viewer, SRS ingest, OvenMediaEngine playback, FFmpeg-based transcoding, Postgres, and Redis.
 - Source-based quickstart and packaged launcher paths that converge on the same deployment contract.
+- A two-phase Ubuntu host installer that keeps program assets, secrets, and durable data separate and refuses to start with sample credentials.
 - Admin bootstrap, health endpoints, release packaging, and CI/release automation.
 
 ### What is planned next
@@ -39,6 +41,8 @@ BitRiver Live is aimed at teams who want one reproducible stack and are willing 
 ## Quickstart
 
 This is the fastest source-based path from a checkout to a working local stack. First run can take several minutes while Docker pulls or builds images.
+
+Installing a tagged release on an Ubuntu/XOA VM instead? Use the artifact-only [Ubuntu installer guide](docs/installing-on-ubuntu.md). It covers the `.deb` and launcher archive, systemd lifecycle, Nginx Proxy Manager, network ports, safe upgrades/uninstall, reboot evidence, and the extra OME ingest/playback checks required before production approval.
 
 ### Prerequisites
 
@@ -130,6 +134,7 @@ flowchart LR
 ## Key docs
 
 - Quickstart: [`docs/quickstart.md`](docs/quickstart.md)
+- Ubuntu/XOA artifact install: [`docs/installing-on-ubuntu.md`](docs/installing-on-ubuntu.md)
 - Architecture: [`docs/architecture.md`](docs/architecture.md)
 - Deployment contract: [`docs/contract.md`](docs/contract.md)
 - Single-host production baseline: [`docs/production-single-host.md`](docs/production-single-host.md)

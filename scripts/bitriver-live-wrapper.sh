@@ -8,6 +8,7 @@ compose_file="$assets_dir/deploy/docker-compose.yml"
 example_env="$assets_dir/deploy/.env.example"
 env_file=${BITRIVER_ENV_FILE:-$assets_dir/.env}
 binary_path=${BITRIVER_BINARY:-"$script_dir/bitriver"}
+export BITRIVER_ROOT="$assets_dir"
 
 fatal() {
   printf '%s\n' "$1" >&2

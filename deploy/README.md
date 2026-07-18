@@ -158,9 +158,15 @@ Result: render + `ome-health-token-check` + OME container startup all use `api-p
 The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers. The renderer also enforces direct `<Application><OutputProfiles>` blocks and rejects deprecated `<Application><Outputs>` wrappers.
 
 ## Systemd installs
-For bare-metal or VM installs, start with the helpers in `deploy/install/`:
 
-- `install/wizard.sh` collects settings interactively and calls `install/ubuntu.sh`.
-- `install/ubuntu.sh` provisions users/directories and installs binaries, configs, and the systemd units under `deploy/systemd/`.
+The release path for an Ubuntu bare-metal/XOA VM is `deploy/install/compose-host.sh` (packaged as `install.sh` and `/usr/local/sbin/bitriver-host`). It wraps the canonical Compose graph with one bounded systemd unit instead of installing a divergent set of native per-service units:
 
-After installation, edit the environment overrides in the unit files (image tags, ports, mount paths), then reload systemd and start the services. See `deploy/systemd/README.md` for a step-by-step walkthrough.
+```bash
+sudo ./install.sh install --operator-user "$USER"
+sudo bitriver-host configure
+sudo bitriver-host activate
+```
+
+Program assets live under `/opt/bitriver-live`, secrets/configuration under `/etc/bitriver-live`, and durable state under `/var/lib/bitriver-live`. Ordinary uninstall preserves configuration/data; permanent purge requires both `--purge-data` and `--yes-really-purge`. See [`docs/installing-on-ubuntu.md`](../docs/installing-on-ubuntu.md).
+
+The older `install/wizard.sh`, `install/ubuntu.sh`, and native service units remain historical/advanced helpers and are not equivalent to the release Compose contract.

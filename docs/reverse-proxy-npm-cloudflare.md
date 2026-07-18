@@ -19,13 +19,17 @@ BITRIVER_LIVE_ADMIN_CORS_ORIGINS=https://stream.example.com
 # Viewer/API browser origin allowlist (comma-separated when multiple).
 BITRIVER_LIVE_VIEWER_CORS_ORIGINS=https://stream.example.com
 
-# Public HTTP(S) base URL for transcoder output manifests/segments.
-BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://stream.example.com/live
+# Trust only the NPM host to supply forwarded client addresses.
+BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
+
+# Public HTTP(S) origin for transcoder output manifests/segments.
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://media.example.com
 ```
 
 Notes:
 
 - Keep schemes explicit (`https://...`) for all origin allowlists.
+- Replace `10.0.10.5/32` with NPM's exact LAN address; do not trust a broad LAN by default.
 - If admin and viewer run on different hostnames, include both exact origins in the corresponding CORS variables.
 - After updating `.env`, re-apply with `docker compose up -d`.
 
@@ -78,6 +82,10 @@ BitRiver uses websocket upgrades for live chat and related realtime flows. With 
 - `Upgrade`
 - `Connection`
 - `Sec-WebSocket-*`
+
+Create a second Proxy Host for `media.example.com` forwarding to the BitRiver VM on port `9080`. Use a separate hostname instead of a `/live` custom location so NPM does not need to rewrite transcoder file paths.
+
+NPM and Cloudflare's normal HTTP proxy do not carry RTMP, TURN, or arbitrary UDP. If the deployment uses those paths, configure and validate direct firewall/NAT exposure for RTMP `1935/tcp`, OME relay `3478/tcp+udp`, and the OME ICE range `10000-10009/udp`. Keep OME manager ports `8081`/`8082`, the transcoder controller `9001`, SRS management, Postgres, and Redis private. See [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md) for the complete port table and XOA reboot gate.
 
 ## 4) Validation checklist
 

@@ -1,107 +1,110 @@
 # TASKS
 
-## Scoped change: deterministic PostgreSQL migration ledger (#1296)
+## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Inventory migration paths and establish the safety design
+- [x] Task 1 - Inventory release packages and define the clean-host contract
   - Acceptance criteria:
-    - `SPEC.md` and `PLAN.md` describe the ledger, checksum, transaction, recovery, parity, documentation, and test contract.
-    - Compose, Helm, CLI, release diagnostics, docs, tests, and existing migration files are inventoried before implementation.
-    - Existing unrelated working-tree changes and downstream installer/OME scope are recorded as boundaries.
+    - `PLAN.md` records supported-host claims, asset/config/data layout, systemd lifecycle, OME readiness boundary, Nginx Proxy Manager topology, risks, and evidence plan.
+    - Existing launcher/archive/package contents, Compose bind mounts, pull-only image behavior, installers, and docs are inspected before implementation.
+    - Unrelated working-tree files and unproved Debian/ARM64/reboot/playback claims are explicit boundaries.
   - Check:
-    - Read-only inventory found Compose and Helm blindly replay every SQL file, no ledger exists, duplicate `0002_*` prefixes require filename identity, and Helm is missing canonical migrations `0008` through `0011`.
-    - Existing `schema_migrations` exclusion in PostgreSQL test cleanup confirms the intended ledger table name.
-    - `docs/contract.md` and generated OME config differences are line-ending-only; untracked deployment helpers remain out of scope.
+    - The Linux launcher package currently ships only `deploy/docker-compose.yml` and `deploy/.env.example`; canonical Compose also binds migrations, the migration runner, SRS/OME generated configs, Nginx config, and transcoder data.
+    - Pull-only Compose still names `bitriver-live/ome-config:local`, but release automation publishes only API, viewer, SRS controller, and transcoder images.
+    - Packaged CLI root discovery falls back to the current directory when no `go.mod` exists, so OME rendering cannot reliably locate installed templates.
+    - The historical Ubuntu/systemd installer deploys native API binaries rather than the canonical full Compose stack.
 
-- [x] Task 2 - Implement the canonical ledger-aware migration runner
+- [x] Task 2 - Make release bundles self-contained and pull-only
   - Acceptance criteria:
-    - Runner validates inputs/tools, creates the ledger, orders filenames deterministically, records provenance/status, and applies only pending SQL.
-    - Applied checksum drift and `applying`/`failed` state stop with actionable, non-sensitive errors.
-    - Plan, status, retry, and mark-applied modes are explicit and checksum-confirmed.
-    - Every migration is executed transactionally and final ledger history is printed without credentials or SQL payloads.
+    - One canonical asset manifest/staging helper builds the launcher layout used by archives and Linux packages.
+    - Installed-root discovery is explicit and works outside a source checkout and from paths containing spaces.
+    - Compose uses a published, version-matched OME config image in pull mode; release automation publishes/scans multi-architecture output.
+    - Every Compose bind mount and render dependency required by the release-shaped stack is present without source files.
   - Check:
-    - Added `deploy/postgres-migrate.sh` with ledger creation, deterministic raw SHA-256 checksums, pending-only apply, transaction execution, drift/ambiguous-state refusal, sanitized history, and checksum-confirmed recovery.
-    - `C:\Program Files\Git\bin\bash.exe -n deploy/postgres-migrate.sh` passed.
-    - `git diff --check -- PLAN.md SPEC.md TASKS.md deploy/postgres-migrate.sh` passed.
+    - Added `deploy/install/release-assets.txt` plus `scripts/stage-release-assets.sh`; both release binary archives and launcher/package jobs now consume the same source-free asset set.
+    - Staging passed in a Linux container with an output path containing spaces and included Compose/env, all migrations, the canonical migration runner, SRS/OME render inputs, Nginx config, installer/systemd assets, scripts, and operator docs.
+    - Packaged root discovery now honors `BITRIVER_ROOT` and launcher/package layouts outside a Go checkout; focused CLI and wrapper tests passed with Go 1.26.5.
+    - Compose now pulls `ghcr.io/bitriver-live/bitriver-ome-config` by release tag/digest; GHCR preflight and required production digest validation include it.
+    - Release automation now publishes the OME helper for amd64/arm64 and emits Linux amd64/arm64 CLI, launcher, `.deb`, and `.rpm` artifacts. Compose config, release workflow tests, shell syntax, and `git diff --check` passed.
 
-- [x] Task 3 - Wire Compose, Helm, and CLI to one canonical mechanism
+- [x] Task 3 - Add the Ubuntu host installer and safe lifecycle commands
   - Acceptance criteria:
-    - Compose and Helm use the shared runner and pass release/commit metadata.
-    - Helm migration SQL and runner copies are generated from canonical assets and SQL parity is byte-for-byte.
-    - `bitriver migrations` exposes plan/status/apply/recovery without printing credentials.
-    - Upgrade planning points operators to the read-only migration preflight.
+    - Installer supports archive and package layouts, separates assets/config/data, creates a bounded systemd unit, and never starts with sample credentials.
+    - Install is rerunnable; status/log/upgrade commands are actionable; non-root operation uses explicit sudo boundaries.
+    - Uninstall disables/removes program integration while retaining config/data by default; destructive purge requires an explicit flag and warning.
+    - OME failure leaves the unit failed with redacted service diagnostics and retry commands.
   - Check:
-    - Compose config renders quietly with the shared runner mounted read-only, explicit connection/provenance env, and `apply` as the default command.
-    - The Helm job invokes the generated runner; all 12 SQL files and the runner match canonical SHA-256 bytes, and `./scripts/sync-helm-deploy-assets.sh --check` passed.
-    - Focused Go 1.26.5 container tests passed for CLI validation, repair invocation, quickstart no-TTY behavior, and upgrade-plan output.
-    - `git diff --check` passed for the CLI, Compose, Helm, env example, and sync changes.
+    - Added `deploy/install/compose-host.sh` with install/upgrade/configure/activate/doctor/status/logs/uninstall commands and a 15-minute bounded systemd unit.
+    - Program assets stage under `/opt/bitriver-live`; root-owned source assets are separated from `/etc/bitriver-live` configuration and `/var/lib/bitriver-live` application/transcoder data through explicit symlinks.
+    - First install runs non-interactive env initialization to rotate sample credentials but leaves the service disabled until the guided wizard, doctor, production env validation, Docker access, and bounded quickstart pass.
+    - Activation failure reports systemd plus Compose status and exact targeted OME/retry commands without automatically dumping credential-bearing environment or raw logs.
+    - The isolated lifecycle test passed twice from a source path and target path containing spaces; configuration survived the rerun, ordinary uninstall retained config/data, unconfirmed purge failed, and confirmed purge removed them.
 
-- [x] Task 4 - Add migration lifecycle and recovery evidence
+- [x] Task 4 - Add artifact-only and package lifecycle evidence
   - Acceptance criteria:
-    - Tests cover fresh database, representative previous schema, no-op rerun, checksum drift, failed retry, interrupted mark-applied recovery, and sanitized history.
-    - CLI invocation/validation and generated Helm parity are covered.
+    - Tests assemble and execute the bundle outside the checkout in a path containing spaces.
+    - Tests cover complete contents, rerunnable install, configuration gate, systemd/service shape, restart behavior, upgrade staging, safe uninstall, and explicit purge.
+    - `.deb`/`.rpm` payload generation and canonical asset parity are checked for amd64/arm64 inputs.
     - Relevant focused checks pass before documentation work proceeds.
   - Check:
-    - `./scripts/test-postgres-migrations.sh` passed against disposable `postgres:15-alpine` and is now part of the Docker-enabled `./scripts/verify.sh` gate.
-    - Fresh apply recorded one migration; adding a second file produced one pending upgrade and then a two-row applied history; the next apply was a no-op.
-    - Editing the first applied SQL caused read-only plan failure with both recorded and current SHA-256 values.
-    - A transactional missing-table failure recorded `failed` with no partial table; checksum-confirmed retry succeeded after the dependency was restored.
-    - A simulated post-commit/pre-ledger-update interruption remained `applying`, blocked plan, and required checksum-confirmed mark-applied after schema verification.
-    - Sanitized status included filename/version/checksum/status/timestamp/release/commit and did not contain the test database credential.
-    - Focused Go 1.26.5 CLI/upgrade tests and generated Helm parity check passed after the final runner fix.
+    - `scripts/test-release-bundle.sh` staged the canonical payload outside the checkout in a path containing spaces, verified manifest parity, and rejected generated credential-bearing OME/SRS files.
+    - `scripts/test-compose-host-installer.sh` covered rerunnable install, rotated configuration, rendered systemd shape, upgrade-safe state retention, ordinary uninstall, rejected purge, and confirmed purge without touching the host.
+    - `scripts/test-linux-packages.sh` used nFPM v2.47.0 to build and inspect amd64/arm64 `.deb` and `.rpm` payloads from the staged release bundle.
+    - Real package generation exposed and fixed unsupported nFPM template syntax and an extra asset-directory nesting level; package paths now resolve to `/usr/local/share/bitriver-live/deploy/...`.
 
-- [x] Task 5 - Update deployment, upgrade, rollback, and testing docs
+- [x] Task 5 - Document Ubuntu/XOA/Nginx Proxy Manager installation and support boundaries
   - Acceptance criteria:
-    - Contract and operator docs describe ledger behavior, preflight, forward-only policy, destructive-change release notes, backups, and recovery.
-    - Compose/Helm parity and first ledger-aware upgrade behavior are explicit.
-    - Downstream Ubuntu/XOA/Nginx Proxy Manager and OME readiness goals stay assigned to #1297/#1300/#1304.
+    - README, quickstart, Ubuntu install guide, deployment contract, release notes, and production release guide describe the artifact-only path.
+    - VM sizing, Docker/Compose setup, non-root/sudo workflow, boot recovery, firewall/NAT ports, WebSockets, trusted proxies, TLS, backup/upgrade/uninstall, and diagnostics are explicit.
+    - Ubuntu 24.04 amd64 is the only production claim unless additional direct evidence passes; real ingest/playback and OME restart remain assigned to #1300/#1304.
   - Check:
-    - Updated the deployment contract, upgrade/recovery runbook, advanced deployment and Ubuntu guidance, release/versioning policy, deployment asset map, and testing guide.
-    - `scripts/generate-contract-doc.sh --check` passed with `BITRIVER_RELEASE_COMMIT` in the generated environment index.
-    - `scripts/check-env-example-placeholders.sh` passed.
-    - Documentation `git diff --check` passed; the pre-existing OME generated config remains untouched and line-ending-only.
+    - Replaced the stale native Ubuntu service guide with the artifact-only Compose host path for Ubuntu 24.04 amd64, including XOA VM sizing, Docker/Compose prerequisites, archive/package checksums, two-phase activation, paths, backup, upgrade, uninstall, and reboot evidence.
+    - Documented NPM app/media proxy hosts, WebSockets, exact trusted-proxy CIDR, TLS/public URL values, and the direct RTMP/WebRTC firewall/NAT boundary that an HTTP reverse proxy cannot satisfy.
+    - README, quickstart, deployment contract, release guide/notes, deploy map, testing, upgrades, and the NPM/Cloudflare guide now agree on the release asset and systemd lifecycle.
+    - OME language explicitly requires authenticated control plus real ingest/playback/recovery against the tagged VM; an unauthenticated root health probe is not release approval.
+    - Generated contract environment index and installer-language consistency checks passed.
 
-- [x] Task 6 - Run full verification and prepare the issue for publication
+- [x] Task 6 - Run full verification and prepare publication evidence
   - Acceptance criteria:
-    - Full repository verification, Compose rendering, quickstart smoke, and migration integration evidence pass or exact blockers are recorded.
-    - Diff review confirms no credentials, generated runtime output, or unrelated deployment helpers are included.
-    - `PLAN.md` and `TASKS.md` contain final evidence and remaining downstream work.
+    - Full repository verification, release/package tests, Compose rendering, and quickstart smoke pass or exact environment blockers are recorded.
+    - Diff review excludes credentials, generated runtime output, and unrelated deployment helpers/data.
+    - Final task evidence distinguishes implementation proof from tagged-release VM reboot and playback evidence.
   - Check:
-    - Pinned Go 1.26.5 passed all module package zones: `./cmd/... ./internal/... ./scripts/... ./web`; focused CLI, architecture, and script packages also passed after the final harness edits.
-    - `./scripts/test-postgres-migrations.sh`, Docker Compose config rendering, contract snapshot generation (12 migrations), contract invariants, env placeholder hygiene, Helm generated-asset parity, shell syntax, and `git diff --check` passed.
-    - `./scripts/test-quickstart.sh` built the production dependency graph and all first-party images, then reported Postgres, Redis, SRS, SRS controller, OME, transcoder, and API healthy; the migration job completed and API/viewer endpoints were reachable.
-    - The quickstart harness restored `deploy/ome/Server.generated.xml` to the exact pre-run SHA-256 and removed all Compose containers/volumes.
-    - The literal `./scripts/verify.sh` wrapper passed its first three checks then stopped at Go because host Go 1.25.6 cannot satisfy the repository's Go 1.26 local-toolchain contract; its remaining constituents passed with pinned Go 1.26.5 and host Docker.
-    - Viewer sources were unchanged, so viewer lint/Jest were not required; the quickstart image build still completed the Next.js 16 production build and TypeScript/static generation.
-    - Diff scope review excludes the user's OME line-ending change, deployment assurance/guide files, diagnostics/startup/validation helpers, and transcoder runtime data.
+    - Literal `./scripts/verify.sh` passed in the pinned Go 1.26.5 plus Python container, including release-bundle, installer-lifecycle, all first-party Go package, architecture, models-import, dependency-source, contract-invariant, and generated-contract checks. Docker and viewer phases reported explicit container-tooling skips.
+    - The verification entrypoint now disables VCS stamping and bounds default Go/filesystem traversal to first-party Go roots; focused regression tests prevent the Windows-mounted-workspace livelocks exposed by this final run.
+    - `scripts/test-postgres-migrations.sh` passed the real PostgreSQL migration lifecycle. `scripts/test-quickstart.sh` then rebuilt the release-shaped stack and passed OME helper rendering/validation, OME health-token preflight, service health, migrations, API health, and retried viewer health.
+    - `scripts/test-linux-packages.sh` generated and inspected amd64/arm64 `.deb` and `.rpm` payloads with nFPM v2.47.0. Compose rendering, YAML parsing, PowerShell parsing, shell syntax, installer-language consistency, and `git diff --check` also passed.
+    - Post-smoke `docker compose --env-file .env -f deploy/docker-compose.yml ps --all` returned an empty service table; generated OME/SRS config and root `.env` have no diff.
+    - Publication is pending: `gh auth status` reports the active `ProhibitedTV` token is invalid. No files were staged, committed, pushed, or merged.
+    - Unrelated deployment helpers/data remain untracked and are explicitly excluded from the intended change set; the temporary `.gomodcache/` was removed after verification.
+    - Tagged Ubuntu/XOA reboot, authenticated OME control-plane, and real ingest/playback acceptance remain external release evidence owned by #1297/#1300/#1304 and are not claimed by this local candidate.
 
 ### Execution log
 - Task 1 analysis:
-  - Confirmed the current Compose and Helm jobs execute every SQL file on every run with no durable audit state.
-  - Confirmed canonical ordering must use complete filenames because two historical migrations share version prefix `0002`.
-  - Confirmed Helm generated SQL is stale at `0007` while canonical migrations continue through `0011`.
-  - Selected raw SHA-256 checksums plus byte-for-byte generated SQL parity so Compose and Helm cannot record different history for the same migration.
-  - Selected explicit `applying`, `applied`, and `failed` states with checksum-confirmed retry/mark-applied recovery for the commit-to-ledger interruption window.
+  - Confirmed #1297 requires artifact-only install/restart/reboot/status/log/upgrade/uninstall behavior and an explicit Ubuntu/Debian/ARM64 support matrix.
+  - Selected Ubuntu 24.04 amd64 as the first production target; Debian 12 and Linux arm64 remain provisional despite current cross-build/package jobs.
+  - Selected `/opt/bitriver-live`, `/etc/bitriver-live`, and `/var/lib/bitriver-live` as separate program/config/data boundaries with data-preserving uninstall.
+  - Identified local-only OME config image publication and packaged-root discovery as prerequisites to any truthful clean-host success claim.
 - Task 2 implementation:
-  - Added a POSIX runner suitable for the pinned Postgres Alpine image; it validates required tools and connection inputs without echoing credentials.
-  - The runner records a claim before SQL execution, forces a single transaction, records success/failure afterward, and leaves interruption state visible rather than silently retrying.
-  - Read-only plan/status modes do not create the ledger; repair requires the exact current and recorded checksum.
+  - Replaced release-workflow copy fragments with a canonical manifest-driven asset staging step shared by binary archives and launcher/package payloads.
+  - Added explicit installed asset-root resolution so the Go renderer, Compose defaults, doctor, migrations, and release commands resolve the release bundle rather than the invoking shell's directory.
+  - Converted the OME helper from a local-only image name to a tagged/digest-pinnable GHCR contract and added it to multi-architecture publication plus vulnerability scanning.
+  - Expanded launcher/package builds to Linux arm64 without declaring support until clean-host evidence passes.
 - Task 3 implementation:
-  - Replaced Compose and Helm's inline replay loops with the same generated runner and bounded Postgres readiness wait.
-  - Added `bitriver migrations` with safe plan default plus status, apply, retry, and mark-applied modes; quickstart now delegates to the same apply path.
-  - Changed generated Helm SQL to exact canonical copies and regenerated the previously missing `0008` through `0011` migrations.
-  - Upgrade planning now requires a read-only migration preflight before image changes and uses the focused CLI for application.
-- Task 4 implementation:
-  - Added an isolated real-Postgres lifecycle test and wired it into the Docker-enabled repository verification sequence.
-  - Made the test portable across Linux and Git Bash by disabling MSYS path conversion only for container-side `docker exec` paths.
-  - Replaced the runner's only `psql -c` variable-substitution call with stdin SQL after real PostgreSQL proved `-c` does not expand psql variables.
-- Task 5 implementation:
-  - Defined complete-filename identity, raw SHA-256 history, pending-only application, and migration failure as a deployment-health blocker in the canonical contract.
-  - Added exact plan/status/retry/mark-applied commands with the validation required before either recovery action.
-  - Established forward-only migrations, immutable applied files, and mandatory release notes plus restore evidence for destructive or rollback-incompatible schema changes.
-  - Documented byte-identical Compose/Helm migration assets and the new real-Postgres verification gate without claiming the downstream Ubuntu installer or OME readiness work is complete.
-- Task 6 verification and hardening:
-  - Tightened the architecture import test and check script to their actual Go package zones so large untracked deployment runtime data cannot time out an unrelated source contract.
-  - Made quickstart smoke render OME through the canonical Compose helper image instead of requiring a host Go toolchain, then added byte-for-byte backup/restore of the tracked generated OME config to prevent local credentials or smoke values from leaking into a diff.
-  - A full clean Compose smoke proved the new ledger job against all 12 canonical migrations; the second dependency evaluation completed as a no-op and did not block API health.
+  - Added a release-layout-aware host manager and systemd unit rather than extending the historical native API-only installer.
+  - Made package/archive installation safe-by-default: sample secrets are rotated, but no service is enabled before production network values and Docker prerequisites validate.
+  - Kept immutable source/package payloads separate from the installed runtime workspace and operator-owned configuration/data so upgrades and package removal cannot silently erase state.
+  - Added explicit OME failure/retry guidance while reserving real playback and restart acceptance for #1300/#1304.
+- Task 4 verification:
+  - Added permanent release-bundle, installer-lifecycle, and opt-in real Linux package acceptance scripts.
+  - Added container package-install/remove acceptance to the release workflow for Ubuntu 24.04, Debian 12, and Rocky Linux 9 while keeping the production support claim limited to Ubuntu 24.04 amd64.
+  - Proved nFPM emits all four Linux package variants and that the package payload is sourced from the same asset manifest as release archives.
+- Task 5 documentation:
+  - Established Ubuntu 24.04 amd64 as the production installation target while keeping Debian/RPM/arm64 claims provisional pending tagged clean-host evidence.
+  - Added a concrete XOA plus Nginx Proxy Manager runbook that separates HTTP reverse proxying from RTMP/WebRTC L4 and UDP exposure.
+  - Added clean-host/reboot evidence requirements to the production release gate and v1.2.3 draft notes instead of treating container health as end-to-end media proof.
+- Task 6 verification/publication:
+  - Passed literal repository verification in the pinned Go 1.26.5 environment, real PostgreSQL migration acceptance, real nFPM package generation, and a rebuilt Compose quickstart smoke through OME/API/viewer health; confirmed clean teardown afterward.
+  - Hardened verification against implicit VCS stamping and unbounded mounted-workspace traversal after the complete gate exposed both portability defects.
+  - Completed the local candidate and evidence record. GitHub CLI authentication still blocks staging/publication, while PR CI and tagged XOA/reboot/media-path evidence necessarily remain pending.

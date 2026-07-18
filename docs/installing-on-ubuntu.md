@@ -1,527 +1,250 @@
-# Installing BitRiver Live on Ubuntu
+# Install BitRiver Live on Ubuntu
 
-This guide walks operators through bringing up BitRiver Live on an Ubuntu Server virtual machine. It covers VM preparation, package installation, data services, ingest components, application builds, and final verification. The recommended default for all platforms is to use the Go CLI to run Docker Compose (`go run ./cmd/bitriver compose up`); this document addresses Ubuntu-specific steps and the Linux-only, optional systemd units documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md). For reference architectures and service manifests, see [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) and [`docs/scaling-topologies.md`](scaling-topologies.md). The sample SRS configuration in [`deploy/srs/conf/srs.conf`](../deploy/srs/conf/srs.conf) is referenced when enabling ingest.
+This is the artifact-only installation path for an operator-managed Ubuntu VM. It installs the canonical Docker Compose stack; it does not build application images or require a source checkout.
 
-> **Supported releases:** Ubuntu 22.04 LTS or later. Earlier releases may require updated package repositories for Node.js and Redis.
+## Support and evidence boundary
 
-## 1. Prepare the virtual machine
+- Production target: Ubuntu Server 24.04 LTS on amd64.
+- Package build coverage: amd64 and arm64 `.deb`/`.rpm` artifacts.
+- Package install coverage: Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers.
+- Provisional until clean-host evidence is attached to a tagged release: Debian 12, Rocky Linux, arm64, XOA/XCP-ng reboot recovery, and public ingest/playback.
 
-1. Provision an Ubuntu VM with at least 4 vCPUs, 8 GB RAM, and 100 GB of SSD-backed storage. Place it on a subnet that can reach your ingest and viewer networks.
-2. Attach a static public IP or configure DNS for the hostname viewers will use (e.g., `stream.example.com`).
-3. Harden the base OS:
-   - Create a non-root sudo user and disable password SSH logins.
-   - Update packages and reboot into the latest kernel.
+The installer can prove rendered configuration, migration completion, process health, and critical Compose health. A release is not production-approved until the tagged artifacts also pass authenticated OvenMediaEngine control, real RTMP ingest, public playback, and reboot/recovery acceptance. Track those remaining gates in issues #1300 and #1304.
+
+## XOA/XCP-ng VM baseline
+
+Create a bridged Ubuntu 24.04 VM with:
+
+- 4 vCPU, 8 GiB RAM, and 40 GiB or more storage for a practical starting point.
+- A stable DHCP reservation or static LAN address.
+- Correct DNS, NTP, and a hostname that survives reboot.
+- A separate backup target for Postgres, `/etc/bitriver-live`, and `/var/lib/bitriver-live`.
+
+The built-in doctor floor is 2 logical CPUs, 4 GiB RAM, and 10 GiB free disk. Transcoding, concurrent streams, and media retention normally need more. Take an XOA snapshot before upgrades, but do not treat a VM snapshot as the only database backup.
+
+## 1. Install Docker Engine and Compose
+
+Use Docker's official Ubuntu repository instructions rather than the convenience script for a production VM:
+
+- [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+- [Install the Docker Compose plugin](https://docs.docker.com/compose/install/linux/)
+
+The required packages from that repository are:
 
 ```bash
 sudo apt update
-sudo apt full-upgrade -y
+sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Sign out and back in after changing group membership, then verify the non-root operator can reach Docker:
+
+```bash
+docker version
+docker compose version
+docker run --rm hello-world
+```
+
+Membership in the `docker` group is effectively root-level host access. Use a dedicated operator account and do not grant it casually.
+
+## 2. Download and verify a release artifact
+
+Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from the same [GitHub release](https://github.com/ProhibitedTV/BitRiver-Live/releases). Never mix a package, archive, or checksum file from different tags.
+
+Example archive verification:
+
+```bash
+grep 'bitriver-launcher-linux-amd64.tar.gz$' CHECKSUMS.txt | sha256sum --check -
+tar -xzf bitriver-launcher-linux-amd64.tar.gz
+cd bitriver-launcher-linux-amd64
+```
+
+## 3. Stage the disabled service
+
+Archive path:
+
+```bash
+sudo ./install.sh install --operator-user "$USER"
+```
+
+Package path:
+
+```bash
+sudo apt install ./bitriver-live_v1.2.3_amd64.deb
+sudo bitriver-host install --operator-user "$USER"
+```
+
+Installation is deliberately two-phase. It rotates sample credentials and installs a disabled systemd unit, but it does not start public services before production network values pass validation.
+
+The filesystem contract is:
+
+| Path | Purpose | Removal behavior |
+| --- | --- | --- |
+| `/opt/bitriver-live` | Versioned program assets, binaries, and Compose workspace | Replaced on upgrade; removed on uninstall |
+| `/etc/bitriver-live/bitriver.env` | Operator environment and secrets, mode `0600` | Preserved by default |
+| `/etc/bitriver-live/Server.generated.xml` | Deployment-time OME config | Preserved by default; never publish it |
+| `/etc/bitriver-live/srs.generated.conf` | Deployment-time SRS config | Preserved by default; never publish it |
+| `/var/lib/bitriver-live` | Postgres-backed application/media state mounted by the stack | Preserved by default |
+| `/etc/systemd/system/bitriver-live-compose.service` | Bounded Compose lifecycle unit | Removed on uninstall |
+
+## 4. Configure public values
+
+Run the guided wizard:
+
+```bash
+sudo bitriver-host configure
+sudo bitriver-host doctor
+```
+
+For a VM behind Nginx Proxy Manager (NPM), use values equivalent to:
+
+```dotenv
+BITRIVER_LIVE_MODE=production
+BITRIVER_DEPLOY_IMAGE_SOURCE=pull
+NEXT_PUBLIC_API_BASE_URL=
+NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer
+BITRIVER_VIEWER_ORIGIN=https://stream.example.com
+BITRIVER_LIVE_ADMIN_CORS_ORIGINS=https://stream.example.com
+BITRIVER_LIVE_VIEWER_CORS_ORIGINS=https://stream.example.com
+BITRIVER_PUBLIC_DOMAIN=stream.example.com
+BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
+BITRIVER_OME_BIND=0.0.0.0
+BITRIVER_OME_IP=203.0.113.20
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://media.example.com
+```
+
+Use the NPM host's exact LAN IP/CIDR for `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`; do not trust an entire LAN unless every machine on it may set forwarded client-IP headers. `BITRIVER_OME_IP` must be the address viewers can actually reach through your chosen NAT/playback design, not `0.0.0.0` or a loopback address.
+
+Before activation, review the secret file without copying it into tickets or logs:
+
+```bash
+sudoedit /etc/bitriver-live/bitriver.env
+sudo -u "$USER" /opt/bitriver-live/bin/bitriver env validate \
+  --env-file /etc/bitriver-live/bitriver.env
+```
+
+Activation in production pull mode requires immutable first-party digests for `bitriver-live`, `bitriver-viewer`, `bitriver-srs-controller`, `bitriver-transcoder`, and `bitriver-ome-config`. Resolve each published tag as shown in [`docs/production-release.md`](production-release.md), then store it in the matching `/etc/bitriver-live/bitriver.env` key with an `@` prefix, for example `BITRIVER_OME_CONFIG_IMAGE_DIGEST=@sha256:...`. Pin the documented third-party image digests as well; never copy a digest from a different release tag or architecture set.
+
+## 5. Configure Nginx Proxy Manager and the firewall
+
+Create an NPM Proxy Host for `stream.example.com`:
+
+- Forward scheme: `http`
+- Forward host: the BitRiver VM's stable LAN address
+- Forward port: `8080`
+- Websockets Support: enabled
+- TLS certificate: enabled, with Force SSL
+
+The default API entrypoint serves `/`, `/api`, `/admin`, and reverse-proxies `/viewer`, so keep those paths on the same upstream. Create a second proxy host such as `media.example.com` to the VM's port `9080` for transcoder manifests and segments. This avoids fragile path rewriting; set `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` to that exact HTTPS origin.
+
+Restrict host-published management ports to trusted networks. The default exposure plan is:
+
+| Port | Protocol | Exposure |
+| --- | --- | --- |
+| `8080` | TCP/HTTP | NPM to BitRiver app; do not publish directly when NPM fronts it |
+| `9080` | TCP/HTTP | NPM to transcoder media host |
+| `1935` | TCP/RTMP | Direct/NAT only when remote encoders ingest |
+| `8083` | TCP/HTTP | OME LL-HLS; proxy only if the selected playback path uses it |
+| `9000` or `9443` | TCP/WebSocket | OME signalling; requires a validated public WSS route |
+| `3478` | TCP and UDP | OME relay when WebRTC uses it |
+| `10000-10009` | UDP | OME ICE media range when WebRTC uses it |
+| `8081`, `8082`, `9001`, `1985`, `1986`, `5432` | TCP | Management/internal; keep private unless a specific runbook requires access |
+
+NPM is an HTTP reverse proxy and does not replace the UDP/NAT rules required by WebRTC. Docker-published ports can also bypass ordinary UFW expectations; enforce public exposure at the hypervisor/router and Docker `DOCKER-USER` chain as appropriate. Keep the XOA management network separate from public media traffic.
+
+If Cloudflare is also in front of NPM, follow [`docs/reverse-proxy-npm-cloudflare.md`](reverse-proxy-npm-cloudflare.md). Do not assume Cloudflare's normal HTTP proxy carries RTMP, TURN, or arbitrary UDP.
+
+## 6. Activate and prove OME is online
+
+Activation validates the host and environment, enables the service, runs bounded quickstart, and fails when critical Compose services do not become healthy:
+
+```bash
+sudo bitriver-host activate
+sudo bitriver-host status
+curl -fsS https://stream.example.com/readyz
+curl -fsS https://stream.example.com/healthz
+```
+
+For OME-specific diagnosis:
+
+```bash
+sudo -u "$USER" docker compose \
+  --file /opt/bitriver-live/deploy/docker-compose.yml \
+  --env-file /etc/bitriver-live/bitriver.env \
+  ps ome ome-config ome-health-token-check bitriver-live
+
+sudo -u "$USER" docker compose \
+  --file /opt/bitriver-live/deploy/docker-compose.yml \
+  --env-file /etc/bitriver-live/bitriver.env \
+  logs --tail=120 ome ome-config ome-health-token-check bitriver-live
+```
+
+Do not paste the environment or generated OME XML into public logs. A green container root probe is necessary but not sufficient. Before release approval, also record:
+
+1. Authenticated OME manager/control success using the deployment token.
+2. Real RTMP publish from an encoder.
+3. Playback from an external viewer through the public URL.
+4. Stop/start and failure recovery without stale OME applications.
+
+## 7. Reboot acceptance on XOA
+
+Run this against the actual installed tag, not a source checkout:
+
+```bash
 sudo reboot
 ```
 
-4. Enable uncomplicated firewall (UFW) to expose only the required ports. Adjust for your topology if traffic terminates at a load balancer.
+After the VM returns:
 
 ```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 1935/tcp   # RTMP ingest to SRS
-sudo ufw allow 8080/tcp   # API (adjust if reverse proxy terminates TLS)
-sudo ufw allow 9080/tcp   # HLS playback mirror (transcoder-public)
-sudo ufw allow 8088/tcp   # SRS WebRTC/HTTP-FLV (optional)
-sudo ufw enable
+systemctl is-enabled bitriver-live-compose.service
+systemctl is-active bitriver-live-compose.service
+sudo bitriver-host status
+curl -fsS https://stream.example.com/readyz
 ```
 
-> **TLS reminder:** Plan for HTTPS. Either terminate TLS at a reverse proxy (e.g., Nginx, Caddy) or use Certbot to issue certificates for the Go API directly. Schedule renewals before going live.
+Repeat the authenticated OME, ingest, and playback checks. Attach the release tag, VM architecture, Ubuntu version, Docker/Compose versions, timestamps, and redacted command results to the release evidence. Until this is recorded, reboot recovery remains unproved.
 
-## 2. Install base packages
+## Operations
 
-Install OS dependencies for the API, database clients, Node.js-based viewer, and ingest tooling.
+Status and logs:
 
 ```bash
-sudo apt install -y build-essential git curl ufw pkg-config libcap2-bin \
-  golang-go nodejs npm postgresql-client redis-tools docker.io docker-compose-plugin
+sudo bitriver-host status
+sudo bitriver-host logs
+sudo journalctl -u bitriver-live-compose.service -n 200 --no-pager
 ```
 
-`libcap2-bin` provides the `setcap` utility the Ubuntu installer uses to keep privileged ports working across manual restarts. If you plan to bind to :80 or :443 directly from the Go process, keep it installed; otherwise pass `--addr :8080` (or another high port) when terminating traffic at a reverse proxy.
-
-If you prefer managed runtimes, replace the distribution Go and Node.js packages with upstream toolchains (for example, via `snap`, `asdf`, or tarballs). Ensure `go version` reports 1.26+ and `node --version` reports 24.x.
-
-## 3. Configure PostgreSQL and Redis
-
-Install server packages and enable services.
+Archive upgrade:
 
 ```bash
-sudo apt install -y postgresql postgresql-contrib redis-server
-sudo systemctl enable --now postgresql
-sudo systemctl enable --now redis-server
+tar -xzf bitriver-launcher-linux-amd64.tar.gz
+cd bitriver-launcher-linux-amd64
+sudo ./install.sh upgrade --operator-user "$USER"
 ```
 
-### PostgreSQL
-
-1. Switch to the `postgres` user to create the application database and credentials. Choose a role name and password that are unique to this deployment—the automation in [`deploy/check-env.sh`](../deploy/check-env.sh) rejects the historical `bitriver`/`changeme` samples so you do not accidentally reuse them.
+Package upgrade:
 
 ```bash
-sudo -u postgres psql <<'SQL'
--- Replace brlive_app and the sample password with your own values
-CREATE ROLE brlive_app WITH LOGIN PASSWORD 'P0stgres-Example!';
-CREATE DATABASE brlive_app OWNER brlive_app;
-GRANT ALL PRIVILEGES ON DATABASE brlive_app TO brlive_app;
-SQL
+sudo apt install ./bitriver-live_vNEXT_amd64.deb
+sudo bitriver-host upgrade --operator-user "$USER"
 ```
 
-2. Enforce TLS between the API and Postgres in production. Update `/etc/postgresql/14/main/postgresql.conf` and `pg_hba.conf` to require `hostssl` entries, and deploy certificates managed by your secrets store (HashiCorp Vault, AWS Secrets Manager, etc.). Restart PostgreSQL after editing:
+Back up and validate restore procedures before upgrading; see [`docs/upgrades.md`](upgrades.md).
+
+Safe uninstall removes program/service integration and retains configuration and data:
 
 ```bash
-sudo systemctl restart postgresql
+sudo bitriver-host uninstall
+sudo apt remove bitriver-live  # package installs only
 ```
 
-3. Verify connectivity from the application host.
-
-When you test connectivity, use the same credentials you created above and ensure the DSN matches the `.env` file you will provide to the application (see [`deploy/.env.example`](../deploy/.env.example) for the canonical key names). The validation script flags mismatched values so the API and migrators do not fall back to the blocked defaults.
+Permanent purge requires both explicit flags:
 
 ```bash
-psql "postgres://brlive_app:P0stgres-Example!@localhost:5432/brlive_app?sslmode=disable" -c '\l'
+sudo bitriver-host uninstall --purge-data --yes-really-purge
+sudo apt remove bitriver-live  # package installs only
 ```
 
-Replace `sslmode=disable` with `require` when TLS is enabled.
-
-If you are upgrading from the JSON datastore, run:
-
-```bash
-go run -tags postgres ./cmd/tools/migrate-json-to-postgres \
-  --json /var/lib/bitriver-live/store.json \
-  --postgres-dsn "postgres://brlive_app:P0stgres-Example!@localhost:5432/brlive_app?sslmode=disable"
-```
-
-The helper copies records into Postgres and verifies the row counts before exiting.
-
-### Redis
-
-1. Harden Redis for networked deployments:
-   - Bind Redis to `127.0.0.1` or your private subnet.
-   - Set a strong password in `/etc/redis/redis.conf` (`requirepass`).
-   - Enable TLS if clients connect over untrusted networks (stunnel or Redis 6+ native TLS).
-
-   The Docker Compose bundle now enables `requirepass` automatically and refuses to start until
-   `BITRIVER_REDIS_PASSWORD` is populated in `.env`. The API reads the same credential via
-   `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`, so update both entries together when you rotate the
-   password. `deploy/check-env.sh` checks for empty values and blocks the placeholder samples to
-   prevent accidental reuse.
-
-2. Restart and validate:
-
-```bash
-sudo systemctl restart redis-server
-redis-cli -a 'R3dis-Example!' ping
-```
-
-## 4. Download BitRiver Live release assets
-
-Always install from a tagged release so the binaries, installer scripts, and Docker Compose manifests stay in sync. Download the archive that matches your architecture from the [GitHub Releases](https://github.com/BitRiver-Live/BitRiver-Live/releases) page.
-
-```bash
-# Replace v1.2.3 with the release tag you plan to deploy
-export BITRIVER_LIVE_VERSION="v1.2.3"
-export BITRIVER_LIVE_PACKAGE="bitriver-live-linux-amd64.tar.gz"  # Use linux-arm64 on Ampere/Graviton hosts
-
-curl -LO "https://github.com/BitRiver-Live/BitRiver-Live/releases/download/${BITRIVER_LIVE_VERSION}/${BITRIVER_LIVE_PACKAGE}"
-sudo mkdir -p /opt/bitriver-live
-sudo tar -C /opt/bitriver-live -xzf "${BITRIVER_LIVE_PACKAGE}"
-sudo chown -R $USER:$USER /opt/bitriver-live
-rm "${BITRIVER_LIVE_PACKAGE}"
-```
-
-The archive expands into `/opt/bitriver-live` with the compiled binaries plus the `deploy/` directory (`docker-compose.yml`, `.env.example`, `check-env.sh`, `install/`, `nginx/`, `ome/`, `srs/`, and `systemd/`) referenced throughout this guide.
-
-## 5. Deploy ingest services
-
-BitRiver Live relies on SRS for ingest and OvenMediaEngine (OME) plus a transcoder for playback. Choose the approach that matches your operations model.
-
-### Option A: Docker Compose
-
-The compose bundle under [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) wires SRS, OME, the transcoder, PostgreSQL, Redis, and the API/viewer. Adapt it for production by overriding secrets and persistent volumes.
-
-Before starting the services, create an environment file and replace the placeholder credentials. Docker Compose refuses to launch until these values are present.
-
-```bash
-cd /opt/bitriver-live
-cp deploy/.env.example .env
-${EDITOR:-nano} .env
-./deploy/check-env.sh
-```
-
-Update the entries for:
-
-- `BITRIVER_POSTGRES_USER` and `BITRIVER_POSTGRES_PASSWORD`
-- `BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`
-- `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
-- `BITRIVER_SRS_TOKEN`
-- `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, and `BITRIVER_OME_API_TOKEN` (`BITRIVER_OME_ACCESS_TOKEN` mirrors the API token for the health probe unless you override it)
-- `BITRIVER_TRANSCODER_TOKEN`
-- `BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`, `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`, and `BITRIVER_TRANSCODER_IMAGE_TAG` (set all four to the release tag you extracted in [Step 4](#4-download-bitriver-live-release-assets) so every container runs the same build)
-- `BITRIVER_SRS_IMAGE_TAG` (defaults to `v5.0.185` so Compose matches the systemd units; bump it only after testing a newer SRS release and update both deployments together)
-
-If OME logs show `Empty <AccessToken> is not allowed`, the renderer detected an empty or missing token in `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` from `.env` (Compose will usually flag `bitriver-ome` as unhealthy at the same time). Compose now uses an unauthenticated local-root probe (`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/`) for OME liveness so auth header drift does not trigger restart loops. Set a non-empty token value, run `./scripts/render-ome-config.sh --force`, and restart with `docker compose up -d` so `deploy/ome/Server.generated.xml` picks up the same `<Managers><API><AccessToken>` value.
-
-The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
-
-The shipped `.env.example` now includes non-empty placeholders (`brlive_app`, `P0stgres-Example!`, `R3dis-Example!`, `admin@stream.example.com`, `https://stream.example.com`, and `https://cdn.example.com/hls`) so the release workflow and `deploy/check-env.sh` can validate the file. Replace every sample value with production-only credentials before launching. The validator fails when `BITRIVER_OME_API` or `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` point to loopback addresses, so set them to routable hostnames that match your ingress or CDN.
-
-Set `BITRIVER_TRANSCODER_TOKEN` to a strong bearer credential. The FFmpeg job controller refuses to start when `JOB_CONTROLLER_TOKEN` (the environment variable consumed inside the container) is empty, so populate it before launching the stack.
-
-Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and password you configure above before bringing the stack online.
-
-The bundled PostgreSQL container now reuses these credentials for its health probe, so the readiness check automatically honours any changes you make to `BITRIVER_POSTGRES_USER` (and `BITRIVER_POSTGRES_DB` if you override it) in `.env`.
-
-> **New default:** The compose manifest no longer publishes PostgreSQL to the host. Containers on the internal network can still reach it at `postgres:5432`, but the port remains firewalled from the host unless you explicitly opt in.
-
-To expose Postgres for administrative access, set `COMPOSE_PROFILES=postgres-host` in `.env` (or your shell) and rerun `docker compose`. The opt-in profile starts a small sidecar that shares the database network namespace and publishes `5432` to the host. Override `BITRIVER_POSTGRES_HOST_PORT` when you need a different host port, and tighten your firewall rules before enabling the profile. `./deploy/check-env.sh` prints a reminder about the security trade-offs whenever the profile is active.
-
-Redis now hosts the chat queue by default (`BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`). The compose
-manifest points the API at the in-cluster service (`BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR=redis:6379`)
-with the password you set above, and creates the `bitriver-live-chat` stream/group pairing out of
-the box. When you connect an external Redis deployment, update the address, stream, group, and
-password fields accordingly before restarting the stack.
-
-The API talks to SRS through the dedicated proxy. Leave `BITRIVER_SRS_API` set to `http://srs-controller:1985` when you use the compose bundle, or point it at the controller host/port (`http://localhost:1986` on the default Docker Compose network). Adjust `SRS_CONTROLLER_UPSTREAM` in `.env` when the proxy needs to reach an external SRS instance instead of the bundled container.
-
-Rerun `./deploy/check-env.sh` until it reports the environment file is ready. The compose manifest also uses required-variable expansion, so `docker compose` fails with an explanatory error when any of the credentials are missing or unchanged from the defaults.
-
-All long-running services in the compose file specify `restart: unless-stopped`, ensuring Docker automatically restarts containers after crashes or reboots. Override the policy per service if your operations model requires different behaviour.
-
-The manifest includes a short-lived `postgres-migrations` helper that waits a bounded time for the bundled Postgres container, validates the durable `schema_migrations` ledger, applies only pending canonical SQL transactionally, prints non-sensitive history, and exits. The `bitriver-live` API depends on that service with `condition: service_completed_successfully`, so checksum drift, a failed migration, or ambiguous interrupted state blocks API startup. Re-running `docker compose up -d` becomes a no-op when the current release is already recorded. Before an upgrade, run `go run ./cmd/bitriver migrations --mode plan --compose-file deploy/docker-compose.yml --env-file .env`; use the recovery procedure in [`docs/upgrades.md`](upgrades.md#failed-or-interrupted-migration-recovery) instead of editing applied SQL or bypassing the job.
-
-```bash
-cd /opt/bitriver-live
-sudo docker compose -f deploy/docker-compose.yml pull
-sudo docker compose -f deploy/docker-compose.yml up -d srs srs-controller ome transcoder transcoder-public
-```
-
-The compose bundle now binds `./transcoder-data` on the host to `/work` inside the FFmpeg controller so HLS manifests survive container restarts. Create the directory structure once before starting production traffic:
-
-```bash
-mkdir -p /opt/bitriver-live/transcoder-data/public
-```
-
-By default the stack serves `/work/public` through the `transcoder-public` Nginx sidecar. It forwards container port `8080` to host port `9080`, which keeps playback URLs stable for both local and remote viewers. The release bundle includes `deploy/nginx/transcoder-public.conf`; copy and adjust it when you need to customise headers or upstreams. The transcoder advertises the mirror via `BITRIVER_TRANSCODER_PUBLIC_DIR=/work/public` and requires you to supply a routable value for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`. Pick the HTTP origin your viewers will actually reach—use the hostname published by your CDN, reverse proxy, or load balancer (for example, `https://cdn.example.com/hls`). When you expose the bundled Nginx sidecar directly, publish it under a public DNS record or IP that remote clients can reach and place that URL in `.env`. Leaving the variable empty or pointing it at loopback (`http://localhost`, `http://127.0.0.1`, etc.) causes `deploy/check-env.sh` and `docker compose` to fail fast, preventing you from advertising unreachable playback URLs. When a live job starts the controller drops a symlink at `/work/public/live/<jobID>` that points at the active session’s output directory and removes it once the stream stops, so the mirror never accumulates stale session folders. Nginx is configured to follow those symlinks (`disable_symlinks off;`).
-
-If you prefer a different publication path, mount an object storage bucket or a directory served by another reverse proxy and point the transcoder at it with `BITRIVER_TRANSCODER_PUBLIC_DIR` (local staging directory) plus `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` (public HTTP origin). S3-compatible storage works well with `s3fs`, `rclone mount`, or a periodic sync (`aws s3 sync /opt/bitriver-live/transcoder-data/public s3://cdn-bucket/uploads/`).
-
-Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
-
-The sample config enables `http_hooks` that call the BitRiver Live ingest endpoints at `http://bitriver-live:8080/api/ingest/srs/{connect,publish,unpublish,play,stop}` and always read the shared token from `BITRIVER_SRS_TOKEN` in `.env`.
-SRS posts JSON payloads that look like:
-
-```json
-{
-  "action": "on_publish",
-  "stream": "<stream-key>",
-  "client_id": "123",
-  "ip": "198.51.100.10",
-  "vhost": "__defaultVhost__",
-  "app": "live",
-  "tcUrl": "rtmp://bitriver-live:1935/live",
-  "param": ""
-}
-```
-
-When a publish arrives, the API validates the stream key, boots ingest, and later stops or marks the channel offline when SRS sends an unpublish. Keep the hook host pointed at wherever the API listens (for example, `localhost:8080` when running the API outside Docker) and update the token via `.env` instead of hardcoding it in the SRS config.
-
-#### Upgrading the SRS container
-
-BitRiver Live pins SRS to `ossrs/srs:v5.0.185`, matching the systemd helpers under [`deploy/systemd/README.md`](../deploy/systemd/README.md). When you validate a newer upstream release:
-
-1. Update `.env` with the new tag by editing `BITRIVER_SRS_IMAGE_TAG`.
-2. Pull and restart the Compose services so the change takes effect:
-   ```bash
-   sudo docker compose -f deploy/docker-compose.yml pull srs
-   sudo docker compose -f deploy/docker-compose.yml up -d srs srs-controller
-   ```
-3. Mirror the tag in `/opt/bitriver-srs/.env` (or the directory you keep for the systemd service) so `SRS_IMAGE` matches.
-4. Restart the native unit to pick up the new image:
-   ```bash
-   sudo systemctl restart srs.service
-   ```
-5. Verify both deployments report the same version via the health endpoint before routing traffic:
-   ```bash
-   curl -fsS http://localhost:1985/api/v1/versions | jq '.data.srs.info.version'
-   ```
-
-If you roll back, reverse the steps: restore the previous tag in `.env` and the systemd environment file, pull the known-good image, and restart both services.
-
-### Option B: systemd services
-
-If you run SRS, OME, and the transcoder as native services, use [`deploy/systemd/README.md`](../deploy/systemd/README.md) for installation guidance. Copy the tracked unit files into `/etc/systemd/system/`, create the matching `/opt/bitriver-*/.env` files, and enable each service:
-
-```bash
-sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-srs-controller /opt/bitriver-ome /opt/bitriver-transcoder
-sudo install -m 0644 deploy/systemd/srs.service /etc/systemd/system/srs.service
-sudo install -m 0644 deploy/systemd/srs-controller.service /etc/systemd/system/srs-controller.service
-sudo install -m 0644 deploy/systemd/ome.service /etc/systemd/system/ome.service
-sudo install -m 0644 deploy/systemd/bitriver-transcoder.service /etc/systemd/system/bitriver-transcoder.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now srs.service
-sudo systemctl enable --now srs-controller.service
-sudo systemctl enable --now ome.service
-sudo systemctl enable --now bitriver-transcoder.service
-```
-
-Populate the `.env` files with the ports, tokens, and image tags described in [`deploy/systemd/README.md`](../deploy/systemd/README.md) before starting traffic. The transcoder unit expects `TRANSCODER_TOKEN` (passed through as `JOB_CONTROLLER_TOKEN`) to be non-empty; systemd restarts will fail until you provide the credential.
-
-Check status and logs to confirm ingest readiness.
-
-```bash
-sudo systemctl status srs.service srs-controller.service
-journalctl -u srs.service -u srs-controller.service -f
-```
-
-## 6. Deploy the API service
-
-### Guided setup
-
-For a prompt-driven experience, run the wizard at [`deploy/install/wizard.sh`](../deploy/install/wizard.sh) from the release directory you extracted earlier:
-
-```bash
-cd /opt/bitriver-live
-./deploy/install/wizard.sh
-```
-
-The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, storage driver, optional hostname hint, TLS certificate/key paths, rate-limiting values, whether to allow public self-signup, and whether to redirect systemd logs. It also prompts for viewer and API domains when you want the Go server to serve HTTPS directly, then copies the provided certificate and key into `<install-dir>/certs`, updates `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY`, and sets `NEXT_PUBLIC_VIEWER_URL`/`NEXT_PUBLIC_API_BASE_URL` accordingly. Viewer self-registration now defaults to disabled; opt in when prompted if you want to reopen public account creation. The wizard still defaults to the Postgres storage backend; be ready with a DSN and a database that has been migrated with the SQL files in [`deploy/migrations/`](../deploy/migrations). When you choose the Postgres storage backend it prompts for the DSN (required) and optionally a Postgres session-store DSN, letting you reuse the primary connection string or point to a dedicated database. The prompt rejects placeholder credentials such as `bitriver:changeme` or `bitriver:bitriver`, matching the safeguards in [`deploy/check-env.sh`](../deploy/check-env.sh); rotate a dedicated Postgres user/password before running the installer. When the wizard detects a source checkout it validates that Go 1.21+ is available; when invoked from a release tarball it skips the Go check because the binaries are already present. It still warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
-
-If a run fails midway, fix the highlighted issue and start the wizard again—it is safe to rerun, and you can accept the previous defaults to regenerate the service.
-
-### Option A: CLI installers (recommended)
-
-The BitRiver CLI now stages binaries/configuration and emits service definitions directly. It can also copy TLS certificates into `<install-dir>/certs` and stamp viewer/API domains into the environment file so HTTPS comes up on first boot. Use the Linux/systemd path below when running on Ubuntu; macOS and Windows operators can switch to `install launchd` or `install windows-service` to generate equivalent launchd/Windows Service templates without editing them by hand.
-
-Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. The installer mirrors [`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh) defaults: Postgres storage by default, Postgres-backed sessions unless overridden, log redirection when `--enable-logs` is set, and autogenerated admin passwords when you supply an email but omit `--bootstrap-admin-password`. Supply `--server-binary`/`--bootstrap-admin-binary` when staging from a release tarball; omit them from a source checkout to trigger a local Go build.
-
-```bash
-cd /opt/bitriver-live
-go run ./cmd/bitriver install systemd \
-  --install-dir /opt/bitriver-live \
-  --data-dir /var/lib/bitriver-live \
-  --service-user bitriver \
-  --mode production \
-  --addr :80 \
-  --viewer-url https://stream.example.com/viewer \
-  --public-api-url https://stream.example.com/api \
-  --viewer-origin https://stream.example.com \
-  --tls-cert /etc/letsencrypt/live/stream.example.com/fullchain.pem \
-  --tls-key /etc/letsencrypt/live/stream.example.com/privkey.pem \
-  --postgres-dsn "postgres://stream_user:super-strong-password@localhost:5432/bitriver_live?sslmode=disable" \
-  --enable-logs \
-  --server-binary ./bitriver-live \
-  --bootstrap-admin-binary ./bootstrap-admin
-```
-
-The command writes `.env` plus a `bitriver-live.service` unit into `--install-dir` so you can review them before copying to `/etc/systemd/system`. The launchd and Windows installers emit `plist` and PowerShell templates alongside the env file using the same defaults. When you provide `--bootstrap-admin-email`, the installer also prints the `/admin` sign-in URL and records the bootstrap credentials in `--install-dir/.env`, so you can recover them later with:
-
-```bash
-bitriver-live env admin --env-file /opt/bitriver-live/.env
-# Source checkout equivalent:
-go run ./cmd/bitriver env admin --env-file /opt/bitriver-live/.env
-```
-
-Add `--show-password` only when you intentionally need to reveal the env-backed seed password. If you rotate the password later in `/admin`, the `.env` value becomes a historical bootstrap credential rather than the current live one.
-
-### Option B: Legacy Bash helper
-
-[`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh) remains available for automation that depends on the original Bash workflow. Run it from the release root when you need the historical behaviour; new deployments should prefer the CLI installers above.
-
-The script builds the API binary, writes `$INSTALL_DIR/.env`, copies TLS certificate/key pairs into `$INSTALL_DIR/certs`, configures optional viewer/API domains plus rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (Postgres), database DSNs, session-store driver settings, TLS paths, and Redis credentials are present before starting traffic.
-
-Viewer self-registration is disabled by default in the generated configuration so that only administrators can create accounts. Re-enable open signups later with `--allow-self-signup` or by setting `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in the environment file.
-
-When the listen address resolves to a privileged port (<1024) the installer injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"` so manual restarts keep the binding. Operators fronting the service with Nginx, Caddy, or another reverse proxy should set `--addr :8080` (or a similar high port) and forward 80/443 from the proxy to avoid capabilities altogether.
-
-Provide `--bootstrap-admin-email` (optionally pairing it with `--bootstrap-admin-password`) to seed the first control-center account automatically. When you skip the password flag the installer now generates a strong random secret, records it in `$INSTALL_DIR/.env`, and prints it exactly once so you can capture it before leaving the terminal. The installer also prints the `/admin` sign-in URL and the recovery hint for `bitriver-live env admin --env-file "$INSTALL_DIR/.env"` so operators can revisit the bootstrap summary later without hunting through logs or shell scrollback. The installer runs the `bootstrap-admin` helper after copying the binaries so the Postgres database already contains an administrator when systemd starts the service. When the viewer proxy is enabled, the public root lands in the viewer flow and administrators should sign in at `/admin`. Rotate the password from the control center after your first login, and remember that the env-backed bootstrap password becomes a historical seed value once rotated there.
-
-Environment variable equivalents:
-
-* `INSTALL_DIR`, `DATA_DIR`, `SERVICE_USER`
-* `BITRIVER_LIVE_ADDR`, `BITRIVER_LIVE_MODE`
-* `BITRIVER_LIVE_TLS_CERT`, `BITRIVER_LIVE_TLS_KEY`
-* `BITRIVER_LIVE_RATE_GLOBAL_RPS`, `BITRIVER_LIVE_RATE_LOGIN_LIMIT`, `BITRIVER_LIVE_RATE_LOGIN_WINDOW`
-* `BITRIVER_LIVE_RATE_REDIS_ADDR`, `BITRIVER_LIVE_RATE_REDIS_PASSWORD`
-* `BITRIVER_LIVE_ENABLE_LOGS`, `BITRIVER_LIVE_LOG_DIR`
-* `BITRIVER_LIVE_HOSTNAME_HINT`
-* `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
-* `BITRIVER_LIVE_POSTGRES_DSN`
-* `BITRIVER_LIVE_SESSION_STORE`, `BITRIVER_LIVE_SESSION_POSTGRES_DSN` (defaults to Postgres and reuses `BITRIVER_LIVE_POSTGRES_DSN` when left unset)
-* `NEXT_PUBLIC_VIEWER_URL`, `NEXT_PUBLIC_API_BASE_URL`, `BITRIVER_VIEWER_ORIGIN`
-
-### Option B: Manual install
-
-If you prefer hand-crafted units, follow the manual process below. The release archive now exposes the API binary as `bitriver-live`, so you can install it directly without renaming.
-
-1. Install the API binary from the release archive.
-
-```bash
-cd /opt/bitriver-live
-install -d -m 755 bin
-install -m 755 bitriver-live bin/bitriver-live
-```
-
-2. Install a dedicated system user and directories for configuration and data.
-
-```bash
-sudo useradd --system --home /var/lib/bitriver-live --shell /usr/sbin/nologin bitriver
-sudo mkdir -p /etc/bitriver-live /var/lib/bitriver-live
-sudo chown -R bitriver:bitriver /var/lib/bitriver-live
-```
-
-3. Create `/etc/bitriver-live/bitriver-live.env` with secrets and connection details. Store passwords, tokens, and API keys in a secrets manager (Vault, SOPS, AWS SSM). Distribute them at boot time via encrypted disks or templating tools (e.g., `ansible-vault`, `systemd-creds`).
-
-```
-BITRIVER_LIVE_ADDR=:8080
-BITRIVER_LIVE_MODE=production
-BITRIVER_LIVE_TLS_CERT=/etc/letsencrypt/live/stream.example.com/fullchain.pem
-BITRIVER_LIVE_TLS_KEY=/etc/letsencrypt/live/stream.example.com/privkey.pem
-BITRIVER_LIVE_STORAGE_DRIVER=postgres
-BITRIVER_LIVE_POSTGRES_DSN=postgres://stream_user:super-strong-password@localhost:5432/bitriver?sslmode=require
-BITRIVER_LIVE_RATE_REDIS_ADDR=127.0.0.1:6379
-BITRIVER_LIVE_RATE_REDIS_PASSWORD=changeme
-BITRIVER_LIVE_SESSION_STORE=postgres
-# Uncomment to allow new viewers to register their own accounts once you are ready to accept signups.
-# BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true
-# Optional: override if you want a dedicated session database.
-# BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://stream_user:super-strong-password@localhost:5432/bitriver_sessions?sslmode=require
-BITRIVER_SRS_TOKEN=REPLACE_ME
-BITRIVER_OME_USERNAME=REPLACE_ME
-BITRIVER_OME_PASSWORD=REPLACE_ME
-BITRIVER_OME_API_TOKEN=REPLACE_ME
-# Optional: override OME API AccessToken used by health probes; defaults to BITRIVER_OME_API_TOKEN when empty.
-BITRIVER_OME_ACCESS_TOKEN=
-
-BITRIVER_TRANSCODER_TOKEN=REPLACE_ME
-BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://cdn.example.com/hls
-BITRIVER_TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public
-```
-
-4. Install the systemd unit from `deploy/systemd/bitriver-live.service` or author a minimal unit:
-
-```ini
-[Unit]
-Description=BitRiver Live API
-After=network-online.target postgresql.service redis-server.service
-
-[Service]
-User=bitriver
-Group=bitriver
-EnvironmentFile=/etc/bitriver-live/bitriver-live.env
-ExecStart=/opt/bitriver-live/bin/bitriver-live
-Restart=on-failure
-RestartSec=5s
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-```
-
-5. Reload systemd and start the service.
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now bitriver-live.service
-sudo systemctl status bitriver-live.service
-```
-
-## 7. Deploy the viewer
-
-The GitHub Release for each BitRiver Live tag publishes a production-ready viewer bundle (`bitriver-viewer-<tag>.tar.gz`) and a container image (`ghcr.io/bitriver-live/bitriver-viewer:<tag>`). Use one of the options below so the API and viewer stay on the same version. Only clone the repository and build `web/viewer` from source when you intentionally need to test local changes.
-
-### Option A: Run the standalone bundle (recommended)
-
-1. Download the viewer archive that matches the API version and extract it alongside the API release:
-
-   ```bash
-   # Replace v1.2.3 with the release you are deploying
-   export BITRIVER_LIVE_VERSION="v1.2.3"
-   curl -LO "https://github.com/BitRiver-Live/BitRiver-Live/releases/download/${BITRIVER_LIVE_VERSION}/bitriver-viewer-${BITRIVER_LIVE_VERSION}.tar.gz"
-
-   sudo mkdir -p /opt/bitriver-viewer
-   sudo tar -xzvf "bitriver-viewer-${BITRIVER_LIVE_VERSION}.tar.gz" -C /opt/bitriver-viewer --strip-components=1
-   rm "bitriver-viewer-${BITRIVER_LIVE_VERSION}.tar.gz"
-   ```
-
-   The archive expands into `/opt/bitriver-viewer` with `.next/standalone/`, `.next/static/`, and `public/` directories that mirror the output of `npm run build`.
-
-2. Create `/opt/bitriver-viewer/.env` with runtime settings for the standalone server. At minimum provide the API origin and listening address:
-
-   ```bash
-   sudo tee /opt/bitriver-viewer/.env >/dev/null <<'EOF'
-NEXT_PUBLIC_API_BASE_URL=https://stream.example.com
-NEXT_VIEWER_BASE_PATH=/viewer
-PORT=3000
-HOSTNAME=0.0.0.0
-EOF
-   ```
-
-3. Start the bundled server with Node.js 24 LTS (or wrap it in systemd as documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md)):
-
-   ```bash
-   cd /opt/bitriver-viewer
-   node .next/standalone/server.js
-   ```
-
-   The `standalone` output includes all production dependencies so no additional `npm install` step is required. Reverse proxies such as Nginx or Caddy can front the process; make sure `BITRIVER_VIEWER_ORIGIN` in the API `.env` points at the viewer URL.
-
-For more deployment patterns—including systemd units and CDN hosting—see [`docs/viewer-deployment.md`](viewer-deployment.md).
-
-### Option B: Deploy the container image
-
-If you prefer containers, run the published image for the same release tag. Mount the environment file so configuration stays consistent with the standalone deployment:
-
-```bash
-docker run -d --name bitriver-viewer \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  --env-file /opt/bitriver-viewer/.env \
-  ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_LIVE_VERSION}
-```
-
-When fronting the viewer with Nginx or another proxy, route `/viewer` requests to the container (or standalone server) and terminate TLS upstream.
-
-> **Building from source?** Clone the repository and follow [`web/viewer/README.md`](../web/viewer/README.md) only when you intentionally want to modify the Next.js app or test development builds. Production installations should stay on the tagged release assets above.
-
-## 8. Post-install checks
-
-1. Validate services are running.
-
-```bash
-systemctl --failed
-sudo systemctl status bitriver-live.service bitriver-viewer.service srs.service srs-controller.service ome.service bitriver-transcoder.service
-```
-
-2. Confirm database connectivity and migrations.
-
-```bash
-psql "postgres://stream_user:super-strong-password@localhost:5432/bitriver?sslmode=require" \
-  --command "SELECT NOW(), current_user;"
-```
-
-3. Check Redis health.
-
-```bash
-redis-cli -a 'changeme' info server | head
-```
-
-4. Hit the API and health endpoints.
-
-```bash
-curl -k https://stream.example.com/healthz
-curl -k https://stream.example.com/api/channels
-```
-
-5. Inspect logs for ingest services.
-
-```bash
-journalctl -u srs.service -u srs-controller.service -u ome.service -u bitriver-transcoder.service --since "-5 minutes"
-```
-
-6. Ensure TLS certificates renew automatically (`certbot renew --dry-run`) and firewall rules persist across reboots (`sudo ufw status`). Rotate secrets periodically and audit access logs.
-
-With these steps complete the BitRiver Live stack should be ready to accept creators, ingest live streams via SRS, transcode them through the FFmpeg controller, and serve viewers via the Next.js frontend.
+The purge deletes `/etc/bitriver-live` and `/var/lib/bitriver-live`. Verify backups first.

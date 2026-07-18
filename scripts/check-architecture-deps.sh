@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-MODULE_PATH="$(GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go list -m -f '{{.Path}}')"
+# Dependency direction is source-only evidence. Disable VCS stamping so `go
+# list` never launches a potentially unbounded `git status` on mounted trees.
+go_flags="${GOFLAGS:+$GOFLAGS }-buildvcs=false"
+go_list=(env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOFLAGS="$go_flags" go list)
+
+MODULE_PATH="$("${go_list[@]}" -m -f '{{.Path}}')"
 
 map_layer() {
   local rel_path="$1"
@@ -165,7 +170,7 @@ while IFS='|' read -r pkg imports; do
       violations+=("$pkg -> $imp (layer violation: $from_layer must not import $to_layer)")
     fi
   done
-done < <(GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}|{{join .Imports ","}}{{end}}' ./cmd/... ./internal/... ./scripts/... ./web)
+done < <("${go_list[@]}" -deps -f '{{if not .Standard}}{{.ImportPath}}|{{join .Imports ","}}{{end}}' ./cmd/... ./internal/... ./scripts/... ./web)
 
 if ((${#violations[@]} > 0)); then
   {

@@ -37,6 +37,8 @@ func buildValidProductionEnv(t *testing.T) map[string]string {
 		"BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST":    "@sha256:3333333333333333333333333333333333333333333333333333333333333333",
 		"BITRIVER_TRANSCODER_IMAGE_TAG":           "1.0.0",
 		"BITRIVER_TRANSCODER_IMAGE_DIGEST":        "@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+		"BITRIVER_OME_CONFIG_IMAGE_TAG":           "1.0.0",
+		"BITRIVER_OME_CONFIG_IMAGE_DIGEST":        "@sha256:5555555555555555555555555555555555555555555555555555555555555555",
 		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
 		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
@@ -82,6 +84,35 @@ func TestVersionOutputIncludesVersionLabel(t *testing.T) {
 	}
 	if !strings.Contains(output, "Date:") {
 		t.Fatalf("expected output to contain Date:, got %q", output)
+	}
+}
+
+func TestRepoRootHonorsInstalledAssetRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "release path with spaces")
+	for _, relative := range []string{
+		filepath.Join("deploy", "docker-compose.yml"),
+		filepath.Join("deploy", ".env.example"),
+		filepath.Join("deploy", "ome", "Server.xml"),
+	} {
+		path := filepath.Join(root, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create installed asset dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("test\n"), 0o644); err != nil {
+			t.Fatalf("write installed asset: %v", err)
+		}
+	}
+
+	previousRoot := cachedRepoRoot
+	cachedRepoRoot = ""
+	t.Setenv("BITRIVER_ROOT", root)
+	t.Cleanup(func() { cachedRepoRoot = previousRoot })
+
+	if got := repoRoot(); got != root {
+		t.Fatalf("repoRoot() = %q, want installed root %q", got, root)
+	}
+	if got := defaultComposeFile(); got != filepath.Join(root, "deploy", "docker-compose.yml") {
+		t.Fatalf("defaultComposeFile() = %q", got)
 	}
 }
 func TestEnvInitWritesGeneratedValues(t *testing.T) {

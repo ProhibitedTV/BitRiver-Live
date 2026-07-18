@@ -190,8 +190,15 @@ Keep this evidence attached to the release ticket/change request before maintena
    ```
 3. The push triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml),
    which rebuilds the Go binaries for every platform, packages the viewer
-   bundle, and publishes the artefacts to the GitHub Release. Monitor the
+   bundle, publishes version-matched first-party container images (including
+   the OME config helper), builds amd64/arm64 launcher archives plus `.deb`/`.rpm`
+   packages, and publishes the artefacts to the GitHub Release. Monitor the
    workflow until every job completes successfully.
+
+The release job is blocked on package acceptance that installs and removes the
+amd64 package in Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers. This is
+package-structure evidence, not a substitute for the clean Ubuntu VM and reboot
+rehearsal described below.
 
 The release workflow's `Build binaries` step must compile Postgres-aware
 targets with `-tags postgres` (`cmd/server`,
@@ -243,6 +250,7 @@ digest enforcement always runs under production conditions for release tags.
 - `BITRIVER_VIEWER_IMAGE_TAG`
 - `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`
 - `BITRIVER_TRANSCODER_IMAGE_TAG`
+- `BITRIVER_OME_CONFIG_IMAGE_TAG` is set automatically to the release tag by the workflow; do not create a separate secret for it.
 - `BITRIVER_SRS_IMAGE_TAG`
 - `BITRIVER_OME_IMAGE_TAG`
 - `BITRIVER_REDIS_IMAGE_DIGEST`
@@ -273,6 +281,7 @@ docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:vX.Y.Z --fo
 docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-viewer:vX.Y.Z --format '{{.Manifest.Digest}}'
 docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z --format '{{.Manifest.Digest}}'
 docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-ome-config:vX.Y.Z --format '{{.Manifest.Digest}}'
 ```
 
 Capture any third-party image digests (`redis`, `postgres`, `ossrs/srs`,
@@ -284,6 +293,33 @@ For production Compose rollouts, keep `BITRIVER_DEPLOY_IMAGE_SOURCE=pull` and
 preconfigure GHCR credentials (`docker login ghcr.io`) on every host before the
 maintenance window. This keeps deploys pull-only, enables preflight manifest
 checks, and avoids accidental source builds on production nodes.
+
+### Clean-host artifact gate (required before announcing the release)
+
+Use a newly provisioned Ubuntu Server 24.04 amd64 VM with no source checkout.
+Download the `.deb` or Linux launcher archive and `CHECKSUMS.txt` from the
+published tag, then follow [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md).
+Record all of the following against the exact release tag and checksums:
+
+1. Artifact-only install from a path containing spaces and a non-root Docker
+   operator using explicit `sudo` lifecycle commands.
+2. Configuration/doctor/activation success with the systemd unit enabled.
+3. OME config render and token consistency, healthy OME/config helper services,
+   and an authenticated manager/control request. The unauthenticated root
+   health probe is not sufficient evidence by itself.
+4. Real RTMP ingest, public manifest/segment retrieval, and playback from a
+   separate viewer through the intended Nginx Proxy Manager/NAT topology.
+5. VM reboot followed by systemd, critical-service, authenticated OME, ingest,
+   and playback recovery checks.
+6. Same-tag rerun and upgrade staging preserve `/etc/bitriver-live` and
+   `/var/lib/bitriver-live`; ordinary uninstall preserves them and explicit
+   purge deletes only the documented paths.
+
+Attach the OS/architecture, XOA VM shape, Docker and Compose versions, public
+topology, timestamps, and redacted command results. Do not retain `.env`, OME
+tokens, generated `Server.generated.xml`, private keys, or raw secret-bearing
+logs. Ubuntu 24.04 amd64 is the only production installation claim until an
+equivalent tagged-host evidence set passes for another platform.
 
 ## 3. Rotate credentials and validate environment files
 
@@ -325,10 +361,11 @@ build out:
    The guard fails when `deploy/ome/Server.generated.xml` was rendered for a
    different `BITRIVER_OME_IMAGE_TAG`, ensuring the preflight stays in sync
    with the tag baked into the container image.
-3. For systemd-based installs, refresh the `.env` files under `/opt/bitriver-*`
-   and restart the services only after the script reports success. Ensure any
-   container image tags (`BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`,
-   etc.) match the newly published release.
+4. For Ubuntu artifact installs, use `/etc/bitriver-live/bitriver.env` as the
+   configuration source and run `sudo bitriver-host upgrade` from the new
+   archive/package only after backup and validation. The generated OME and SRS
+   files remain under `/etc/bitriver-live`; do not replace them with files from
+   a source checkout.
 
 ### Helm-based releases
 

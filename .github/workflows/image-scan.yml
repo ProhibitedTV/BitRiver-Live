@@ -64,7 +64,7 @@ jobs:
 
       - name: Verify ome-config has no OS-package CVEs
         run: |
-          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress bitriver-live/ome-config:local
+          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress ghcr.io/bitriver-live/bitriver-ome-config:ci
 
       - name: Scan first-party images for critical vulnerabilities (blocking)
         run: |

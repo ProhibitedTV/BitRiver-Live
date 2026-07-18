@@ -1,0 +1,25 @@
+[Unit]
+Description=BitRiver Live canonical Docker Compose stack
+Documentation=https://github.com/ProhibitedTV/BitRiver-Live
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=@BITRIVER_OPERATOR_USER@
+Group=@BITRIVER_OPERATOR_GROUP@
+WorkingDirectory="@BITRIVER_INSTALL_DIR@"
+Environment="BITRIVER_ROOT=@BITRIVER_INSTALL_DIR@"
+Environment="BITRIVER_LAUNCHER_ROOT=@BITRIVER_INSTALL_DIR@"
+Environment="BITRIVER_ENV_FILE=@BITRIVER_ENV_FILE@"
+Environment="BITRIVER_BINARY=@BITRIVER_INSTALL_DIR@/bin/bitriver"
+ExecStart="@BITRIVER_INSTALL_DIR@/bin/bitriver-live" start
+ExecReload="@BITRIVER_INSTALL_DIR@/bin/bitriver-live" restart
+ExecStop="@BITRIVER_INSTALL_DIR@/bin/bitriver-live" stop
+TimeoutStartSec=15min
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=multi-user.target

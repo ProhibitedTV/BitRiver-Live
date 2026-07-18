@@ -17,10 +17,24 @@ If you are evaluating the project, start here. If you are preparing a production
 | --- | --- | --- |
 | Source checkout (recommended for evaluation and contribution) | You want the quickest path from a clone to a working local stack, or you expect to inspect/change code. | `go run ./cmd/bitriver quickstart` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart"`) |
 | macOS release launcher | You want to validate the packaged launcher experience from a tagged release. | `brew install --formula https://github.com/ProhibitedTV/BitRiver-Live/releases/latest/download/bitriver-live.rb && bitriver-live` |
-| Linux release package | You want the packaged CLI/launcher on a Linux host. | Install the `.deb` or `.rpm` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then run `bitriver-live`. |
+| Ubuntu 24.04 amd64 release install | You want a boot-managed production Compose host without a source checkout. | Install the `.deb` or extract the launcher archive, then follow [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md) to run `bitriver-host install`, configure, and activate. |
+| Other Linux release package | You want to evaluate the packaged CLI/launcher. Debian 12, Rocky Linux, and arm64 remain provisional until tagged clean-host evidence is recorded. | Install the matching `.deb`/`.rpm` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then run `bitriver-live`. |
 | Windows release installer | You want the packaged Windows entry point. | Install `bitriver-live-<version>.msi` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then launch **Start BitRiver Live** or run `bitriver-live.ps1`. |
 
 The control centre's browser-based Home Server Installer now mirrors the Ubuntu helper with a seven-step flow: Welcome, System Check, Install Mode, Core Settings, Review, Installing, and Success. Quick Install is the default path, while Advanced Install opens the lower-level storage, network, and service controls only when you explicitly ask for them.
+
+### Ubuntu archive/package flow
+
+The Ubuntu host installer stages one source-free release bundle under `/opt/bitriver-live`, stores secrets/configuration under `/etc/bitriver-live`, and keeps durable state under `/var/lib/bitriver-live`. Installation does not enable the service until the guided production configuration and validation pass:
+
+```bash
+# From an extracted bitriver-launcher-linux-amd64 archive:
+sudo ./install.sh install --operator-user "$USER"
+sudo bitriver-host configure
+sudo bitriver-host activate
+```
+
+The equivalent `.deb` flow is `sudo apt install ./bitriver-live_<tag>_amd64.deb` followed by `sudo bitriver-host install --operator-user "$USER"`. See the [Ubuntu/XOA guide](installing-on-ubuntu.md) before opening firewall ports or placing the VM behind Nginx Proxy Manager.
 
 ## Shared backend pipeline (all launchers)
 
@@ -114,9 +128,9 @@ Result levels:
 - `FAIL`: blocking issue; command exits non-zero and startup wrappers should stop
   until you fix the listed item.
 
-### Tier 1 coverage
+### Platform coverage
 
-The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms: Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. For the supported operator baseline, see [`docs/production-status.md`](production-status.md) and [`docs/production-single-host.md`](production-single-host.md).
+The Go-based quickstart defines the canonical deployment contract across Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Linux with Docker Engine plus the Compose plugin. Launcher wrappers and installers forward into the same Compose + `.env` pipeline. Ubuntu Server 24.04 LTS on amd64 is the production installation target; Debian, RPM distributions, and Linux arm64 remain provisional until their tagged clean-host and reboot evidence is recorded. For the supported operator baseline, see [`docs/production-status.md`](production-status.md) and [`docs/production-single-host.md`](production-single-host.md).
 
 ## First step: run environment preflight
 
@@ -146,7 +160,7 @@ Installer path (recommended for operators):
 bitriver-live
 ```
 
-The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows), stores runtime settings in `<launcher-root>/.env`, and bootstraps that file from `deploy/.env.example` on first run. On first run, the Windows launcher fills in `BITRIVER_REDIS_PASSWORD` (and keeps `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` in sync) if the file still uses the sample placeholder so Docker Compose can interpolate the Redis credentials.
+Interactive launchers keep assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows) and bootstrap runtime settings from `deploy/.env.example`. The Ubuntu boot-managed installer instead uses `/opt/bitriver-live`, `/etc/bitriver-live/bitriver.env`, and `/var/lib/bitriver-live`; use `bitriver-host` for that lifecycle. On first run, the Windows launcher fills in `BITRIVER_REDIS_PASSWORD` (and keeps `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` in sync) if the file still uses the sample placeholder so Docker Compose can interpolate the Redis credentials.
 
 ### Desktop/system-tray control panel
 

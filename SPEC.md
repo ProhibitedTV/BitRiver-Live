@@ -28,10 +28,11 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
-- PostgreSQL schema changes are recorded in a durable, queryable ledger with stable filenames, checksums, status, timestamps, and release provenance.
-- Startup applies only pending migrations and refuses edited history, failed migrations, or ambiguous interrupted state.
-- Operators can inspect a read-only migration plan/history and recover only through explicit checksum-confirmed commands and documented validation steps.
-- Docker Compose and Helm execute the same canonical migration bytes in the same deterministic order.
-- Fresh installs, upgrades from a representative previous schema, no-op reruns, drift refusal, and failure/interruption recovery have automated evidence.
-- Upgrade and rollback docs define the forward-only policy and require backups plus release notes for destructive or rollback-incompatible changes.
-- This work preserves the roadmap toward an Ubuntu 24.04 XOA VM installer behind Nginx Proxy Manager without claiming installer or OvenMediaEngine readiness is complete.
+- A source-free Ubuntu 24.04 LTS x86_64 host can install the canonical pull-only stack from a tagged launcher archive or Linux package.
+- Release bundles contain every Compose bind mount, migration, renderer/template, proxy asset, wrapper, service definition, and operator document required at runtime.
+- Program assets, configuration, and durable data have separate ownership/lifecycle boundaries; uninstall retains operator data unless an explicit destructive flag is supplied.
+- First activation performs actionable prerequisite/resource/port/DNS/permission checks, generates production secrets, validates the environment, applies migrations, and waits for bounded service health.
+- The OME renderer is a published multi-architecture release image; a clean host never depends on a locally built `ome-config:local` image or a Go/source checkout.
+- The stack is enabled for reboot recovery through systemd and exposes status, logs, upgrade, and safe removal commands.
+- XOA/XCP-ng and Nginx Proxy Manager documentation distinguishes HTTP(S)/WebSocket proxying from direct media/firewall ports and internal-only control services.
+- Automated evidence covers release-shaped paths containing spaces, rerunnable installation, package contents, safe uninstall, and failure diagnostics without overstating Debian, ARM64, reboot, or real playback evidence.

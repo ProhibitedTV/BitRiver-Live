@@ -91,6 +91,38 @@ func TestProductionBuildsUseCompleteUpstreamModuleGraph(t *testing.T) {
 	}
 }
 
+func TestArchitectureCheckDisablesVCSStamping(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	architectureCheck := readRepoFile(t, repoRoot, filepath.Join("scripts", "check-architecture-deps.sh"))
+	if !strings.Contains(architectureCheck, "-buildvcs=false") {
+		t.Fatal("architecture dependency check must disable VCS stamping for bounded mounted-workspace verification")
+	}
+}
+
+func TestModelsImportCheckStaysInsideFirstPartyGoRoots(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	modelsCheck := readRepoFile(t, repoRoot, filepath.Join("scripts", "check-no-models-imports.sh"))
+	if !strings.Contains(modelsCheck, "GO_ROOTS=(cmd internal scripts web)") {
+		t.Fatal("models import check must scope recursive traversal to first-party Go roots")
+	}
+	if strings.Contains(modelsCheck, "find . -type f") {
+		t.Fatal("models import check must not recursively traverse the entire workspace")
+	}
+}
+
+func TestVerifyUsesBoundedFirstPartyGoRoots(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	verifyScript := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
+	for _, required := range []string{"./cmd/...", "./internal/...", "./scripts/...", "./web", "-buildvcs=false"} {
+		if !strings.Contains(verifyScript, required) {
+			t.Fatalf("verify script missing bounded Go test invariant %q", required)
+		}
+	}
+	if strings.Contains(verifyScript, `go_test_packages="./..."`) {
+		t.Fatal("verify script must not recursively discover packages across non-Go workspace trees")
+	}
+}
+
 func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	viewerRoot := filepath.Join(repoRoot, "web", "viewer")
