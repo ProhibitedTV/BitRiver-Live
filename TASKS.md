@@ -62,7 +62,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Fixed the production OME listener validator discovered during documentation: `BITRIVER_OME_BIND`/`BITRIVER_OME_IP` may remain wildcard inside Docker, while public LL-HLS, RTMP, transcoder, and viewer URLs remain strict. Focused `cmd/bitriver` and `internal/ingest` tests passed.
     - Generated contract index, installer-language guard, README image existence checks, and `git diff --check` passed.
 
-- [x] Task 6 - Run release-quality validation and publish separately
+- [-] Task 6 - Run release-quality validation and publish separately
   - Acceptance criteria:
     - Focused Windows/runtime/viewer/docs checks and `./scripts/verify.sh --viewer` pass or exact blockers are recorded.
     - Diff and staged-file review exclude `.env`, credentials, runtime output, and unrelated untracked helpers.
@@ -72,4 +72,5 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Final `./scripts/verify.sh --viewer` passed all Go packages, architecture/dependency/contract checks, the Postgres migration lifecycle, Compose rendering, clean quickstart smoke, viewer lint, and 25 Jest suites / 215 tests / 4 snapshots.
     - Final `.\scripts\verify-windows-docker.ps1 -Start` passed on Docker Desktop 4.82.0 with Linux/amd64 engine 29.6.1 and Compose 5.3.0; migrations, critical service health, admin bootstrap, and `200` responses from `/healthz`, `/readyz`, `/viewer`, and `/admin` all passed. Its printed cleanup command was executed successfully.
     - The staged audit included 64 intended files with no root `.env`, runtime data, unrelated deployment helpers, or detected secret patterns; `git diff --cached --check` passed and the generated OME config retained its placeholder token.
-    - Committed and pushed on `feat/windows-docker-readme`; opened draft PR [#1326](https://github.com/ProhibitedTV/BitRiver-Live/pull/1326) against `main`, separate from Ubuntu installer PR #1325. Remote CI is reported from the final pushed head rather than assumed from local proof.
+    - Committed and pushed on `feat/windows-docker-readme`; opened draft PR [#1326](https://github.com/ProhibitedTV/BitRiver-Live/pull/1326) against `main`, separate from Ubuntu installer PR #1325.
+    - Remote CI exposed a missing-fixture failure before the vulnerability scan ran: the inline `.ci.env` did not include the two new required public media URLs, so the dependent Ubuntu gate failed and its remaining jobs skipped. Workflow-fixture repair and final remote revalidation are in progress.

@@ -322,6 +322,47 @@ func TestWindowsDockerDesktopProofUsesCanonicalQuickstart(t *testing.T) {
 	}
 }
 
+func TestWorkflowComposeFixturesIncludePublicMediaURLs(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+	assignments := []string{
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://example.com/live",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://example.com/live",
+	}
+	for _, relativePath := range []string{
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".github", "workflows", "image-scan.yml"),
+	} {
+		contents, readErr := os.ReadFile(filepath.Join(repoRoot, relativePath))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", relativePath, readErr)
+		}
+		workflow := string(contents)
+		for _, assignment := range assignments {
+			if !strings.Contains(workflow, assignment) {
+				t.Fatalf("%s must include %q in its Compose fixture", relativePath, assignment)
+			}
+		}
+	}
+
+	releasePath := filepath.Join(repoRoot, ".github", "workflows", "release.yml")
+	releaseContents, err := os.ReadFile(releasePath)
+	if err != nil {
+		t.Fatalf("read release workflow: %v", err)
+	}
+	for _, variable := range []string{
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL: ${{ secrets.BITRIVER_SRS_PUBLIC_RTMP_BASE_URL }}",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL: ${{ secrets.BITRIVER_OME_PUBLIC_LLHLS_BASE_URL }}",
+	} {
+		if !strings.Contains(string(releaseContents), variable) {
+			t.Fatalf("release workflow must forward %q", variable)
+		}
+	}
+}
+
 func TestTranscoderPublicNginxMapsDocumentedHLSPrefix(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
