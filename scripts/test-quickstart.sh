@@ -352,8 +352,21 @@ PY
 echo "Building local docker compose images..."
 docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
 
-echo "Pulling missing third-party runtime images..."
-docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore-buildable --policy missing
+echo "Pulling missing runtime images..."
+mapfile -t runtime_images < <(
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" config --images | sort -u
+)
+for image in "${runtime_images[@]}"; do
+  if [[ -z "$image" ]]; then
+    continue
+  fi
+  if docker image inspect "$image" >/dev/null 2>&1; then
+    echo "Using local runtime image: $image"
+    continue
+  fi
+  echo "Pulling missing runtime image: $image"
+  docker pull "$image"
+done
 
 dump_compose_diagnostics() {
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true

@@ -79,6 +79,24 @@ func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
 	}
 }
 
+func TestQuickstartPullsOnlyMissingRenderedImages(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	quickstart := readRepoFile(t, repoRoot, filepath.Join("scripts", "test-quickstart.sh"))
+	if strings.Contains(quickstart, "pull --ignore-buildable --policy missing") {
+		t.Fatal("quickstart must not pull the non-buildable OME health sibling after building its shared helper image")
+	}
+	for _, required := range []string{
+		"mapfile -t runtime_images",
+		"config --images | sort -u",
+		`docker image inspect "$image"`,
+		`docker pull "$image"`,
+	} {
+		if !strings.Contains(quickstart, required) {
+			t.Errorf("quickstart missing local-first runtime image invariant %q", required)
+		}
+	}
+}
+
 func TestProductionBuildsUseCompleteUpstreamModuleGraph(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	releaseWorkflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "release.yml"))
