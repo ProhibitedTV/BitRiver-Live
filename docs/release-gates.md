@@ -11,7 +11,7 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Blocking | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, `Go unit tests`, viewer jobs when paths match | Test logs, verifier phase output, viewer lint/test output |
 | 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
-| 4. Production media and workflow acceptance | Healthy containers hide broken RTMP mapping, OME/transcoder output, chat/moderation, VOD processing, or aggregate status | Runtime/media changes; every release candidate; repeated after installing tagged artifacts | Blocking | `./scripts/test-production-golden-path.sh --stack quickstart --client docker`; `.github/workflows/ingest-e2e.yml`; `--stack running` on a prepared candidate host | Scanner-approved `production-golden-path.json` with stage timing, advancing playlist evidence, 1080p probes, workflow results, and final status |
+| 4. Production media and workflow acceptance | Healthy containers hide broken RTMP mapping, OME/transcoder output, chat/moderation, VOD processing, or aggregate status | Runtime/media changes; every release candidate; repeated after installing tagged artifacts | Blocking | `./scripts/test-production-golden-path.sh --stack quickstart --client docker`; `.github/workflows/ingest-e2e.yml`; release workflow `pull-only-product-gate`; `--stack running` on a prepared candidate host | Scanner-approved `production-golden-path.json` with stage timing, advancing playlist evidence, 1080p probes, workflow results, image-manifest evidence, and final status |
 | 5. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
 | 6. Release readiness | Tags published with stale changelog, missing release notes, unpinned or secret-bearing artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh`; `./scripts/scan-release-evidence.sh` | Redacted contract status, release artifact inventory and scan status, release notes, image digest status, pgx guard output |
 | 7. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; non-mutating command plus operator evidence | `./scripts/release-canary.sh`; `go run ./cmd/bitriver release canary`; `docs/operations.md`; `/readyz`, `/healthz`, `/api/status` | Canary report JSON, redacted health snapshots, log scan summary, version metadata, rollback readiness notes |
@@ -141,11 +141,17 @@ scanned against per-run account, password, token, and stream-key sentinels.
 Never attach raw media-service logs or generated configs merely because the
 JSON scan passed.
 
-Source-build success is not tagged-artifact proof. Before stable promotion,
-install immutable pull-only artifacts on the supported Ubuntu 24.04 amd64
-candidate and rerun the same assertions with `--stack running`. Reboot/recovery
-and browser player recovery/quality remain separate required evidence until
-their dedicated gates exist.
+Source-build success is not tagged-artifact proof. For a tag, the release
+workflow publishes five images to `ghcr.io/prohibitedtv`, logs out of GHCR,
+waits boundedly for every anonymous manifest, pins the actual first- and
+third-party digests, and reruns this same gate in production/pull mode. GitHub
+Release creation depends on that result.
+
+That hosted-runner proof is still not clean-host proof. Before stable
+promotion, install the immutable pull-only artifacts on the supported Ubuntu
+24.04 amd64 candidate and rerun the same assertions with `--stack running`.
+Authenticated OME control, Nginx Proxy Manager/browser playback, and VM
+reboot/recovery remain separate required evidence.
 
 ### 5. AI-authored PR risk scorecard
 
@@ -176,12 +182,19 @@ Before tagging, follow `docs/production-release.md`. A release candidate should 
 - release workflow artifacts are built from the intended tag
 - production credentials remain job-local and no populated environment or generated credential config is uploaded
 - `release-contract-evidence` reports successful environment and digest validation without values
+- every first-party manifest is anonymously readable under
+  `ghcr.io/prohibitedtv/<image>:<exact-tag>` before publication proceeds
+- `release-product-evidence` proves the pulled, digest-pinned image set passed
+  the production media/API golden path
 - `release-publication-evidence` inventories and passes scans for downloaded artifacts and the final publication payload
 - Postgres-aware binaries/images include the real pgx-backed implementation when required
-- production image digests and third-party digests are recorded or intentionally deferred
+- production image digests and third-party digests are recorded
 - tracked and packaged OME config matches the placeholder contract; deployment-time credential renders remain local to the deployment host
 
-Failures here usually mean the tag should wait. Fix the source, rerun the relevant gate, and only then publish or promote artifacts.
+Failures before tagging mean the tag should wait. A failed tag is immutable:
+fix the source, increment the RC number, and rerun rather than force-moving the
+existing tag. RC tags are prereleases and do not update `latest`; stable tags
+may update it only after all promotion evidence is accepted.
 
 ### 7. Canary, observability, and rollback
 

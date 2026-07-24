@@ -353,12 +353,19 @@ func TestWorkflowComposeFixturesIncludePublicMediaURLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read release workflow: %v", err)
 	}
-	for _, variable := range []string{
-		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL: ${{ secrets.BITRIVER_SRS_PUBLIC_RTMP_BASE_URL }}",
-		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL: ${{ secrets.BITRIVER_OME_PUBLIC_LLHLS_BASE_URL }}",
+	if !strings.Contains(string(releaseContents), "prepare_release_candidate.py env") {
+		t.Fatal("release workflow must prepare its job-local media URL contract")
+	}
+	candidateHelper, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "prepare_release_candidate.py"))
+	if err != nil {
+		t.Fatalf("read release candidate helper: %v", err)
+	}
+	for _, assignment := range []string{
+		`"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL": "rtmp://localhost:1935/live"`,
+		`"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL": "http://localhost:18080/live"`,
 	} {
-		if !strings.Contains(string(releaseContents), variable) {
-			t.Fatalf("release workflow must forward %q", variable)
+		if !strings.Contains(string(candidateHelper), assignment) {
+			t.Fatalf("release candidate helper must include %q", assignment)
 		}
 	}
 }
@@ -429,6 +436,9 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "BITRIVER_TRANSCODE_LADDER: ${BITRIVER_TRANSCODE_LADDER:-}") {
 		t.Fatalf("base compose file should pass the configured rendition ladder into the API container")
+	}
+	if !strings.Contains(string(content), "${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-live:") {
+		t.Fatalf("base compose file should use the owned, overridable official image namespace")
 	}
 }
 
@@ -583,6 +593,38 @@ func TestQuickstartSmokeSuppliesPublicMediaDefaultsForExistingEnv(t *testing.T) 
 		if !strings.Contains(script, required) {
 			t.Fatalf("quickstart smoke must supply missing public media value %q when reusing an existing env", required)
 		}
+	}
+}
+
+func TestQuickstartSmokeSupportsExplicitPullProductionMode(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "test-quickstart.sh"))
+	if err != nil {
+		t.Fatalf("read test-quickstart: %v", err)
+	}
+	script := string(content)
+	for _, required := range []string{
+		`ENV_FILE="${BITRIVER_SMOKE_ENV_FILE:-$REPO_ROOT/.env}"`,
+		`SMOKE_IMAGE_SOURCE="${BITRIVER_SMOKE_IMAGE_SOURCE:-build}"`,
+		`SMOKE_LIVE_MODE="${BITRIVER_SMOKE_LIVE_MODE:-development}"`,
+		`build|pull)`,
+		`pull-mode quickstart smoke requires BITRIVER_SMOKE_ENV_FILE`,
+		`"$SCRIPT_DIR/require-image-digests.sh" --env-file "$ENV_FILE"`,
+		`docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull ome-config`,
+		`Pull-only smoke selected; no Compose image builds are permitted.`,
+		`export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("pull-mode quickstart contract missing %q", required)
+		}
+	}
+	if strings.Contains(script, "SMOKE_IMAGE_SOURCE=pull") || strings.Contains(script, "SMOKE_LIVE_MODE=production") {
+		t.Fatal("source quickstart must retain build/development defaults unless release validation opts into pull/production")
 	}
 }
 

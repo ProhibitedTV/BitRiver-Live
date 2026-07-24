@@ -28,6 +28,15 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
+- A valid `vMAJOR.MINOR.PATCH[-PRERELEASE]` tag can run the release workflow without repository deployment secrets; all validation credentials are generated and destroyed inside one job.
+- Official first-party images publish to an owned, publicly consumable GHCR namespace while forks/mirrors can override the image namespace through the deployment contract.
+- Prerelease tags create GitHub prereleases and never update `latest`; stable tags retain the normal release/latest behavior.
+- The release workflow blocks GitHub Release creation until tagged, pull-only images boot the canonical production Compose stack and pass the scanner-approved full-stack golden path.
+- Linux package and Windows MSI versions are derived correctly from the tag, and every installer uses the canonical release asset manifest.
+- Published checksums/assets and anonymous GHCR manifests are verified after the candidate workflow succeeds.
+- A release candidate is not described as stable or clean-host approved until Ubuntu/XOA install, Nginx Proxy Manager/browser playback, and reboot/recovery evidence pass.
+
+## Previous Change Success Criteria - production golden path
 - One release-blocking harness exercises the real canonical Compose services rather than mocked adapters or only the storage package.
 - The harness creates real accounts and a creator channel, publishes deterministic 1080p RTMP with audio, observes the live/offline lifecycle, and proves OME plus transcoder playback is decodable and advancing.
 - Authenticated chat send/history and an owner moderation action pass through the real API and Redis-backed chat path.

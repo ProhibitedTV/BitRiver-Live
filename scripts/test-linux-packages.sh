@@ -35,13 +35,28 @@ for arch in amd64 arm64; do
     (
       cd "$launcher_root"
       NFPM_ARCH="$arch" \
-      NFPM_VERSION=v1.2.3 \
+      NFPM_VERSION=1.2.3 \
+      NFPM_PRERELEASE= \
       LAUNCHER_ROOT="$launcher_root" \
       GOMAXPROCS=2 \
         nfpm pkg --packager "$format" --config "$repo_root/deploy/installers/nfpm.yaml" --target "$target"
     )
     [[ -s $target ]] || { echo "package was not created: $target" >&2; exit 1; }
   done
+done
+
+for format in deb rpm; do
+  target="$tmp_root/packages/bitriver-live_v1.2.3-rc.1_amd64.${format}"
+  (
+    cd "$launcher_root"
+    NFPM_ARCH=amd64 \
+    NFPM_VERSION=1.2.3 \
+    NFPM_PRERELEASE=rc.1 \
+    LAUNCHER_ROOT="$launcher_root" \
+    GOMAXPROCS=2 \
+      nfpm pkg --packager "$format" --config "$repo_root/deploy/installers/nfpm.yaml" --target "$target"
+  )
+  [[ -s $target ]] || { echo "prerelease package was not created: $target" >&2; exit 1; }
 done
 
 if command -v dpkg-deb >/dev/null 2>&1; then
@@ -56,6 +71,11 @@ if command -v dpkg-deb >/dev/null 2>&1; then
       exit 1
     fi
   done
+  prerelease_version=$(dpkg-deb --field "$tmp_root/packages/bitriver-live_v1.2.3-rc.1_amd64.deb" Version)
+  [[ $prerelease_version == *rc.1* ]] || {
+    echo "Debian prerelease metadata lost rc.1: $prerelease_version" >&2
+    exit 1
+  }
 fi
 
-echo "PASS: nfpm built amd64/arm64 deb/rpm packages from the canonical release bundle"
+echo "PASS: nfpm built stable and prerelease amd64/arm64 deb/rpm packages from the canonical release bundle"

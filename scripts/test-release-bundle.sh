@@ -57,7 +57,7 @@ done
 grep -Fq "scripts/stage-release-assets.sh --output \"\$out_dir\"" "$repo_root/.github/workflows/release.yml"
 grep -Fq "scripts/stage-release-assets.sh --output \"\$launcher_root/share/bitriver-live\"" "$repo_root/.github/workflows/release.yml"
 grep -q 'image_name: bitriver-ome-config' "$repo_root/.github/workflows/release.yml"
-grep -q 'ghcr.io/bitriver-live/bitriver-ome-config' "$repo_root/deploy/docker-compose.yml"
+grep -q 'BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config' "$repo_root/deploy/docker-compose.yml"
 grep -q 'dst: /usr/local/sbin/bitriver-host' "$repo_root/deploy/installers/nfpm.yaml"
 
 echo "PASS: release bundle is complete, source-free, and excludes generated credentials"

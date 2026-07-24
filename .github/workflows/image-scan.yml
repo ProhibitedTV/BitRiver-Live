@@ -83,7 +83,7 @@ jobs:
             fi
 
             case "$image" in
-              ghcr.io/bitriver-live/*|bitriver-live/*)
+              ghcr.io/prohibitedtv/*|bitriver-live/*)
                 echo "Scanning first-party image (blocking): $image"
                 trivy image \
                   --severity CRITICAL \
@@ -104,7 +104,7 @@ jobs:
             fi
 
             case "$image" in
-              ghcr.io/bitriver-live/*|bitriver-live/*)
+              ghcr.io/prohibitedtv/*|bitriver-live/*)
                 continue
                 ;;
             esac

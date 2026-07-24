@@ -1015,34 +1015,46 @@ func runPullImagePreflight(envValues map[string]string) error {
 	if err != nil {
 		return err
 	}
+	registryHost := strings.Split(imageRefs[0], "/")[0]
 	for _, imageRef := range imageRefs {
 		if err := manifestInspectRunner(imageRef); err != nil {
 			msg := strings.ToLower(err.Error())
 			if strings.Contains(msg, "denied") || strings.Contains(msg, "unauthorized") || strings.Contains(msg, "forbidden") {
-				return fmt.Errorf("GHCR pull preflight failed for %s: access denied.\nRun `docker login ghcr.io` with a token that has read access to the package, then retry", imageRef)
+				return fmt.Errorf("image pull preflight failed for %s: access denied.\nRun `docker login %s` with a token that has read access to the package, then retry", imageRef, registryHost)
 			}
 			if strings.Contains(msg, "no such manifest") || strings.Contains(msg, "manifest unknown") || strings.Contains(msg, "not found") {
-				return fmt.Errorf("GHCR pull preflight failed for %s: manifest not found.\nVerify tag/digest values in BITRIVER_*_IMAGE_TAG and BITRIVER_*_IMAGE_DIGEST", imageRef)
+				return fmt.Errorf("image pull preflight failed for %s: manifest not found.\nVerify BITRIVER_IMAGE_NAMESPACE plus tag/digest values in BITRIVER_*_IMAGE_TAG and BITRIVER_*_IMAGE_DIGEST", imageRef)
 			}
-			return fmt.Errorf("GHCR pull preflight failed for %s: %w", imageRef, err)
+			return fmt.Errorf("image pull preflight failed for %s: %w", imageRef, err)
 		}
 	}
-	fmt.Fprintf(os.Stdout, "Image preflight ok: verified %d GHCR manifests for pull mode.\n", len(imageRefs))
+	fmt.Fprintf(os.Stdout, "Image preflight ok: verified %d registry manifests for pull mode.\n", len(imageRefs))
 	return nil
 }
 
 func requiredGHCRImageRefs(values map[string]string) ([]string, error) {
+	namespace := strings.TrimSuffix(strings.TrimSpace(values["BITRIVER_IMAGE_NAMESPACE"]), "/")
+	if namespace == "" {
+		namespace = "ghcr.io/prohibitedtv"
+	}
+	if namespace != strings.ToLower(namespace) ||
+		strings.ContainsAny(namespace, " \t\r\n") ||
+		strings.Contains(namespace, "://") ||
+		!strings.Contains(namespace, "/") {
+		return nil, errors.New("BITRIVER_IMAGE_NAMESPACE must be a lowercase registry path such as ghcr.io/prohibitedtv")
+	}
+
 	refs := []struct {
 		name           string
 		tagKey         string
 		fallbackTagKey string
 		digestKey      string
 	}{
-		{name: "ghcr.io/bitriver-live/bitriver-live", tagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_LIVE_IMAGE_DIGEST"},
-		{name: "ghcr.io/bitriver-live/bitriver-viewer", tagKey: "BITRIVER_VIEWER_IMAGE_TAG", digestKey: "BITRIVER_VIEWER_IMAGE_DIGEST"},
-		{name: "ghcr.io/bitriver-live/bitriver-srs-controller", tagKey: "BITRIVER_SRS_CONTROLLER_IMAGE_TAG", digestKey: "BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST"},
-		{name: "ghcr.io/bitriver-live/bitriver-transcoder", tagKey: "BITRIVER_TRANSCODER_IMAGE_TAG", digestKey: "BITRIVER_TRANSCODER_IMAGE_DIGEST"},
-		{name: "ghcr.io/bitriver-live/bitriver-ome-config", tagKey: "BITRIVER_OME_CONFIG_IMAGE_TAG", fallbackTagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_OME_CONFIG_IMAGE_DIGEST"},
+		{name: namespace + "/bitriver-live", tagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_LIVE_IMAGE_DIGEST"},
+		{name: namespace + "/bitriver-viewer", tagKey: "BITRIVER_VIEWER_IMAGE_TAG", digestKey: "BITRIVER_VIEWER_IMAGE_DIGEST"},
+		{name: namespace + "/bitriver-srs-controller", tagKey: "BITRIVER_SRS_CONTROLLER_IMAGE_TAG", digestKey: "BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST"},
+		{name: namespace + "/bitriver-transcoder", tagKey: "BITRIVER_TRANSCODER_IMAGE_TAG", digestKey: "BITRIVER_TRANSCODER_IMAGE_DIGEST"},
+		{name: namespace + "/bitriver-ome-config", tagKey: "BITRIVER_OME_CONFIG_IMAGE_TAG", fallbackTagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_OME_CONFIG_IMAGE_DIGEST"},
 	}
 
 	resolved := make([]string, 0, len(refs))

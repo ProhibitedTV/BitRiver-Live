@@ -4,6 +4,13 @@ This is the artifact-only installation path for an operator-managed Ubuntu VM. I
 
 > **Availability:** the repository contains this installer and package pipeline, but no tagged GitHub Release or downloadable Ubuntu artifact exists yet. Use the source-checkout quickstart for evaluation. Use the commands below only with assets and images published together by an actual release tag.
 
+The planned first artifact set is `v1.2.3-rc.1`. A tag containing a hyphen is
+a GitHub prerelease and does not move the `latest` image tag. Official images
+use `ghcr.io/prohibitedtv`; forks and mirrors can override
+`BITRIVER_IMAGE_NAMESPACE`. The release workflow logs out of GHCR and proves
+that all five official tagged manifests are anonymously readable before it
+publishes the GitHub prerelease.
+
 ## Support and evidence boundary
 
 - Production target: Ubuntu Server 24.04 LTS on amd64.
@@ -54,6 +61,16 @@ Membership in the `docker` group is effectively root-level host access. Use a de
 
 Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from the same [GitHub release](https://github.com/ProhibitedTV/BitRiver-Live/releases). Never mix a package, archive, or checksum file from different tags.
 
+Confirm the matching images are public before changing the host:
+
+```bash
+for image in bitriver-live bitriver-viewer bitriver-srs-controller bitriver-transcoder bitriver-ome-config; do
+  docker buildx imagetools inspect "ghcr.io/prohibitedtv/${image}:v1.2.3-rc.1" >/dev/null
+done
+```
+
+Replace `v1.2.3-rc.1` with the exact release tag you downloaded.
+
 Example archive verification:
 
 ```bash
@@ -73,7 +90,7 @@ sudo ./install.sh install --operator-user "$USER"
 Package path:
 
 ```bash
-sudo apt install ./bitriver-live_v1.2.3_amd64.deb
+sudo apt install ./bitriver-live_v1.2.3-rc.1_amd64.deb
 sudo bitriver-host install --operator-user "$USER"
 ```
 

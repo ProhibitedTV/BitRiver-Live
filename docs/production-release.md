@@ -25,9 +25,14 @@ Release credentials are exposed if a workflow uploads a populated environment fi
 
 The tag workflow enforces these boundaries:
 
-- Production values are materialized only in the `verify-env` job under `$RUNNER_TEMP` and are deleted with an `always()` cleanup step.
+- Synthetic validation values are materialized only inside `verify-env` and
+  `pull-only-product-gate` under `$RUNNER_TEMP`; each job creates its own input
+  and deletes it with an `always()` cleanup step.
 - Missing, malformed, placeholder, and digest inputs remain validation failures, while validation stays compatible with supported `_FILE` secret sources.
-- Validator logs and fixed-schema contract evidence are scanned against exact injected values; only `release-contract-evidence` is retained for 3 days.
+- Validator logs and fixed-schema contract/product evidence are scanned against
+  exact injected values. `release-contract-evidence` is retained for 3 days;
+  the credential-free image-manifest and golden-path JSON in
+  `release-product-evidence` are retained for 14 days.
 - OME freshness renders from `deploy/.env.example` into a temporary output. The tracked generated XML and release packages contain placeholders, never deployment credentials.
 - Every downloaded build artifact and the final `dist/` payload are scanned before publication. `release-publication-evidence` retains the SHA-256 artifact inventory and scan status for 3 days.
 - Intermediate build artifacts have an explicit 7-day retention and are not a credential transport.
@@ -208,17 +213,22 @@ Keep this evidence attached to the release ticket/change request before maintena
 ## 2. Tag the release and trigger the workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.
-2. Create an annotated tag that follows the `vMAJOR.MINOR.PATCH` pattern:
+2. Create one annotated tag that follows
+   `vMAJOR.MINOR.PATCH[-PRERELEASE]`. Use a numbered RC for the first public
+   candidate:
    ```bash
-   git tag -a vX.Y.Z -m "Release vX.Y.Z"
-   git push origin vX.Y.Z
+   git tag -a v1.2.3-rc.1 -m "Release v1.2.3-rc.1"
+   git push origin v1.2.3-rc.1
    ```
+   Tags are immutable publication inputs. If a candidate fails, fix the source
+   and publish `rc.2`; never force-move or overwrite `rc.1`.
 3. The push triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml),
    which rebuilds the Go binaries for every platform, packages the viewer
    bundle, publishes version-matched first-party container images (including
    the OME config helper), builds amd64/arm64 launcher archives plus `.deb`/`.rpm`
-   packages, and publishes the artefacts to the GitHub Release. Monitor the
-   workflow until every job completes successfully.
+   packages, and publishes the artefacts to the GitHub Release. A prerelease
+   tag is marked as a GitHub prerelease and does not move the `latest` image
+   tag. Monitor the workflow until every job completes successfully.
 
 The release job is blocked on package acceptance that installs and removes the
 amd64 package in Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers. This is
@@ -234,60 +244,28 @@ with Postgres storage flags and fails if output contains `pgx driver stubbed in
 this build`, preventing future workflow edits from regressing to stubbed
 storage builds.
 
-### Repository secrets for the release workflow
+### Job-local release validation credentials
 
-The `verify-env` job in the release workflow materializes a production-ready
-validation input under the runner temporary directory, validates it with
-`deploy/check-env.sh`, and then enforces third-party image digest pins via
-`scripts/require-image-digests.sh`. The input is deleted in the same job and is
-never uploaded. Configure the
-following
-repository secrets (mirroring [`deploy/.env.example`](../deploy/.env.example))
-so the job can populate every required variable and image tag:
+The release workflow does not require repository `BITRIVER_*` secrets. Its
+`verify-env` job derives strict version/package metadata from the tag, copies
+[`deploy/.env.example`](../deploy/.env.example) into the runner temporary
+directory, and replaces every sample credential with a strong job-local value.
+It also resolves current third-party image digests, validates the production
+contract with `deploy/check-env.sh`, and enforces digest pins with
+`scripts/require-image-digests.sh`.
 
-The workflow sets `BITRIVER_LIVE_MODE=production` and
-`BITRIVER_DEPLOY_IMAGE_SOURCE=pull` directly in the job (not from secrets) so
-digest enforcement always runs under production conditions for release tags.
+Prepublication first-party digest placeholders prove only contract formatting;
+they are labeled that way in the redacted evidence. After the five tagged
+images publish, `pull-only-product-gate` logs out of GHCR, resolves their real
+anonymous manifests with bounded retries, pins those digests into a new
+temporary input, and runs the canonical production/pull stack plus the full
+media/API golden path. GitHub Release creation cannot start until that job
+passes.
 
-- `BITRIVER_POSTGRES_USER`
-- `BITRIVER_POSTGRES_PASSWORD`
-- `BITRIVER_REDIS_PASSWORD`
-- `BITRIVER_OME_API`
-- `BITRIVER_LIVE_ADMIN_EMAIL`
-- `BITRIVER_LIVE_ADMIN_PASSWORD`
-- `BITRIVER_LIVE_SESSION_TTL` (use the same duration as `deploy/.env.example`,
-  currently `168h`, unless your session policy requires a shorter window)
-- `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` (set to `false` in most production deploys)
-- `BITRIVER_LIVE_METRICS_TOKEN` (required by the release workflow) so
-  `/metrics` remains protected
-- `BITRIVER_LIVE_RATE_LOGIN_LIMIT` (set to a non-zero value, such as `10`)
-- `BITRIVER_LIVE_RATE_LOGIN_WINDOW` (for example `1m`, paired with
-  `BITRIVER_LIVE_RATE_LOGIN_LIMIT` to cap password spray attempts)
-- `BITRIVER_SRS_TOKEN`
-- `BITRIVER_OME_USERNAME`
-- `BITRIVER_OME_PASSWORD`
-- `BITRIVER_OME_API_TOKEN` (override `BITRIVER_OME_ACCESS_TOKEN` only if the health probe must use a different token)
-- `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT`
-- `BITRIVER_TRANSCODER_TOKEN`
-- `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`
-- `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`
-- `BITRIVER_LIVE_IMAGE_TAG`
-- `BITRIVER_VIEWER_IMAGE_TAG`
-- `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`
-- `BITRIVER_TRANSCODER_IMAGE_TAG`
-- `BITRIVER_OME_CONFIG_IMAGE_TAG` is set automatically to the release tag by the workflow; do not create a separate secret for it.
-- `BITRIVER_SRS_IMAGE_TAG`
-- `BITRIVER_OME_IMAGE_TAG`
-- `BITRIVER_REDIS_IMAGE_DIGEST`
-- `BITRIVER_POSTGRES_IMAGE_DIGEST`
-- `BITRIVER_SRS_IMAGE_DIGEST`
-- `BITRIVER_OME_IMAGE_DIGEST`
-- `BITRIVER_NGINX_IMAGE_DIGEST`
-- `BITRIVER_ALPINE_3_IMAGE_DIGEST`
-- `BITRIVER_ALPINE_3_19_IMAGE_DIGEST`
-- `BITRIVER_DEBIAN_IMAGE_DIGEST`
-- `NEXT_PUBLIC_API_BASE_URL`
-- `NEXT_PUBLIC_VIEWER_URL`
+Generated env and sentinel files remain under `$RUNNER_TEMP`, use restricted
+permissions, are never uploaded or printed, and are deleted in `always()`
+cleanup steps. Repository Actions configuration needs package write permission
+through `GITHUB_TOKEN`, but it does not need real operator credentials.
 
 The workflow retains only redacted status evidence from this validation. OME
 freshness is checked separately by rendering `deploy/.env.example` to a
@@ -302,11 +280,11 @@ the release notes (and/or update `deploy/.env.example`) so production deployment
 can pin to immutable references:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:vX.Y.Z --format '{{.Manifest.Digest}}'
-docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-viewer:vX.Y.Z --format '{{.Manifest.Digest}}'
-docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z --format '{{.Manifest.Digest}}'
-docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z --format '{{.Manifest.Digest}}'
-docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-ome-config:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/prohibitedtv/bitriver-live:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/prohibitedtv/bitriver-viewer:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/prohibitedtv/bitriver-srs-controller:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/prohibitedtv/bitriver-transcoder:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/prohibitedtv/bitriver-ome-config:vX.Y.Z --format '{{.Manifest.Digest}}'
 ```
 
 Capture any third-party image digests (`redis`, `postgres`, `ossrs/srs`,
@@ -314,10 +292,11 @@ Capture any third-party image digests (`redis`, `postgres`, `ossrs/srs`,
 alongside the release so operators can mirror the same verified set in their
 `.env` files.
 
-For production Compose rollouts, keep `BITRIVER_DEPLOY_IMAGE_SOURCE=pull` and
-preconfigure GHCR credentials (`docker login ghcr.io`) on every host before the
-maintenance window. This keeps deploys pull-only, enables preflight manifest
-checks, and avoids accidental source builds on production nodes.
+For production Compose rollouts, keep `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`.
+Official release images are public, so anonymous manifest inspection and pulls
+must work without `docker login ghcr.io`. A private fork or mirror may require
+registry credentials. Pull-only mode enables preflight manifest checks and
+avoids accidental source builds on production nodes.
 
 ### Clean-host artifact gate (required before announcing the release)
 

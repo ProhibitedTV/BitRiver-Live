@@ -29,6 +29,7 @@ func containsString(values []string, target string) bool {
 func buildValidProductionEnv(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
+		"BITRIVER_IMAGE_NAMESPACE":                "ghcr.io/prohibitedtv",
 		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
 		"BITRIVER_LIVE_IMAGE_DIGEST":              "@sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
@@ -2456,6 +2457,40 @@ func TestRunPullImagePreflightReturnsAccessDeniedMessage(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "docker login ghcr.io") {
 		t.Fatalf("expected docker login guidance, got %v", err)
+	}
+}
+
+func TestRequiredGHCRImageRefsUsesOfficialAndOverriddenNamespace(t *testing.T) {
+	values := map[string]string{
+		"BITRIVER_LIVE_IMAGE_TAG":           "v1.2.3",
+		"BITRIVER_VIEWER_IMAGE_TAG":         "v1.2.3",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG": "v1.2.3",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":     "v1.2.3",
+	}
+
+	refs, err := requiredGHCRImageRefs(values)
+	if err != nil {
+		t.Fatalf("resolve official image refs: %v", err)
+	}
+	if got, want := refs[0], "ghcr.io/prohibitedtv/bitriver-live:v1.2.3"; got != want {
+		t.Fatalf("official API image = %q, want %q", got, want)
+	}
+	if got, want := refs[4], "ghcr.io/prohibitedtv/bitriver-ome-config:v1.2.3"; got != want {
+		t.Fatalf("official OME helper image = %q, want %q", got, want)
+	}
+
+	values["BITRIVER_IMAGE_NAMESPACE"] = "registry.example.test/team/bitriver"
+	refs, err = requiredGHCRImageRefs(values)
+	if err != nil {
+		t.Fatalf("resolve mirrored image refs: %v", err)
+	}
+	if got, want := refs[1], "registry.example.test/team/bitriver/bitriver-viewer:v1.2.3"; got != want {
+		t.Fatalf("mirrored viewer image = %q, want %q", got, want)
+	}
+
+	values["BITRIVER_IMAGE_NAMESPACE"] = "ghcr.io/ProhibitedTV"
+	if _, err := requiredGHCRImageRefs(values); err == nil || !strings.Contains(err.Error(), "lowercase registry path") {
+		t.Fatalf("expected mixed-case namespace rejection, got %v", err)
 	}
 }
 
