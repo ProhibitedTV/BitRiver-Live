@@ -73,7 +73,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Pinned Go 1.26.5 focused runtime/workflow packages passed; eight Python harness tests, shell syntax, generated contract freshness, installer wording, and diff checks passed.
     - Full clean-checkout `./scripts/verify.sh --viewer` passed in 208.3 seconds: all Go packages, architecture/dependency/contract checks, release bundle, Postgres migrations, Compose validation, quickstart smoke, viewer lint, and 25 viewer suites (215 tests, four snapshots).
     - The operator-local root `.env` was moved outside the checkout only for the clean-checkout verification and restored in a guaranteed `finally` block; no backup/leftover file or runtime container/volume remained.
-    - Remote PR checks and merge/issue publication evidence remain pending.
+    - PR #1328 first remote run passed secret, docs, workflow, shell, and image-scan jobs. Ubuntu then reproduced `mkdir /work/live: permission denied`: the Linux smoke override forced host UID 1001 onto the named volume initialized for the transcoder image UID 10001. The fix will retain the image user for that volume and replace raw `docker inspect` failure output with a state-only diagnostic.
+    - Remote rerun, merge, and issue publication evidence remain pending.
 
 ## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
 

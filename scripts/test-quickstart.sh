@@ -55,8 +55,9 @@ services:
     user: "${host_uid}:${host_gid}"
   ome-health-token-check:
     user: "${host_uid}:${host_gid}"
+  # The transcoder image owns /work as its non-root image user. Do not replace
+  # that UID when /work is an isolated named volume.
   transcoder:
-    user: "${host_uid}:${host_gid}"
     volumes:
       - bitriver-smoke-transcoder:/work
   transcoder-public:
@@ -520,7 +521,9 @@ wait_for_health_check() {
   unhealthy)
     echo "error: service $service_name reported unhealthy" >&2
     docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=80 "$service_name" >&2 || true
-    docker inspect "$container_id"
+    docker inspect \
+      --format 'state={{.State.Status}} exit_code={{.State.ExitCode}} error={{json .State.Error}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+      "$container_id" >&2 || true
     return 2
     ;;
   *)

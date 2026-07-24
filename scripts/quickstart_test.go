@@ -447,6 +447,25 @@ func TestQuickstartSmokePreservesContainerEnvironmentPathsOnWindows(t *testing.T
 	if strings.Contains(script, `export MSYS2_ARG_CONV_EXCL="*"`) || strings.Contains(script, `export MSYS_NO_PATHCONV=1`) {
 		t.Fatal("quickstart smoke must retain argument conversion for native Docker temp-file paths")
 	}
+	linuxOverride := extractSection(script, `cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML`, "\nYAML\nelse")
+	if linuxOverride == "" {
+		t.Fatal("expected Linux quickstart smoke override")
+	}
+	if strings.Contains(linuxOverride, `transcoder:
+    user:`) {
+		t.Fatal("Linux smoke must retain the transcoder image UID for its isolated named /work volume")
+	}
+	if !strings.Contains(linuxOverride, `transcoder:
+    volumes:
+      - bitriver-smoke-transcoder:/work`) {
+		t.Fatal("Linux smoke should mount the isolated media volume without replacing the transcoder image user")
+	}
+	if strings.Contains(script, "\n    docker inspect \"$container_id\"\n") {
+		t.Fatal("quickstart health diagnostics must not dump container configuration or environment values")
+	}
+	if !strings.Contains(script, "error={{json .State.Error}}") {
+		t.Fatal("quickstart health diagnostics should retain a state-only container error summary")
+	}
 }
 
 func TestProductionGoldenPathWorkflowOwnsRealComposeLifecycle(t *testing.T) {
