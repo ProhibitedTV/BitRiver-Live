@@ -85,6 +85,16 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Unrelated deployment helpers/data remain untracked and are explicitly excluded from the intended change set; the temporary `.gomodcache/` was removed after verification.
     - Tagged Ubuntu/XOA reboot, authenticated OME control-plane, and real ingest/playback acceptance remain external release evidence owned by #1297/#1300/#1304 and are not claimed by this local candidate.
 
+- [-] Task 7 - Reconcile the installer candidate with current main
+  - Acceptance criteria:
+    - PR #1326's merged SRS/OME/transcoder/public media URL and Windows documentation contracts remain intact.
+    - Ubuntu release assets, OME helper publication, package/systemd lifecycle, and pull-only behavior remain intact.
+    - README and quickstart distinguish implemented future release paths from downloads that do not exist before the first tag.
+    - Focused contract tests, release-bundle/installer checks, Compose rendering, full verification, and remote PR gates pass on the reconciled head.
+  - Check:
+    - Read-only merge analysis identified overlapping release workflows, Compose/env validation, quickstart smoke, and operator documentation; `PLAN.md` now records the reconciliation rules and validation plan.
+    - Current `main` is `0f557e81`; PR #1325 remains draft at `5d2f3d11`, with its historical CI green but its head non-mergeable until this reconciliation is complete.
+
 ### Execution log
 - Task 1 analysis:
   - Confirmed #1297 requires artifact-only install/restart/reboot/status/log/upgrade/uninstall behavior and an explicit Ubuntu/Debian/ARM64 support matrix.
