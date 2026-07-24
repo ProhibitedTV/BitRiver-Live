@@ -69,6 +69,7 @@ type uploadJob struct {
 	Playback    string
 	CreatedAt   time.Time
 	CompletedAt *time.Time
+	Error       string
 }
 
 type processState struct {
@@ -146,6 +147,24 @@ func (s *server) uploadLogger(jobID string, meta *uploadJob) *slog.Logger {
 		}
 	}
 	return logger
+}
+
+func (s *server) processLogger(jobID string) *slog.Logger {
+	if s == nil || s.logger == nil {
+		return nil
+	}
+	s.mu.RLock()
+	liveMeta := s.jobs[jobID]
+	uploadMeta := s.uploads[jobID]
+	s.mu.RUnlock()
+	switch {
+	case liveMeta != nil:
+		return s.jobLogger(jobID, liveMeta)
+	case uploadMeta != nil:
+		return s.uploadLogger(jobID, uploadMeta)
+	default:
+		return s.logger.With("job_id", jobID)
+	}
 }
 
 // logAuthFailure logs auth failure details for observability without mutating runtime state.
@@ -230,6 +249,12 @@ type uploadResponse struct {
 	JobID       string          `json:"jobId"`
 	PlaybackURL string          `json:"playbackUrl"`
 	Renditions  json.RawMessage `json:"renditions"`
+}
+
+type uploadStatusResponse struct {
+	JobID  string `json:"jobId"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
 const (
@@ -371,6 +396,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/jobs", s.handleJobs)
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/uploads", s.handleUploads)
+	mux.HandleFunc("/v1/uploads/", s.handleUploadByID)
 
 	handler := http.Handler(mux)
 	if s.metrics != nil {
@@ -980,6 +1006,46 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusAccepted, resp)
 }
 
+func (s *server) handleUploadByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.authorize(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/v1/uploads/")
+	if id == "" || strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	s.mu.RLock()
+	meta, ok := s.uploads[id]
+	if !ok || meta == nil {
+		s.mu.RUnlock()
+		http.NotFound(w, r)
+		return
+	}
+	completed := meta.CompletedAt != nil
+	jobErr := strings.TrimSpace(meta.Error)
+	s.mu.RUnlock()
+
+	status := "running"
+	switch {
+	case jobErr != "":
+		status = "failed"
+	case completed:
+		status = "completed"
+	}
+	s.writeJSON(w, http.StatusOK, uploadStatusResponse{
+		JobID:  id,
+		Status: status,
+		Error:  jobErr,
+	})
+}
+
 // makeJobExitHandler performs make job exit handler and propagates validation or dependency failures to the caller.
 func (s *server) makeJobExitHandler(id string) func(error) {
 	return func(err error) {
@@ -1024,27 +1090,37 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 	return func(err error) {
 		now := time.Now().UTC()
 		var meta *uploadJob
-		var publish bool
 		s.mu.Lock()
 		if up, ok := s.uploads[id]; ok {
-			if up.CompletedAt == nil {
-				up.CompletedAt = &now
+			if err != nil {
+				up.Error = err.Error()
 			}
 			meta = up
-			publish = err == nil
 		}
 		delete(s.processes, id)
 		s.mu.Unlock()
 		uploadLogger := s.uploadLogger(id, meta)
-		if publish && meta != nil {
-			if err := s.publishUpload(meta); err != nil {
+		completionErr := err
+		if completionErr == nil && meta != nil {
+			if publishErr := s.publishUpload(meta); publishErr != nil {
 				if uploadLogger != nil {
-					uploadLogger.Warn("publish upload", "error", err)
+					uploadLogger.Warn("publish upload", "error", publishErr)
 				}
-				s.updateComponent(componentPublishing, err)
+				s.updateComponent(componentPublishing, publishErr)
+				completionErr = fmt.Errorf("publish upload: %w", publishErr)
 			} else {
 				s.updateComponent(componentPublishing, nil)
 			}
+		}
+		if meta != nil {
+			s.mu.Lock()
+			if meta.CompletedAt == nil {
+				meta.CompletedAt = &now
+			}
+			if completionErr != nil {
+				meta.Error = completionErr.Error()
+			}
+			s.mu.Unlock()
 		}
 		if meta != nil {
 			if saveErr := s.store.SaveUpload(meta); saveErr != nil {
@@ -1053,8 +1129,8 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 				}
 			}
 		}
-		if err != nil {
-			s.updateComponent(componentFFmpeg, err)
+		if completionErr != nil {
+			s.updateComponent(componentFFmpeg, completionErr)
 			metrics.TranscoderJobFailed("upload")
 			return
 		}
@@ -1268,7 +1344,7 @@ func (s *server) startFFmpeg(jobID string, plan *transcodePlan, onExit func(erro
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, "ffmpeg", plan.args...)
-	processLogger := s.jobLogger(jobID, s.jobs[jobID])
+	processLogger := s.processLogger(jobID)
 	cmd.Stdout = newLogWriter(jobID, "stdout", processLogger)
 	cmd.Stderr = newLogWriter(jobID, "stderr", processLogger)
 	if err := cmd.Start(); err != nil {

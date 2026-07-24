@@ -2,7 +2,7 @@
 
 Every PR should make its release risk reviewable without reconstructing the change from commit history. The PR template contains a release scorecard for that purpose.
 
-The scorecard is part of Gate 4 in `docs/release-gates.md`. It is advisory by default, but reviewers should treat missing or inconsistent evidence as blocking for runtime, deployment, auth, data, migration, release packaging, or operator workflow changes.
+The scorecard is part of Gate 5 in `docs/release-gates.md`. It is advisory by default, but reviewers should treat missing or inconsistent evidence as blocking for runtime, deployment, auth, data, migration, release packaging, or operator workflow changes.
 
 ## What to fill in
 

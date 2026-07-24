@@ -170,6 +170,7 @@ These variables are consumed by `deploy/docker-compose.monitoring.yml` when set.
 | `BITRIVER_OME_TCP_RELAY` | `*:3478` | Optional | TURN relay candidate construction may break. |
 | `BITRIVER_OME_ICE_CANDIDATE` | `*:10000-10009/udp` | Optional | WebRTC ICE connectivity/candidate advertisement can fail. |
 | `BITRIVER_TRANSCODER_API` | `http://transcoder:9000` | Optional | API transcoder job control fails. |
+| `BITRIVER_TRANSCODE_LADDER` | unset (built-in defaults) | Optional | Live and VOD rendition policy changes; malformed entries are rejected by ingest configuration parsing. |
 | `BITRIVER_TRANSCODER_TOKEN` | placeholder | Required | Transcoder job-controller auth fails. |
 | `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` | `https://cdn.example.com/hls` placeholder (template), auto-localized by `env init` when placeholder | Required | Validator blocks placeholder/loopback in production; published playback URLs become unreachable if wrong. |
 | `BITRIVER_TRANSCODER_PUBLIC_DIR` | `/work/public` (compose) | Optional | Artifact path mismatch between transcoder and nginx sidecar. |
@@ -368,6 +369,7 @@ _This section is generated from `deploy/.env.example` by `scripts/generate-contr
 | `BITRIVER_OME_ICE_PORT_RANGE` | `10000-10009` |
 | `BITRIVER_OME_ICE_CANDIDATE` | `*:10000-10009/udp` |
 | `BITRIVER_TRANSCODER_API` | `http://transcoder:9000` |
+| `BITRIVER_TRANSCODE_LADDER` | _(empty)_ |
 | `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` | `https://cdn.example.com/hls` |
 | `BITRIVER_TRANSCODER_HOST_PORT` | `9001` |
 | `BITRIVER_INGEST_HEALTH` | `/healthz` |

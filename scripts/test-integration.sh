@@ -6,25 +6,28 @@ cd "$REPO_ROOT"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/test-integration.sh [--ingest-e2e]
+Usage: ./scripts/test-integration.sh [--production-golden-path]
 
 Runs integration entrypoints:
   - ./scripts/test-postgres.sh (requires docker or BITRIVER_TEST_POSTGRES_DSN)
   - ./scripts/test-quickstart.sh (requires docker)
-  - ./scripts/test-ingest-e2e.sh (only when explicitly enabled)
+  - ./scripts/test-production-golden-path.sh via canonical quickstart (opt-in)
 
-Ingest e2e controls:
-  --ingest-e2e                    Run ingest e2e in this invocation.
-  BITRIVER_TEST_ALL_INGEST_E2E=1  Run ingest e2e by environment override.
+Production golden-path controls:
+  --production-golden-path                    Run the real product gate.
+  BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1  Run it by environment override.
+
+Compatibility:
+  --ingest-e2e and BITRIVER_TEST_ALL_INGEST_E2E=1 remain accepted aliases.
 USAGE
 }
 
-run_ingest_e2e=false
+run_production_golden_path=false
 
 while (($# > 0)); do
   case "$1" in
-    --ingest-e2e)
-      run_ingest_e2e=true
+    --production-golden-path|--ingest-e2e)
+      run_production_golden_path=true
       ;;
     -h|--help)
       usage
@@ -39,8 +42,8 @@ while (($# > 0)); do
   shift
 done
 
-if [[ "${BITRIVER_TEST_ALL_INGEST_E2E:-}" == "1" ]]; then
-  run_ingest_e2e=true
+if [[ "${BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH:-}" == "1" || "${BITRIVER_TEST_ALL_INGEST_E2E:-}" == "1" ]]; then
+  run_production_golden_path=true
 fi
 
 run_step() {
@@ -63,14 +66,20 @@ skip_step() {
 
 if command -v docker >/dev/null 2>&1; then
   run_step "Postgres integration tests" ./scripts/test-postgres.sh
-  run_step "Quickstart smoke" ./scripts/test-quickstart.sh
+  if [[ "$run_production_golden_path" == true ]]; then
+    skip_step "Quickstart smoke" "the production golden path owns the same canonical quickstart lifecycle."
+  else
+    run_step "Quickstart smoke" ./scripts/test-quickstart.sh
+  fi
 else
   skip_step "Postgres integration tests" "docker is not installed or not on PATH."
   skip_step "Quickstart smoke" "docker is not installed or not on PATH."
 fi
 
-if [[ "$run_ingest_e2e" == true ]]; then
-  run_step "Ingest end-to-end tests" ./scripts/test-ingest-e2e.sh
+if [[ "$run_production_golden_path" == true ]]; then
+  run_step "Production golden path" ./scripts/test-production-golden-path.sh \
+    --stack quickstart \
+    --client "${BITRIVER_GOLDEN_PATH_CLIENT:-docker}"
 else
-  skip_step "Ingest end-to-end tests" "disabled by default (use --ingest-e2e or BITRIVER_TEST_ALL_INGEST_E2E=1)."
+  skip_step "Production golden path" "disabled by default (use --production-golden-path or BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1)."
 fi

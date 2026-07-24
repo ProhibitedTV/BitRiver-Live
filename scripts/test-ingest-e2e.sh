@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-
-export GOTOOLCHAIN="local"
-export GOPROXY="off"
-export GOSUMDB="off"
-
-go test ./internal/storage -count=1 -timeout=120s -run TestIngestPipelineEndToEnd
+# Compatibility entrypoint retained for existing branch protection and
+# workflow callers. This is now a real canonical-Compose product gate; the
+# cheap storage/controller integration guard lives in test-ingest-storage.sh.
+exec "$SCRIPT_DIR/test-production-golden-path.sh" \
+  --stack quickstart \
+  --client "${BITRIVER_GOLDEN_PATH_CLIENT:-docker}" \
+  --artifact-dir "${BITRIVER_GOLDEN_PATH_ARTIFACT_DIR:-$SCRIPT_DIR/../.artifacts/production-golden-path}"

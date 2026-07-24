@@ -11,9 +11,10 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 | 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Blocking | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, `Go unit tests`, viewer jobs when paths match | Test logs, verifier phase output, viewer lint/test output |
 | 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
-| 4. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
-| 5. Release readiness | Tags published with stale changelog, missing release notes, unpinned or secret-bearing artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh`; `./scripts/scan-release-evidence.sh` | Redacted contract status, release artifact inventory and scan status, release notes, image digest status, pgx guard output |
-| 6. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; non-mutating command plus operator evidence | `./scripts/release-canary.sh`; `go run ./cmd/bitriver release canary`; `docs/operations.md`; `/readyz`, `/healthz`, `/api/status` | Canary report JSON, redacted health snapshots, log scan summary, version metadata, rollback readiness notes |
+| 4. Production media and workflow acceptance | Healthy containers hide broken RTMP mapping, OME/transcoder output, chat/moderation, VOD processing, or aggregate status | Runtime/media changes; every release candidate; repeated after installing tagged artifacts | Blocking | `./scripts/test-production-golden-path.sh --stack quickstart --client docker`; `.github/workflows/ingest-e2e.yml`; `--stack running` on a prepared candidate host | Scanner-approved `production-golden-path.json` with stage timing, advancing playlist evidence, 1080p probes, workflow results, and final status |
+| 5. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
+| 6. Release readiness | Tags published with stale changelog, missing release notes, unpinned or secret-bearing artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh`; `./scripts/scan-release-evidence.sh` | Redacted contract status, release artifact inventory and scan status, release notes, image digest status, pgx guard output |
+| 7. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; non-mutating command plus operator evidence | `./scripts/release-canary.sh`; `go run ./cmd/bitriver release canary`; `docs/operations.md`; `/readyz`, `/healthz`, `/api/status` | Canary report JSON, redacted health snapshots, log scan summary, version metadata, rollback readiness notes |
 
 ## Gate details
 
@@ -114,7 +115,39 @@ Packaged launcher and upgrade execution evidence remain staged release-candidate
 
 The `--target` flag produces an upgrade-plan artifact in both tiers so release reviewers can see the migration and operator checklist even before a slower baseline-to-target upgrade rehearsal is automated.
 
-### 4. AI-authored PR risk scorecard
+### 4. Production media and workflow acceptance
+
+Quickstart and health probes cannot establish that real media advances or that
+product workflows work across service boundaries. Run the destructive
+source-checkout gate on a clean Docker-capable host:
+
+```bash
+./scripts/test-production-golden-path.sh \
+  --stack quickstart \
+  --client docker
+```
+
+The gate creates creator and viewer sessions through public APIs, bootstraps a
+channel, sends deterministic 1920x1080 video plus audio over RTMP, requires the
+live/offline transitions, and probes advancing decodable HLS from both
+OvenMediaEngine and the FFmpeg transcoder. It also requires chat/history,
+moderation, multipart VOD processing/publication/playback, viewer/health/metrics
+surfaces, and a final ready aggregate status.
+
+The lifecycle-owning mode uses isolated state and removes the stack afterward.
+It retains only
+`.artifacts/production-golden-path/production-golden-path.json`, which is
+scanned against per-run account, password, token, and stream-key sentinels.
+Never attach raw media-service logs or generated configs merely because the
+JSON scan passed.
+
+Source-build success is not tagged-artifact proof. Before stable promotion,
+install immutable pull-only artifacts on the supported Ubuntu 24.04 amd64
+candidate and rerun the same assertions with `--stack running`. Reboot/recovery
+and browser player recovery/quality remain separate required evidence until
+their dedicated gates exist.
+
+### 5. AI-authored PR risk scorecard
 
 AI-authored changes should make risk legible to human reviewers. Fill in the release scorecard in the PR template and keep it current when the diff changes.
 
@@ -134,7 +167,7 @@ Pass `--changed-files` to catch obvious mismatches between the diff and selected
 
 Treat missing evidence as advisory for small docs-only changes and blocking for runtime, deployment, auth, data, migration, or release workflow changes.
 
-### 5. Release readiness
+### 6. Release readiness
 
 Before tagging, follow `docs/production-release.md`. A release candidate should prove:
 
@@ -150,7 +183,7 @@ Before tagging, follow `docs/production-release.md`. A release candidate should 
 
 Failures here usually mean the tag should wait. Fix the source, rerun the relevant gate, and only then publish or promote artifacts.
 
-### 6. Canary, observability, and rollback
+### 7. Canary, observability, and rollback
 
 Production promotion needs operator evidence, not just CI logs. Before reopening or expanding traffic:
 

@@ -76,6 +76,24 @@ workflow does not discover failures after the tag is pushed.
 
 For the default local quality gate, run `./scripts/verify.sh`; it covers Go and contract checks plus the real-Postgres migration lifecycle, Compose validation, and quickstart smoke (`./scripts/test-quickstart.sh`) in deterministic order when Docker is available.
 
+Before tagging, run the content-level product acceptance gate from a clean
+source checkout on a Docker-capable host:
+
+```bash
+./scripts/test-production-golden-path.sh \
+  --stack quickstart \
+  --client docker \
+  --artifact-dir .artifacts/production-golden-path
+```
+
+Passing requires authenticated account/channel APIs, deterministic 1080p RTMP,
+advancing and decodable OME and transcoder HLS, offline transition,
+chat/moderation, VOD upload/transcode/publication/playback, and final aggregate
+health. The wrapper scans its versioned JSON report against per-run secrets and
+tears down the disposable stack. Attach only
+`production-golden-path.json`; raw Compose logs and generated media-service
+configuration are not release evidence.
+
 Before tagging or promoting a release candidate, run the named golden-path release gate and attach its artifact directory to the release ticket/change request:
 
 ```bash
@@ -87,6 +105,13 @@ The full tier writes `.artifacts/release-gate/release-gate-report.json`, redacte
 ```bash
 ./scripts/release-gate-smoke.sh --tier fast --target vX.Y.Z
 ```
+
+These source-build gates prove the checked-out code and canonical Compose
+contract. They do not prove that a published tag, digest-pinned image set, or
+Ubuntu package is installable. Stable promotion still requires the same product
+assertions in `--stack running` mode after pull-only installation on a clean
+Ubuntu 24.04 amd64 candidate host, followed by the reboot/recovery evidence
+described below.
 
 After deploying the release candidate to staging or the production canary host, run the canary/rollback gate and attach its artifact directory to the change request:
 

@@ -28,11 +28,11 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
-- A source-free Ubuntu 24.04 LTS x86_64 host can install the canonical pull-only stack from a tagged launcher archive or Linux package.
-- Release bundles contain every Compose bind mount, migration, renderer/template, proxy asset, wrapper, service definition, and operator document required at runtime.
-- Program assets, configuration, and durable data have separate ownership/lifecycle boundaries; uninstall retains operator data unless an explicit destructive flag is supplied.
-- First activation performs actionable prerequisite/resource/port/DNS/permission checks, generates production secrets, validates the environment, applies migrations, and waits for bounded service health.
-- The OME renderer is a published multi-architecture release image; a clean host never depends on a locally built `ome-config:local` image or a Go/source checkout.
-- The stack is enabled for reboot recovery through systemd and exposes status, logs, upgrade, and safe removal commands.
-- XOA/XCP-ng and Nginx Proxy Manager documentation distinguishes HTTP(S)/WebSocket proxying from direct media/firewall ports and internal-only control services.
-- Automated evidence covers release-shaped paths containing spaces, rerunnable installation, package contents, safe uninstall, and failure diagnostics without overstating Debian, ARM64, reboot, or real playback evidence.
+- One release-blocking harness exercises the real canonical Compose services rather than mocked adapters or only the storage package.
+- The harness creates real accounts and a creator channel, publishes deterministic 1080p RTMP with audio, observes the live/offline lifecycle, and proves OME plus transcoder playback is decodable and advancing.
+- Authenticated chat send/history and an owner moderation action pass through the real API and Redis-backed chat path.
+- A generated short VOD is uploaded, transcoded, published, listed for viewers, and media-probed through the supported playback surface.
+- Health, readiness, status, viewer metadata, and media content assertions use bounded retries that identify the failed stage instead of hiding hangs.
+- Evidence is machine-readable, includes timing and media probe results, excludes secrets, and passes a sentinel-based release-evidence scan on both success and failure.
+- The same running-stack assertions can be reused by source CI, tagged pull-only release promotion, and clean Ubuntu/XOA acceptance.
+- Build-mode Docker Desktop/CI proof is not described as tagged pull-only, browser recovery/quality, reboot, or repeated-run stability evidence until those direct gates pass.

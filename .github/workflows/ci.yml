@@ -94,6 +94,10 @@ jobs:
               - 'cmd/transcoder/**'
               - 'cmd/srs-controller/**'
               - 'scripts/test-ingest-e2e.sh'
+              - 'scripts/test-ingest-storage.sh'
+              - 'scripts/test-production-golden-path.sh'
+              - 'scripts/production_golden_path.py'
+              - 'scripts/golden-path-client.Dockerfile'
               - 'scripts/render-srs-config.sh'
               - 'scripts/render-ome-config.sh'
               - 'deploy/srs/**'
@@ -140,7 +144,7 @@ jobs:
     env:
       BITRIVER_TEST_POSTGRES: ${{ needs.changed-files.outputs.postgres_changed == 'true' && '1' || '0' }}
       BITRIVER_TEST_QUICKSTART: ${{ needs.changed-files.outputs.quickstart_changed == 'true' && '1' || '0' }}
-      BITRIVER_TEST_ALL_INGEST_E2E: ${{ needs.changed-files.outputs.ingest_changed == 'true' && '1' || '0' }}
+      BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH: ${{ needs.changed-files.outputs.ingest_changed == 'true' && '1' || '0' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

@@ -241,6 +241,126 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 	}
 }
 
+func TestUploadProcessorRecordingPersistenceFailureDoesNotResubmitTranscode(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-recording-failure": {
+			ID:        "upload-recording-failure",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata:  map[string]string{"sourceUrl": "https://example.com/recording-failure.mp4"},
+		},
+	}
+	store.failEnsureRecordingFor("upload-recording-failure", errors.New("recording store unavailable"))
+
+	ingestFake := newFakeIngest()
+	ingestFake.setResult("upload-recording-failure", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/recording-failure.m3u8"}, nil)
+	updates := store.updatesFor("upload-recording-failure")
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:   store,
+		Ingest:  ingestFake,
+		Workers: 1,
+		Timeout: time.Second,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	waitForUploadUpdate(t, updates, 3*time.Second, func(upload domain.Upload) bool {
+		return upload.Status == "failed" && strings.Contains(upload.Error, "ensure upload recording persistence retry budget exhausted")
+	})
+	if count := ingestFake.callCount("upload-recording-failure"); count != 1 {
+		t.Fatalf("expected one accepted transcode submission, got %d", count)
+	}
+	if attempts := store.ensureAttemptCount("upload-recording-failure"); attempts != uploadMaxRetryAttempts {
+		t.Fatalf("expected %d recording persistence attempts, got %d", uploadMaxRetryAttempts, attempts)
+	}
+}
+
+func TestUploadProcessorReadyPersistenceFailureDoesNotResubmitTranscode(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-ready-failure": {
+			ID:        "upload-ready-failure",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata:  map[string]string{"sourceUrl": "https://example.com/ready-failure.mp4"},
+		},
+	}
+	store.failStatusUpdateFor("upload-ready-failure", "ready", errors.New("ready update unavailable"))
+
+	ingestFake := newFakeIngest()
+	ingestFake.setResult("upload-ready-failure", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/ready-failure.m3u8"}, nil)
+	updates := store.updatesFor("upload-ready-failure")
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:   store,
+		Ingest:  ingestFake,
+		Workers: 1,
+		Timeout: time.Second,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	waitForUploadUpdate(t, updates, 3*time.Second, func(upload domain.Upload) bool {
+		return upload.Status == "failed" && strings.Contains(upload.Error, "mark upload ready persistence retry budget exhausted")
+	})
+	if count := ingestFake.callCount("upload-ready-failure"); count != 1 {
+		t.Fatalf("expected one accepted transcode submission, got %d", count)
+	}
+	if attempts := store.statusUpdateAttemptCount("upload-ready-failure", "ready"); attempts != uploadMaxRetryAttempts {
+		t.Fatalf("expected %d ready persistence attempts, got %d", uploadMaxRetryAttempts, attempts)
+	}
+}
+
+func TestUploadProcessorDoesNotRetryTranscodeWhenRetryStateCannotPersist(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-retry-state-failure": {
+			ID:        "upload-retry-state-failure",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata:  map[string]string{"sourceUrl": "https://example.com/retry-state-failure.mp4"},
+		},
+	}
+	store.failStatusUpdateFor("upload-retry-state-failure", "pending", errors.New("retry state unavailable"))
+
+	ingestFake := newFakeIngest()
+	ingestFake.setResult("upload-retry-state-failure", ingest.UploadTranscodeResult{}, errors.New("503 service unavailable"))
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:   store,
+		Ingest:  ingestFake,
+		Workers: 1,
+		Timeout: time.Second,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	waitForIngestCallCount(t, ingestFake, "upload-retry-state-failure", 1, time.Second)
+	time.Sleep(500 * time.Millisecond)
+	if count := ingestFake.callCount("upload-retry-state-failure"); count != 1 {
+		t.Fatalf("expected retry suppression after state persistence failed, got %d transcode submissions", count)
+	}
+	if attempts := store.statusUpdateAttemptCount("upload-retry-state-failure", "pending"); attempts != uploadMaxRetryAttempts {
+		t.Fatalf("expected %d retry-state persistence attempts, got %d", uploadMaxRetryAttempts, attempts)
+	}
+}
+
 func TestUploadProcessorTransientRetryProgression(t *testing.T) {
 	store := newFakeUploadStore()
 	store.uploads = map[string]domain.Upload{
@@ -323,12 +443,16 @@ func TestUploadProcessorTerminalFailureAfterRetryBudget(t *testing.T) {
 }
 
 type fakeUploadStore struct {
-	mu              sync.Mutex
-	uploads         map[string]domain.Upload
-	recordings      map[string]domain.Recording
-	failFirstUpdate map[string]error
-	updateAttempts  map[string]int
-	updateCh        map[string]chan domain.Upload
+	mu                   sync.Mutex
+	uploads              map[string]domain.Upload
+	recordings           map[string]domain.Recording
+	failFirstUpdate      map[string]error
+	failEnsureRecording  map[string]error
+	failStatusUpdate     map[string]map[string]error
+	updateAttempts       map[string]int
+	ensureAttempts       map[string]int
+	statusUpdateAttempts map[string]map[string]int
+	updateCh             map[string]chan domain.Upload
 }
 
 type fakeSourceCleaner struct {
@@ -391,11 +515,15 @@ func (f *fakeSourceCleaner) callCount() int {
 
 func newFakeUploadStore() *fakeUploadStore {
 	return &fakeUploadStore{
-		uploads:         make(map[string]domain.Upload),
-		recordings:      make(map[string]domain.Recording),
-		failFirstUpdate: make(map[string]error),
-		updateAttempts:  make(map[string]int),
-		updateCh:        make(map[string]chan domain.Upload),
+		uploads:              make(map[string]domain.Upload),
+		recordings:           make(map[string]domain.Recording),
+		failFirstUpdate:      make(map[string]error),
+		failEnsureRecording:  make(map[string]error),
+		failStatusUpdate:     make(map[string]map[string]error),
+		updateAttempts:       make(map[string]int),
+		ensureAttempts:       make(map[string]int),
+		statusUpdateAttempts: make(map[string]map[string]int),
+		updateCh:             make(map[string]chan domain.Upload),
 	}
 }
 
@@ -458,6 +586,10 @@ func (f *fakeUploadStore) EnsureUploadRecording(ctx context.Context, id string, 
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.ensureAttempts[id]++
+	if err := f.failEnsureRecording[id]; err != nil {
+		return "", err
+	}
 	upload, ok := f.uploads[id]
 	if !ok {
 		return "", errors.New("upload not found")
@@ -493,6 +625,18 @@ func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update do
 	}
 	attempt := f.updateAttempts[id]
 	f.updateAttempts[id] = attempt + 1
+	if update.Status != nil {
+		status := strings.ToLower(strings.TrimSpace(*update.Status))
+		if _, ok := f.statusUpdateAttempts[id]; !ok {
+			f.statusUpdateAttempts[id] = make(map[string]int)
+		}
+		f.statusUpdateAttempts[id][status]++
+		if failures := f.failStatusUpdate[id]; failures != nil {
+			if err := failures[status]; err != nil {
+				return domain.Upload{}, err
+			}
+		}
+	}
 	if err, shouldFail := f.failFirstUpdate[id]; shouldFail && attempt == 0 {
 		delete(f.failFirstUpdate, id)
 		return domain.Upload{}, err
@@ -547,6 +691,40 @@ func (f *fakeUploadStore) updateAttemptCount(id string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.updateAttempts[id]
+}
+
+func (f *fakeUploadStore) failEnsureRecordingFor(id string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err == nil {
+		err = errors.New("forced recording persistence failure")
+	}
+	f.failEnsureRecording[id] = err
+}
+
+func (f *fakeUploadStore) ensureAttemptCount(id string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ensureAttempts[id]
+}
+
+func (f *fakeUploadStore) failStatusUpdateFor(id, status string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	status = strings.ToLower(strings.TrimSpace(status))
+	if err == nil {
+		err = errors.New("forced status persistence failure")
+	}
+	if _, ok := f.failStatusUpdate[id]; !ok {
+		f.failStatusUpdate[id] = make(map[string]error)
+	}
+	f.failStatusUpdate[id][status] = err
+}
+
+func (f *fakeUploadStore) statusUpdateAttemptCount(id, status string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.statusUpdateAttempts[id][strings.ToLower(strings.TrimSpace(status))]
 }
 
 func cloneMetadataMap(src map[string]string) map[string]string {

@@ -427,6 +427,104 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	if !strings.Contains(string(content), "BITRIVER_OME_LLHLS_ORIGIN: ${BITRIVER_OME_LLHLS_ORIGIN:-http://ome:${BITRIVER_OME_LLHLS_PORT:-8080}}") {
 		t.Fatalf("base compose file should route same-origin /live playback to the internal OME LL-HLS listener")
 	}
+	if !strings.Contains(string(content), "BITRIVER_TRANSCODE_LADDER: ${BITRIVER_TRANSCODE_LADDER:-}") {
+		t.Fatalf("base compose file should pass the configured rendition ladder into the API container")
+	}
+}
+
+func TestQuickstartSmokePreservesContainerEnvironmentPathsOnWindows(t *testing.T) {
+	content, err := os.ReadFile("test-quickstart.sh")
+	if err != nil {
+		t.Fatalf("read quickstart smoke script: %v", err)
+	}
+	script := string(content)
+	if !strings.Contains(script, `[[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]`) {
+		t.Fatal("quickstart smoke should detect Git Bash and Cygwin before native Docker invocations")
+	}
+	if !strings.Contains(script, `export MSYS2_ENV_CONV_EXCL="*"`) {
+		t.Fatal("quickstart smoke should preserve container paths such as /healthz in Compose environment values")
+	}
+	if strings.Contains(script, `export MSYS2_ARG_CONV_EXCL="*"`) || strings.Contains(script, `export MSYS_NO_PATHCONV=1`) {
+		t.Fatal("quickstart smoke must retain argument conversion for native Docker temp-file paths")
+	}
+	linuxOverride := extractSection(script, `cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML`, "\nYAML\nelse")
+	if linuxOverride == "" {
+		t.Fatal("expected Linux quickstart smoke override")
+	}
+	if strings.Contains(linuxOverride, `transcoder:
+    user:`) {
+		t.Fatal("Linux smoke must retain the transcoder image UID for its isolated named /work volume")
+	}
+	if !strings.Contains(linuxOverride, `transcoder:
+    volumes:
+      - bitriver-smoke-transcoder:/work`) {
+		t.Fatal("Linux smoke should mount the isolated media volume without replacing the transcoder image user")
+	}
+	if strings.Contains(script, "\n    docker inspect \"$container_id\"\n") {
+		t.Fatal("quickstart health diagnostics must not dump container configuration or environment values")
+	}
+	if !strings.Contains(script, "error={{json .State.Error}}") {
+		t.Fatal("quickstart health diagnostics should retain a state-only container error summary")
+	}
+}
+
+func TestProductionGoldenPathWorkflowOwnsRealComposeLifecycle(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	read := func(path string) string {
+		t.Helper()
+		content, readErr := os.ReadFile(filepath.Join(repoRoot, path))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		return string(content)
+	}
+
+	compatibilityEntrypoint := read("scripts/test-ingest-e2e.sh")
+	if strings.Contains(compatibilityEntrypoint, "go test ./internal/storage") {
+		t.Fatal("ingest E2E compatibility entrypoint must not claim a storage-only test as product acceptance")
+	}
+	for _, required := range []string{
+		"test-production-golden-path.sh",
+		"--stack quickstart",
+		"--client",
+		"BITRIVER_GOLDEN_PATH_ARTIFACT_DIR",
+	} {
+		if !strings.Contains(compatibilityEntrypoint, required) {
+			t.Fatalf("ingest E2E compatibility entrypoint missing %q", required)
+		}
+	}
+
+	storageGuard := read("scripts/test-ingest-storage.sh")
+	if !strings.Contains(storageGuard, "go test ./internal/storage") || !strings.Contains(storageGuard, "TestIngestPipelineEndToEnd") {
+		t.Fatal("cheap storage/controller ingest guard should remain separately callable")
+	}
+
+	workflow := read(".github/workflows/ingest-e2e.yml")
+	for _, required := range []string{
+		"name: Production golden path",
+		"timeout-minutes: 30",
+		"run: ./scripts/test-production-golden-path.sh --stack quickstart --client docker",
+		"production-golden-path.json",
+		"if: always()",
+		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("production golden-path workflow missing %q", required)
+		}
+	}
+
+	testAll := read("scripts/test-all.sh")
+	if !strings.Contains(testAll, "BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH") {
+		t.Fatal("test-all should expose an accurately named production golden-path control")
+	}
+	if !strings.Contains(testAll, `skip_step "Quickstart smoke" "the production golden path owns the same canonical quickstart lifecycle."`) {
+		t.Fatal("test-all should avoid a duplicate quickstart when the product gate is enabled")
+	}
 }
 
 func TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort(t *testing.T) {

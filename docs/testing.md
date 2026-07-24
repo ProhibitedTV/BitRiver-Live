@@ -26,7 +26,7 @@ Use these category entrypoints from the repository root:
 - **Integration umbrella:** `./scripts/test-integration.sh`
   - Wraps `./scripts/test-postgres.sh` and `./scripts/test-quickstart.sh`.
   - Docker-dependent checks are skipped with explicit messages when Docker is unavailable.
-  - Ingest e2e remains opt-in (`--ingest-e2e` or `BITRIVER_TEST_ALL_INGEST_E2E=1`) and runs `./scripts/test-ingest-e2e.sh` when enabled.
+  - The production golden path remains opt-in (`--production-golden-path` or `BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1`). When enabled it owns the canonical quickstart lifecycle instead of starting the same stack twice.
 - **Postgres integration (tagged):** `./scripts/test-postgres.sh`
   - Runs storage integration tests behind the `postgres` tag using Docker or `BITRIVER_TEST_POSTGRES_DSN`.
   - CI: [`.github/workflows/postgres-tests.yml`](../.github/workflows/postgres-tests.yml), plus `postgres-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and release validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
@@ -47,9 +47,12 @@ Use these category entrypoints from the repository root:
 - **Deploy smoke:** `./scripts/deploy-smoke.sh`
   - Boots the compose stack with an isolated temporary project name, waits for API `/readyz`, prints a short PASS/FAIL summary, and always tears down.
   - Operator-focused one-command confidence check before/after deploy changes.
-- **Ingest e2e:** `./scripts/test-ingest-e2e.sh`
-  - Exercises the ingest control-plane/storage lifecycle guard.
-  - CI: [`.github/workflows/ingest-e2e.yml`](../.github/workflows/ingest-e2e.yml) and `ingest-e2e` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Ingest storage/controller integration:** `./scripts/test-ingest-storage.sh`
+  - Runs the cheap focused storage and HTTP-controller lifecycle guard without claiming real media-service coverage.
+- **Production golden path:** `./scripts/test-production-golden-path.sh --stack quickstart --client docker`
+  - Boots the canonical Compose stack, creates real account/channel state, publishes deterministic 1080p RTMP with audio, requires advancing and decodable OME and transcoder HLS, observes offline state, exercises chat/moderation, uploads and decodes a published VOD, checks aggregate health, scans retained evidence, and tears down.
+  - `scripts/test-ingest-e2e.sh` remains a compatibility alias for branch protection and existing callers; it now runs this real product gate.
+  - CI: [`.github/workflows/ingest-e2e.yml`](../.github/workflows/ingest-e2e.yml) and the path-gated Ubuntu job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 - **Viewer integration / Playwright:** `npm --prefix web/viewer run test:integration`
   - Runs viewer lint + Jest + Playwright integration checks.
   - CI: [`.github/workflows/viewer-ci.yml`](../.github/workflows/viewer-ci.yml), `viewer-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and release viewer validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
@@ -60,19 +63,23 @@ Run everything with the umbrella entrypoint:
 ./scripts/test-all.sh
 ```
 
-`./scripts/test-all.sh` runs `./scripts/test-unit.sh` + `./scripts/test-integration.sh` and then viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
+`./scripts/test-all.sh` runs `./scripts/test-unit.sh`, the repository verifier, selected Docker integration gates, and viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
 
-Ingest e2e is intentionally opt-in in the umbrella script. Enable it with either:
+The production golden path is intentionally opt-in in the umbrella script. Enable it with either:
 
 ```bash
-./scripts/test-all.sh --ingest-e2e
+./scripts/test-all.sh --production-golden-path
 ```
 
 or:
 
 ```bash
-BITRIVER_TEST_ALL_INGEST_E2E=1 ./scripts/test-all.sh
+BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1 ./scripts/test-all.sh
 ```
+
+The old `--ingest-e2e` and `BITRIVER_TEST_ALL_INGEST_E2E=1` names remain
+accepted as compatibility aliases. New automation should use the accurate
+production-golden-path names.
 
 ## Self-hosted product acceptance checklist
 
@@ -311,15 +318,28 @@ Trivy commands locally in an environment with Docker) to confirm:
 - first-party image scans still fail on unsuppressed CRITICAL findings, and
 - any exception applies only to the intended image/CVE pair.
 
-End-to-end ingest coverage (storage + HTTP controller + control-plane stub)
-is packaged as a dedicated guard so release branches and tags keep exercising
-the critical ingest → transcoder → playback path. Run the wrapper to boot the
-ingest stub, drive the real HTTP controller, and verify manifests and teardown
-calls are recorded:
+The cheap storage + HTTP controller integration guard remains independently
+callable:
 
 ```bash
-./scripts/test-ingest-e2e.sh
+./scripts/test-ingest-storage.sh
 ```
+
+It is not product E2E. For production acceptance, run the real Compose gate:
+
+```bash
+./scripts/test-production-golden-path.sh \
+  --stack quickstart \
+  --client docker
+```
+
+The gate retains only the versioned
+`.artifacts/production-golden-path/production-golden-path.json` report after
+scanning it against per-run account, password, token, and stream-key sentinels.
+Passing requires content-level 1920x1080 decode and advancing playlists, not
+only healthy containers or successful manifest responses. `--stack running`
+reuses the same assertions against a deliberately prepared staging stack; it
+does not own or tear down that deployment.
 
 ## Quickstart/Compose smoke
 

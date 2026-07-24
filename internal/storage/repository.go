@@ -22,6 +22,7 @@ type Repository interface {
 	domain.RecordingsRepository
 	domain.PaymentsRepository
 	domain.LegalRepository
+	EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error)
 
 	SetUserPassword(id, password string) (domain.User, error)
 	GetMFASettings(userID string) (domain.MFASettings, bool, error)

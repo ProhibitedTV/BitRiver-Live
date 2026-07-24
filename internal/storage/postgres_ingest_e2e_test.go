@@ -16,7 +16,6 @@ func TestPostgresIngestPipelineEndToEnd(t *testing.T) {
 		PrimaryIngest:   "rtmp://ingest-primary/live",
 		BackupIngest:    "rtmp://ingest-backup/live",
 		OriginURL:       "http://origin.internal/live",
-		PlaybackURL:     "https://cdn.example.com/live/channel.m3u8",
 		LiveJobIDs:      []string{"job-live-1", "job-live-2"},
 		SRSToken:        "srs-secret",
 		TranscoderToken: "transcoder-secret",
@@ -27,19 +26,20 @@ func TestPostgresIngestPipelineEndToEnd(t *testing.T) {
 	t.Cleanup(stub.Close)
 
 	controllerConfig := ingest.Config{
-		SRSBaseURL:        stub.BaseURL(),
-		SRSToken:          "srs-secret",
-		OMEBaseURL:        stub.BaseURL(),
-		OMEAccessToken:    "ome-access-token",
-		OMEUsername:       "ome-user",
-		OMEPassword:       "ome-pass",
-		JobBaseURL:        stub.BaseURL(),
-		JobToken:          "transcoder-secret",
-		MaxBootAttempts:   2,
-		RetryInterval:     5 * time.Millisecond,
-		HTTPMaxAttempts:   2,
-		HTTPRetryInterval: 10 * time.Millisecond,
-		HealthTimeout:     time.Second,
+		SRSBaseURL:         stub.BaseURL(),
+		SRSToken:           "srs-secret",
+		OMEBaseURL:         stub.BaseURL(),
+		OMEPlaybackBaseURL: "https://cdn.example.com/live",
+		OMEAccessToken:     "ome-access-token",
+		OMEUsername:        "ome-user",
+		OMEPassword:        "ome-pass",
+		JobBaseURL:         stub.BaseURL(),
+		JobToken:           "transcoder-secret",
+		MaxBootAttempts:    2,
+		RetryInterval:      5 * time.Millisecond,
+		HTTPMaxAttempts:    2,
+		HTTPRetryInterval:  10 * time.Millisecond,
+		HealthTimeout:      time.Second,
 		LadderProfiles: []ingest.Rendition{
 			{Name: "1080p", ManifestURL: "https://cdn.example.com/hls/1080p.m3u8", Bitrate: 4300},
 			{Name: "720p", ManifestURL: "https://cdn.example.com/hls/720p.m3u8", Bitrate: 2400},
@@ -88,7 +88,7 @@ func TestPostgresIngestPipelineEndToEnd(t *testing.T) {
 	if len(session.IngestEndpoints) != 2 {
 		t.Fatalf("expected both ingest endpoints, got %v", session.IngestEndpoints)
 	}
-	if session.PlaybackURL != "https://cdn.example.com/live/channel.m3u8" {
+	if session.PlaybackURL != "https://cdn.example.com/live/"+channel.ID+"/llhls.m3u8" {
 		t.Fatalf("unexpected playback URL: %s", session.PlaybackURL)
 	}
 	if got := len(session.RenditionManifests); got != 2 {
@@ -112,11 +112,10 @@ func TestPostgresIngestPipelineEndToEnd(t *testing.T) {
 	operations := stub.Operations()
 	expectedKinds := []string{
 		"channel-create",
-		"application-create",
+		"application-validate",
 		"job-start",
 		"job-stop",
 		"job-stop",
-		"application-delete",
 		"channel-delete",
 	}
 	if len(operations) != len(expectedKinds) {

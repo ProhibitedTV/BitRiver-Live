@@ -607,6 +607,67 @@ func TestAuthMiddlewareRejectsMissingSession(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareAllowsOnlyExactSignedUploadMediaGET(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	tests := []struct {
+		name     string
+		method   string
+		path     string
+		wantNext bool
+		wantCode int
+	}{
+		{
+			name:     "exact media get",
+			method:   http.MethodGet,
+			path:     "/api/uploads/upload-123/media?token=media-token",
+			wantNext: true,
+			wantCode: http.StatusNoContent,
+		},
+		{
+			name:     "upload metadata remains protected",
+			method:   http.MethodGet,
+			path:     "/api/uploads/upload-123",
+			wantNext: false,
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:     "nested suffix remains protected",
+			method:   http.MethodGet,
+			path:     "/api/uploads/upload-123/media/extra",
+			wantNext: false,
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:     "media mutation remains protected",
+			method:   http.MethodPost,
+			path:     "/api/uploads/upload-123/media?token=media-token",
+			wantNext: false,
+			wantCode: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			nextCalled := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				nextCalled = true
+				w.WriteHeader(http.StatusNoContent)
+			})
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			rec := httptest.NewRecorder()
+
+			authMiddleware(handler, next).ServeHTTP(rec, req)
+
+			if nextCalled != tc.wantNext {
+				t.Fatalf("expected nextCalled=%t, got %t", tc.wantNext, nextCalled)
+			}
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected status %d, got %d", tc.wantCode, rec.Code)
+			}
+		})
+	}
+}
+
 func TestCanonicalSRSHookRoutesBypassBrowserSession(t *testing.T) {
 	handler, _ := newTestHandler(t)
 

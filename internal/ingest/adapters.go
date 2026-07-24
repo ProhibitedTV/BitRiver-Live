@@ -224,6 +224,12 @@ type ffmpegUploadResponse struct {
 	Renditions  []Rendition `json:"renditions"`
 }
 
+type ffmpegUploadStatusResponse struct {
+	JobID  string `json:"jobId"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
 // uploadJobResult is a high-level result of starting a VOD upload job, used
 // internally by the ingest package.
 type uploadJobResult struct {
@@ -472,11 +478,57 @@ func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRe
 		}
 		return uploadJobResult{}, err
 	}
+	if strings.TrimSpace(response.JobID) == "" {
+		return uploadJobResult{}, fmt.Errorf("transcoder upload response omitted jobId")
+	}
+	if err := a.waitForUpload(ctx, response.JobID); err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
+		return uploadJobResult{}, err
+	}
 	return uploadJobResult{
 		JobID:       response.JobID,
 		PlaybackURL: response.PlaybackURL,
 		Renditions:  CloneRenditions(response.Renditions),
 	}, nil
+}
+
+func (a *httpTranscoderAdapter) waitForUpload(ctx context.Context, jobID string) error {
+	interval := a.retryInterval
+	if interval <= 0 {
+		interval = defaultRetryBackoff
+	}
+	statusURL := fmt.Sprintf("%s/v1/uploads/%s", a.baseURL, url.PathEscape(jobID))
+	for {
+		var response ffmpegUploadStatusResponse
+		if err := getJSON(ctx, a.client, statusURL, &response, func(req *http.Request) {
+			setBearer(req, a.token)
+		}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
+			return fmt.Errorf("read upload job status: %w", err)
+		}
+		switch strings.ToLower(strings.TrimSpace(response.Status)) {
+		case "completed":
+			return nil
+		case "failed":
+			message := strings.TrimSpace(response.Error)
+			if message == "" {
+				message = "unknown transcoder failure"
+			}
+			return fmt.Errorf("upload job failed: %s", message)
+		case "running", "accepted", "processing":
+		default:
+			return fmt.Errorf("upload job returned unsupported status %q", response.Status)
+		}
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func renditionsLabel(renditions []Rendition) string {
@@ -505,6 +557,13 @@ func postJSON(ctx context.Context, client *http.Client, url string, payload inte
 		return fmt.Errorf("marshal request: %w", err)
 	}
 	return doWithRetry(ctx, client, http.MethodPost, url, body, mutate, dest, logger, attempts, interval)
+}
+
+func getJSON(ctx context.Context, client *http.Client, url string, dest interface{}, mutate func(*http.Request), logger *slog.Logger, attempts int, interval time.Duration) error {
+	if client == nil {
+		client = defaultHTTPClient
+	}
+	return doWithRetry(ctx, client, http.MethodGet, url, nil, mutate, dest, logger, attempts, interval)
 }
 
 // deleteRequest issues an HTTP DELETE request and discards any successful
