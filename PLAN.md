@@ -47,6 +47,7 @@
 - The official npm audit reports three high-severity runtime findings against Next 16.2.10 and its PostCSS/Sharp dependency chain. Upgrade `next` and `eslint-config-next` together to the non-major fixed 16.2.11 release and require the blocking production audit to report no high/critical findings.
 - Next 16.2.11 fixes its direct advisories but still hard-pins vulnerable PostCSS 8.4.31 and allows only vulnerable Sharp 0.34.x; no newer stable Next release exists. Temporarily override those transitive packages to fixed PostCSS 8.5.22 and Sharp 0.35.3, lock the exception in the runtime-baseline test, and exercise the production image. The viewer already sets `images.unoptimized: true`, so it does not depend on Next's image optimizer; remove the override once an aligned stable Next release ships.
 - The root Docker build context currently includes `deploy/transcoder-data/`; this checkout's local media made the context roughly 200 MB and could leak runtime artifacts to a builder/cache. Exclude that runtime directory explicitly and lock the boundary in a static regression.
+- The reconciled CI image scan found CVE-2026-59873 in `tar@7.5.15` under the Node 24 Alpine image's global npm installation, not in the viewer application dependency tree. The production runner needs the Node executable but never invokes npm or npx; remove the package manager payload and entrypoints from the final runtime stage, retain npm in the build stages, and guard both the runtime capability and reduced attack surface in the Dockerfile baseline test.
 
 ## Test Plan
 - Shell syntax, installer unit tests, and focused Go tests for installed-root discovery, image preflight, Compose invocation, and OME helper image selection.
@@ -66,6 +67,7 @@
 - Run `npm audit --omit=dev --audit-level=high` after the Next.js patch and record any remaining high/critical production finding as release-blocking.
 - Start the clean production viewer image after the security overrides and require its public route to return successfully; do not accept a zero-count audit if the resulting image cannot boot.
 - Rebuild the root OME/helper context after updating `.dockerignore` and confirm local transcoder output is neither transferred nor packaged.
+- Rebuild the production viewer image, confirm `node` and the Next standalone server remain runnable while npm/npx and `/usr/local/lib/node_modules/npm` are absent, then rerun the blocking image scan and full remote CI.
 
 ## Boundaries
 - The user explicitly authorized installer, deployment-contract, and roadmap work for the Ubuntu/XOA/Nginx Proxy Manager target, including the necessary release workflow changes.

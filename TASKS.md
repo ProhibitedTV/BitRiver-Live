@@ -108,6 +108,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The aligned Node 24 / TypeScript 6 / ESLint 9 baseline plus Next 16.2.11 and the fixed PostCSS/Sharp overrides passed an isolated clean `npm ci`, lint, 25 Jest suites / 215 tests / 4 snapshots, production build, and `npm audit --omit=dev --audit-level=high` with zero vulnerabilities.
     - The rebuilt canonical quickstart passed OME helper render/validation, all image builds, migration completion, critical service health including OME, API health, and viewer reachability; cleanup left an empty Compose project and restored generated configuration.
     - Adding `deploy/transcoder-data/` to the root `.dockerignore` reduced the helper rebuild context transfer from roughly 200 MB to 37 kB and kept the user's local media outside the builder.
+    - Reconciled CI run 30101348208 passed the unified Ubuntu gate, viewer CI/audit, Windows/macOS Go tests, entrypoint checks, docs, ShellCheck, and secret guard. Its sole failure was the blocking viewer image scan: the Node 24 Alpine base supplied global npm with `tar@7.5.15` (CVE-2026-59873), while the application tree was clean.
+    - The production viewer stage now removes unused npm/npx runtime payloads while retaining them in build stages. The focused runtime-baseline test passed; the rebuilt image retained Node 24, omitted npm/npx, and served `/viewer` with HTTP 200. The repaired head still requires the remote Trivy rerun before Task 7 can close.
 
 ### Execution log
 - Task 1 analysis:

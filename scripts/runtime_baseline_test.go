@@ -195,6 +195,16 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	if !strings.Contains(viewerDockerfile, "node:"+nodeMajorVersion+"-alpine") {
 		t.Fatalf("viewer Dockerfile must use node:%s-alpine", nodeMajorVersion)
 	}
+	for _, removedRuntimeTool := range []string{
+		"/usr/local/lib/node_modules/npm",
+		"/usr/local/bin/npm",
+		"/usr/local/bin/npx",
+	} {
+		if !strings.Contains(viewerDockerfile, "RUN rm -rf") ||
+			!strings.Contains(viewerDockerfile, removedRuntimeTool) {
+			t.Errorf("viewer production stage must remove unused runtime package-manager path %q", removedRuntimeTool)
+		}
+	}
 
 	setupAction := readRepoFile(t, repoRoot, filepath.Join(".github", "actions", "setup-node-viewer", "action.yml"))
 	if !strings.Contains(setupAction, "default: '"+nodeMajorVersion+"'") {
