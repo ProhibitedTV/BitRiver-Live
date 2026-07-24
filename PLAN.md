@@ -79,4 +79,5 @@
 ## Completion
 - Local implementation and acceptance are complete: pinned-toolchain repository verification, package generation, PostgreSQL migration acceptance, release-shaped Compose/OME smoke, and clean teardown passed.
 - Draft PR #1325 is published. Its ShellCheck failure, stale local-only OME Trivy target, and sibling-service registry pull were repaired with focused Linux bundle/workflow/Go checks plus a full OME/API/viewer host smoke and clean teardown passing. Required CI is green on implementation head `de869492`, including the Ubuntu test-all gate, image vulnerability scan, viewer integration, cross-platform Go, and entrypoint checks.
+- The installer candidate is reconciled with current `main` on head `e3f96cb5`. CI run 30102433565 is green across the unified Ubuntu gate, first-party blocking image scan, viewer integration/build/audit, secret/docs/shell/workflow guards, cross-platform Go, and quickstart entrypoint matrix.
 - Tagged Ubuntu/XOA reboot, authenticated OME control-plane access, and real ingest/playback/recovery remain required external release evidence for #1297/#1300/#1304; this local candidate does not claim them.

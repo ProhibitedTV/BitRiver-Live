@@ -85,7 +85,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Unrelated deployment helpers/data remain untracked and are explicitly excluded from the intended change set; the temporary `.gomodcache/` was removed after verification.
     - Tagged Ubuntu/XOA reboot, authenticated OME control-plane, and real ingest/playback acceptance remain external release evidence owned by #1297/#1300/#1304 and are not claimed by this local candidate.
 
-- [-] Task 7 - Reconcile the installer candidate with current main
+- [x] Task 7 - Reconcile the installer candidate with current main
   - Acceptance criteria:
     - PR #1326's merged SRS/OME/transcoder/public media URL and Windows documentation contracts remain intact.
     - Ubuntu release assets, OME helper publication, package/systemd lifecycle, and pull-only behavior remain intact.
@@ -109,7 +109,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The rebuilt canonical quickstart passed OME helper render/validation, all image builds, migration completion, critical service health including OME, API health, and viewer reachability; cleanup left an empty Compose project and restored generated configuration.
     - Adding `deploy/transcoder-data/` to the root `.dockerignore` reduced the helper rebuild context transfer from roughly 200 MB to 37 kB and kept the user's local media outside the builder.
     - Reconciled CI run 30101348208 passed the unified Ubuntu gate, viewer CI/audit, Windows/macOS Go tests, entrypoint checks, docs, ShellCheck, and secret guard. Its sole failure was the blocking viewer image scan: the Node 24 Alpine base supplied global npm with `tar@7.5.15` (CVE-2026-59873), while the application tree was clean.
-    - The production viewer stage now removes unused npm/npx runtime payloads while retaining them in build stages. The focused runtime-baseline test passed; the rebuilt image retained Node 24, omitted npm/npx, and served `/viewer` with HTTP 200. The repaired head still requires the remote Trivy rerun before Task 7 can close.
+    - The production viewer stage now removes unused npm/npx runtime payloads while retaining them in build stages. The focused runtime-baseline test passed; the rebuilt image retained Node 24, omitted npm/npx, and served `/viewer` with HTTP 200.
+    - Final reconciled CI run 30102433565 passed on head `e3f96cb5`, including the unified Ubuntu gate, first-party blocking image scan, viewer integration/build/audit, cross-platform Go, quickstart entrypoint matrix, and all secret/docs/shell/workflow guards. PR #1325 is mergeable and Task 7 is complete.
 
 ### Execution log
 - Task 1 analysis:
