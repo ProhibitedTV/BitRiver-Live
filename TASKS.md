@@ -72,6 +72,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Local `./scripts/verify.sh --viewer` passed in 196.1 seconds with pinned Go 1.26.5: all Go packages, architecture/contract/schema checks, release-bundle validation, Postgres migration lifecycle, Compose config, Docker Desktop source quickstart, viewer lint, and 25 suites/215 tests passed.
     - The private root `.env` was moved outside the checkout only for that run, restored in `finally`, and retained the exact SHA-256 hash. The canonical smoke left no BitRiver containers.
     - Eleven Python release-helper tests, focused Go CLI/workflow tests, YAML/WiX parsing, shell syntax, generated contract checks, doc consistency checks, and `git diff --check` passed.
+    - First PR run `30132326373` exposed ShellCheck SC1007 on the intentionally empty stable nFPM prerelease assignment. Changed it to the explicit `NFPM_PRERELEASE=''` form; no package behavior changed.
     - PR, remote CI, merge, immutable RC tag, published assets/images, anonymous pull, and tag-workflow product evidence remain pending.
 
 ## Scoped change: full-stack production golden-path E2E (#1300)

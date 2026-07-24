@@ -36,7 +36,7 @@ for arch in amd64 arm64; do
       cd "$launcher_root"
       NFPM_ARCH="$arch" \
       NFPM_VERSION=1.2.3 \
-      NFPM_PRERELEASE= \
+      NFPM_PRERELEASE='' \
       LAUNCHER_ROOT="$launcher_root" \
       GOMAXPROCS=2 \
         nfpm pkg --packager "$format" --config "$repo_root/deploy/installers/nfpm.yaml" --target "$target"
