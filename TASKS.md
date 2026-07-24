@@ -63,7 +63,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Ubuntu installation guidance and v1.2.3 draft notes state that source-built Compose proof exists while tagged images/packages, clean-host Ubuntu, reboot recovery, and browser recovery/quality remain unproved.
     - `check-doc-installer-language.sh`, generated contract freshness, targeted wording/reference searches, and `git diff --check` passed.
 
-- [-] Task 6 - Run local Docker proof, full verification, and publication lifecycle
+- [x] Task 6 - Run local Docker proof, full verification, and publication lifecycle
   - Acceptance criteria:
     - The real-stack gate passes locally with media/API evidence and clean teardown.
     - Required repository checks and remote CI pass; diff review excludes secrets, generated configs, runtime media, and unrelated user files.
@@ -73,10 +73,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Pinned Go 1.26.5 focused runtime/workflow packages passed; eight Python harness tests, shell syntax, generated contract freshness, installer wording, and diff checks passed.
     - Full clean-checkout `./scripts/verify.sh --viewer` passed in 208.3 seconds: all Go packages, architecture/dependency/contract checks, release bundle, Postgres migrations, Compose validation, quickstart smoke, viewer lint, and 25 viewer suites (215 tests, four snapshots).
     - The operator-local root `.env` was moved outside the checkout only for the clean-checkout verification and restored in a guaranteed `finally` block; no backup/leftover file or runtime container/volume remained.
-    - PR #1328 first remote run passed secret, docs, workflow, shell, and image-scan jobs. Ubuntu then reproduced `mkdir /work/live: permission denied`: the Linux smoke override forced host UID 1001 onto the named volume initialized for the transcoder image UID 10001. The fix will retain the image user for that volume and replace raw `docker inspect` failure output with a state-only diagnostic.
-    - The second remote run confirmed Linux quickstart passes and progressed to the tagged Postgres tier, which found `postgres_ingest_e2e_test.go` still using removed `ingeststub.Options.PlaybackURL` and legacy OME application lifecycle expectations. The tagged scenario must be aligned and proven against real Postgres before another push.
+    - PR #1328 first remote run passed secret, docs, workflow, shell, and image-scan jobs. Ubuntu then reproduced `mkdir /work/live: permission denied`: the Linux smoke override forced host UID 1001 onto the named volume initialized for the transcoder image UID 10001. The fix retains the image user for that volume and replaces raw `docker inspect` failure output with a state-only diagnostic.
+    - The second remote run confirmed Linux quickstart passes and progressed to the tagged Postgres tier, which found `postgres_ingest_e2e_test.go` still using removed `ingeststub.Options.PlaybackURL` and legacy OME application lifecycle expectations.
     - The tagged scenario now derives playback through `OMEPlaybackBaseURL`, expects current authenticated application validation, and passed `go test -count=1 -timeout=120s -tags postgres ./internal/storage/...` against a migrated disposable Postgres 15 container.
-    - Remote rerun, merge, and issue publication evidence remain pending.
+    - Final CI run 30128551732 passed on head `712f9275`, including the complete cross-platform matrix. Its Ubuntu test-all job executed the canonical production golden path, produced `/evidence/production-golden-path.json`, passed the release-evidence scan, and avoided a duplicate quickstart lifecycle.
+    - Draft PR #1328 records local and remote evidence plus the remaining tagged Ubuntu/XOA, reboot, browser recovery/quality, and pull-only release boundaries owned by #1297/#1304; squash merge remains the publication step after this task record lands.
 
 ## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
 
