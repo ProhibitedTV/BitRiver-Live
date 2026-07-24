@@ -28,9 +28,11 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
-- A Windows 11 operator can evaluate the source checkout with Docker Desktop's Linux-container backend and native PowerShell using copyable, tested commands.
-- Docker/Compose prerequisites, canonical config rendering, startup, and health failures produce enough context to distinguish host setup problems from application failures.
-- The README shows the real public viewer and operator surfaces captured from a running BitRiver Live stack, with no generated concept art or private data.
-- README workflows accurately explain local evaluation, creator ingest, viewer playback, administration, and the single-host deployment boundary.
-- GitHub Releases and downloadable packages are described as unavailable until a tag is actually published; the current source-checkout path is never hidden behind dead release links.
-- Ubuntu 24.04 on an XOA VM behind Nginx Proxy Manager remains the production target without claiming clean-host, real ingest/playback, or OME recovery acceptance before those gates pass.
+- A source-free Ubuntu 24.04 LTS x86_64 host can install the canonical pull-only stack from a tagged launcher archive or Linux package.
+- Release bundles contain every Compose bind mount, migration, renderer/template, proxy asset, wrapper, service definition, and operator document required at runtime.
+- Program assets, configuration, and durable data have separate ownership/lifecycle boundaries; uninstall retains operator data unless an explicit destructive flag is supplied.
+- First activation performs actionable prerequisite/resource/port/DNS/permission checks, generates production secrets, validates the environment, applies migrations, and waits for bounded service health.
+- The OME renderer is a published multi-architecture release image; a clean host never depends on a locally built `ome-config:local` image or a Go/source checkout.
+- The stack is enabled for reboot recovery through systemd and exposes status, logs, upgrade, and safe removal commands.
+- XOA/XCP-ng and Nginx Proxy Manager documentation distinguishes HTTP(S)/WebSocket proxying from direct media/firewall ports and internal-only control services.
+- Automated evidence covers release-shaped paths containing spaces, rerunnable installation, package contents, safe uninstall, and failure diagnostics without overstating Debian, ARM64, reboot, or real playback evidence.

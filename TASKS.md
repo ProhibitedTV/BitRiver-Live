@@ -1,76 +1,145 @@
 # TASKS
 
-## Scoped change: Windows Docker Desktop proof and evidence-led README
+## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Inventory current claims and reproducible proof paths
+- [x] Task 1 - Inventory release packages and define the clean-host contract
   - Acceptance criteria:
-    - README art, release/package links, Windows entrypoints, runtime routes, demo-data options, and screenshot locations are mapped before implementation.
-    - The GitHub remote release state and local Docker Desktop client/server state are checked without exposing credentials.
-    - Existing unrelated work and the Ubuntu installer PR remain explicit boundaries.
+    - `PLAN.md` records supported-host claims, asset/config/data layout, systemd lifecycle, OME readiness boundary, Nginx Proxy Manager topology, risks, and evidence plan.
+    - Existing launcher/archive/package contents, Compose bind mounts, pull-only image behavior, installers, and docs are inspected before implementation.
+    - Unrelated working-tree files and unproved Debian/ARM64/reboot/playback claims are explicit boundaries.
   - Check:
-    - Confirmed the README uses the 2.4 MB concept-art `bitriver-live-banner-text.png` and claims packaged launcher availability despite zero published GitHub Releases.
-    - Confirmed native `scripts/quickstart.ps1`, the canonical CLI, `/viewer`, `/admin`, `/healthz`, `/readyz`, self-signup, first-channel creation, and authenticated admin seeding provide supported proof/demo paths.
-    - Confirmed Docker Desktop 4.82.0 is running on Windows with client/engine 29.6.1, Compose 5.3.0, the `desktop-linux` context, and a Linux/amd64 server.
-    - Updated `SPEC.md` and `PLAN.md` before runtime/code changes; kept PR #1325, root `.env`, and the user's untracked deployment helpers out of scope.
+    - The Linux launcher package currently ships only `deploy/docker-compose.yml` and `deploy/.env.example`; canonical Compose also binds migrations, the migration runner, SRS/OME generated configs, Nginx config, and transcoder data.
+    - Pull-only Compose still names `bitriver-live/ome-config:local`, but release automation publishes only API, viewer, SRS controller, and transcoder images.
+    - Packaged CLI root discovery falls back to the current directory when no `go.mod` exists, so OME rendering cannot reliably locate installed templates.
+    - The historical Ubuntu/systemd installer deploys native API binaries rather than the canonical full Compose stack.
 
-- [x] Task 2 - Make the native Windows Docker Desktop proof reproducible
+- [x] Task 2 - Make release bundles self-contained and pull-only
   - Acceptance criteria:
-    - A documented PowerShell command validates Docker Desktop Linux-container mode, Compose, canonical config, source-build startup, and bounded health checks.
-    - Failures distinguish Docker-not-running/permission problems from repository defects.
-    - Focused parser and behavior tests pass.
+    - One canonical asset manifest/staging helper builds the launcher layout used by archives and Linux packages.
+    - Installed-root discovery is explicit and works outside a source checkout and from paths containing spaces.
+    - Compose uses a published, version-matched OME config image in pull mode; release automation publishes/scans multi-architecture output.
+    - Every Compose bind mount and render dependency required by the release-shaped stack is present without source files.
   - Check:
-    - Added `scripts/verify-windows-docker.ps1`; its lightweight path proved Docker Desktop 4.82.0, Linux/amd64 engine 29.6.1, Compose 5.3.0, `desktop-linux`, and canonical config rendering.
-    - The `-Start` path uses an isolated temporary evaluation env, delegates startup to the canonical CLI, and passed migrations, all critical service health checks, admin bootstrap, and `200` responses for `/healthz`, `/readyz`, `/viewer`, and `/admin` on this Windows host.
-    - Real execution exposed and fixed two PowerShell wrapper defects: case-insensitive `Path`/`PATH` handling hid Docker from the CLI, and offline Go build variables leaked into Docker build args. The wrapper now compiles the CLI under isolated Go settings, restores the operator environment, and then runs it.
-    - Aligned quickstart/env/Compose validation with the documented inline `BITRIVER_LIVE_MODE=development` override while keeping the saved env required to remain production mode.
-    - PowerShell parsing, validate-only execution, focused `cmd/bitriver` and `scripts` Go tests under Go 1.26.5, workflow static contracts, and `git diff --check` passed.
+    - Added `deploy/install/release-assets.txt` plus `scripts/stage-release-assets.sh`; both release binary archives and launcher/package jobs now consume the same source-free asset set.
+    - Staging passed in a Linux container with an output path containing spaces and included Compose/env, all migrations, the canonical migration runner, SRS/OME render inputs, Nginx config, installer/systemd assets, scripts, and operator docs.
+    - Packaged root discovery now honors `BITRIVER_ROOT` and launcher/package layouts outside a Go checkout; focused CLI and wrapper tests passed with Go 1.26.5.
+    - Compose now pulls `ghcr.io/bitriver-live/bitriver-ome-config` by release tag/digest; GHCR preflight and required production digest validation include it.
+    - Release automation now publishes the OME helper for amd64/arm64 and emits Linux amd64/arm64 CLI, launcher, `.deb`, and `.rpm` artifacts. Compose config, release workflow tests, shell syntax, and `git diff --check` passed.
 
-- [x] Task 3 - Prove the running product and prepare safe demo state
+- [x] Task 3 - Add the Ubuntu host installer and safe lifecycle commands
   - Acceptance criteria:
-    - Canonical Compose boots from this Windows source checkout and core HTTP endpoints pass.
-    - Any screenshot data is deterministic, non-sensitive, and created through supported interfaces.
-    - The canonical SRS callback routes bypass browser-session middleware but still require the independent shared hook token, and a synthetic RTMP publish no longer fails at `on_connect`.
-    - OME evidence is described at the level actually exercised, including LL-HLS CORS, the same-origin `/live/` route, and browser playback rather than process health alone.
+    - Installer supports archive and package layouts, separates assets/config/data, creates a bounded systemd unit, and never starts with sample credentials.
+    - Install is rerunnable; status/log/upgrade commands are actionable; non-root operation uses explicit sudo boundaries.
+    - Uninstall disables/removes program integration while retaining config/data by default; destructive purge requires an explicit flag and warning.
+    - OME failure leaves the unit failed with redacted service diagnostics and retry commands.
   - Check:
-    - The canonical Windows proof completed migrations, started the source-built Compose stack, reported every critical service healthy, bootstrapped an administrator, and returned `200` from `/healthz`, `/readyz`, `/viewer`, and `/admin`.
-    - Created a local-only channel through supported authenticated interfaces, published a synthetic audio/video RTMP source through SRS, and fixed the callback, dynamic-forward, static OME application, transcoder job, and public playback contracts exposed by that run.
-    - Verified all three transcoder manifests (`1080p`, `720p`, and `480p`) returned `200`; verified OME LL-HLS returned `Access-Control-Allow-Origin: *`; and decoded five seconds of video and audio from the same-origin `/live/<channel>/llhls.m3u8` route with FFmpeg.
-    - Added focused callback-auth, orchestration, OME application, transcoder recovery, proxy, CSP, and player-selection tests. The controlled browser backend blocked `.m3u8` requests with `ERR_BLOCKED_BY_CLIENT` before they reached the application, so automated visual playback is not claimed; the direct decode and hls.js path are the bounded evidence.
+    - Added `deploy/install/compose-host.sh` with install/upgrade/configure/activate/doctor/status/logs/uninstall commands and a 15-minute bounded systemd unit.
+    - Program assets stage under `/opt/bitriver-live`; root-owned source assets are separated from `/etc/bitriver-live` configuration and `/var/lib/bitriver-live` application/transcoder data through explicit symlinks.
+    - First install runs non-interactive env initialization to rotate sample credentials but leaves the service disabled until the guided wizard, doctor, production env validation, Docker access, and bounded quickstart pass.
+    - Activation failure reports systemd plus Compose status and exact targeted OME/retry commands without automatically dumping credential-bearing environment or raw logs.
+    - The isolated lifecycle test passed twice from a source path and target path containing spaces; configuration survived the rerun, ordinary uninstall retained config/data, unconfirmed purge failed, and confirmed purge removed them.
 
-- [x] Task 4 - Capture real product screenshots and remove concept art
+- [x] Task 4 - Add artifact-only and package lifecycle evidence
   - Acceptance criteria:
-    - A small screenshot set is captured from the live application at a stable desktop viewport and visually inspected; responsive behavior is inspected separately.
-    - Images contain no secrets, broken states, browser chrome, or private host details.
-    - The old banner is removed from the README and repository if no longer referenced.
+    - Tests assemble and execute the bundle outside the checkout in a path containing spaces.
+    - Tests cover complete contents, rerunnable install, configuration gate, systemd/service shape, restart behavior, upgrade staging, safe uninstall, and explicit purge.
+    - `.deb`/`.rpm` payload generation and canonical asset parity are checked for amd64/arm64 inputs.
+    - Relevant focused checks pass before documentation work proceeds.
   - Check:
-    - Captured the running viewer home and live directory without browser chrome at a stable desktop viewport, then visually inspected both files and the responsive route state.
-    - Confirmed the images contain only intentional local demo content and no credentials, private hosts, error states, or operator-only details.
-    - Added the two product screenshots under `docs/assets/screenshots/`, replaced README concept art with those images, and removed the unreferenced 2.4 MB banner from the repository.
+    - `scripts/test-release-bundle.sh` staged the canonical payload outside the checkout in a path containing spaces, verified manifest parity, and rejected generated credential-bearing OME/SRS files.
+    - `scripts/test-compose-host-installer.sh` covered rerunnable install, rotated configuration, rendered systemd shape, upgrade-safe state retention, ordinary uninstall, rejected purge, and confirmed purge without touching the host.
+    - `scripts/test-linux-packages.sh` used nFPM v2.47.0 to build and inspect amd64/arm64 `.deb` and `.rpm` payloads from the staged release bundle.
+    - Real package generation exposed and fixed unsupported nFPM template syntax and an extra asset-directory nesting level; package paths now resolve to `/usr/local/share/bitriver-live/deploy/...`.
 
-- [x] Task 5 - Rewrite README and Windows quickstart guidance
+- [x] Task 5 - Document Ubuntu/XOA/Nginx Proxy Manager installation and support boundaries
   - Acceptance criteria:
-    - README leads with the real product, shows accurate operator/viewer workflows, and gives a copyable native PowerShell path.
-    - Current source-checkout availability is clearly separated from planned tagged installers/packages.
-    - Ubuntu/XOA/Nginx Proxy Manager and OME production gates remain accurate and linked to deeper docs.
-    - Production validation treats OME's server IP as a container-local listener and does not require the VM's public address inside the container.
+    - README, quickstart, Ubuntu install guide, deployment contract, release notes, and production release guide describe the artifact-only path.
+    - VM sizing, Docker/Compose setup, non-root/sudo workflow, boot recovery, firewall/NAT ports, WebSockets, trusted proxies, TLS, backup/upgrade/uninstall, and diagnostics are explicit.
+    - Ubuntu 24.04 amd64 is the only production claim unless additional direct evidence passes; real ingest/playback and OME restart remain assigned to #1300/#1304.
   - Check:
-    - Replaced the README with an evidence-led product/operator narrative using the two real application screenshots, an accurate media-flow diagram, source-checkout quickstarts, native Windows proof, first-stream workflow, support boundary, and operational acceptance gate.
-    - Removed dead package/installer download instructions from the quickstart and replaced the Ubuntu guide with the current Ubuntu 24.04 source-build path for XOA/NPM home hosting; added explicit same-origin `/live/`, `/hls/`, websocket, firewall, RTMP/TCP, backup, reboot, and recovery guidance.
-    - Corrected contract, lifecycle, failure-model, and advanced-deployment docs to reflect authenticated SRS callbacks/forwarding, static OME `default/live` validation, LL-HLS CORS, and public/private URL boundaries.
-    - Fixed the production OME listener validator discovered during documentation: `BITRIVER_OME_BIND`/`BITRIVER_OME_IP` may remain wildcard inside Docker, while public LL-HLS, RTMP, transcoder, and viewer URLs remain strict. Focused `cmd/bitriver` and `internal/ingest` tests passed.
-    - Generated contract index, installer-language guard, README image existence checks, and `git diff --check` passed.
+    - Replaced the stale native Ubuntu service guide with the artifact-only Compose host path for Ubuntu 24.04 amd64, including XOA VM sizing, Docker/Compose prerequisites, archive/package checksums, two-phase activation, paths, backup, upgrade, uninstall, and reboot evidence.
+    - Documented NPM app/media proxy hosts, WebSockets, exact trusted-proxy CIDR, TLS/public URL values, and the direct RTMP/WebRTC firewall/NAT boundary that an HTTP reverse proxy cannot satisfy.
+    - README, quickstart, deployment contract, release guide/notes, deploy map, testing, upgrades, and the NPM/Cloudflare guide now agree on the release asset and systemd lifecycle.
+    - OME language explicitly requires authenticated control plus real ingest/playback/recovery against the tagged VM; an unauthenticated root health probe is not release approval.
+    - Generated contract environment index and installer-language consistency checks passed.
 
-- [-] Task 6 - Run release-quality validation and publish separately
+- [x] Task 6 - Run full verification and prepare publication evidence
   - Acceptance criteria:
-    - Focused Windows/runtime/viewer/docs checks and `./scripts/verify.sh --viewer` pass or exact blockers are recorded.
-    - Diff and staged-file review exclude `.env`, credentials, runtime output, and unrelated untracked helpers.
-    - Work is committed and proposed separately from PR #1325 with remote CI status reported accurately.
+    - Full repository verification, release/package tests, Compose rendering, and quickstart smoke pass or exact environment blockers are recorded.
+    - Diff review excludes credentials, generated runtime output, and unrelated deployment helpers/data.
+    - Final task evidence distinguishes implementation proof from tagged-release VM reboot and playback evidence.
   - Check:
-    - The first full gate exposed a Windows junction-fallback defect: the transcoder depended on `cmd.exe` being discoverable through `PATH`, while the release gate intentionally narrows `PATH`. It now resolves the interpreter through `ComSpec`/`SystemRoot`; the interpreter-selection and complete job lifecycle/health regressions pass under that narrowed environment.
-    - Final `./scripts/verify.sh --viewer` passed all Go packages, architecture/dependency/contract checks, the Postgres migration lifecycle, Compose rendering, clean quickstart smoke, viewer lint, and 25 Jest suites / 215 tests / 4 snapshots.
-    - Final `.\scripts\verify-windows-docker.ps1 -Start` passed on Docker Desktop 4.82.0 with Linux/amd64 engine 29.6.1 and Compose 5.3.0; migrations, critical service health, admin bootstrap, and `200` responses from `/healthz`, `/readyz`, `/viewer`, and `/admin` all passed. Its printed cleanup command was executed successfully.
-    - The staged audit included 64 intended files with no root `.env`, runtime data, unrelated deployment helpers, or detected secret patterns; `git diff --cached --check` passed and the generated OME config retained its placeholder token.
-    - Committed and pushed on `feat/windows-docker-readme`; opened draft PR [#1326](https://github.com/ProhibitedTV/BitRiver-Live/pull/1326) against `main`, separate from Ubuntu installer PR #1325.
-    - Remote CI exposed a missing-fixture failure before the vulnerability scan ran: the inline `.ci.env` did not include the two new required public media URLs, so the dependent Ubuntu gate failed and its remaining jobs skipped. Workflow-fixture repair and final remote revalidation are in progress.
+    - Literal `./scripts/verify.sh` passed in the pinned Go 1.26.5 plus Python container, including release-bundle, installer-lifecycle, all first-party Go package, architecture, models-import, dependency-source, contract-invariant, and generated-contract checks. Docker and viewer phases reported explicit container-tooling skips.
+    - The verification entrypoint now disables VCS stamping and bounds default Go/filesystem traversal to first-party Go roots; focused regression tests prevent the Windows-mounted-workspace livelocks exposed by this final run.
+    - `scripts/test-postgres-migrations.sh` passed the real PostgreSQL migration lifecycle. `scripts/test-quickstart.sh` then rebuilt the release-shaped stack and passed OME helper rendering/validation, OME health-token preflight, service health, migrations, API health, and retried viewer health.
+    - `scripts/test-linux-packages.sh` generated and inspected amd64/arm64 `.deb` and `.rpm` payloads with nFPM v2.47.0. Compose rendering, YAML parsing, PowerShell parsing, shell syntax, installer-language consistency, and `git diff --check` also passed.
+    - Post-smoke `docker compose --env-file .env -f deploy/docker-compose.yml ps --all` returned an empty service table; generated OME/SRS config and root `.env` have no diff.
+    - GitHub authentication was restored; commit `c3dd9c65` was pushed and draft PR #1325 opened without closing #1297. The first CI pass caught ShellCheck SC2016 in two intentional literal workflow assertions; escaped fixed-string patterns now preserve the contract without suppressions, and Linux `bash -n` plus `scripts/test-release-bundle.sh` pass locally.
+    - The repaired CI run then exposed a stale `bitriver-live/ome-config:local` Trivy target duplicated in `ci.yml`, even though Compose built `ghcr.io/bitriver-live/bitriver-ome-config:ci`. Both scan workflows now select exactly one OME helper from the collected Compose image list; YAML parsing, CI contract validation, rendered image selection, and the focused Go 1.26.5 regression test pass.
+    - The next image scan passed, but the Ubuntu gate exposed `compose pull --ignore-buildable` contacting GHCR for the non-buildable `ome-health-token-check` sibling after its shared helper image had already been built locally. Quickstart now enumerates rendered image references, retains locally inspectable images, and pulls only genuinely absent images.
+    - Linux syntax and the focused Go 1.26.5 quickstart regression passed. A full host smoke then reused the local OME helper, passed OME render/token/process health, migrations, API health, and viewer retry, and cleaned down to an empty Compose project.
+    - Final CI run 29628820507 passed on implementation head `de869492`: Ubuntu test-all, image vulnerability scan, ShellCheck, docs/workflow consistency, committed-secret guard, viewer integration, Windows/macOS Go tests, and Ubuntu/macOS/Windows entrypoint checks are green.
+    - Draft PR #1325 remains unmerged. No production-release claim is permitted until the external release gates below pass.
+    - Unrelated deployment helpers/data remain untracked and are explicitly excluded from the intended change set; the temporary `.gomodcache/` was removed after verification.
+    - Tagged Ubuntu/XOA reboot, authenticated OME control-plane, and real ingest/playback acceptance remain external release evidence owned by #1297/#1300/#1304 and are not claimed by this local candidate.
+
+- [x] Task 7 - Reconcile the installer candidate with current main
+  - Acceptance criteria:
+    - PR #1326's merged SRS/OME/transcoder/public media URL and Windows documentation contracts remain intact.
+    - Ubuntu release assets, OME helper publication, package/systemd lifecycle, and pull-only behavior remain intact.
+    - README and quickstart distinguish implemented future release paths from downloads that do not exist before the first tag.
+    - Focused contract tests, release-bundle/installer checks, Compose rendering, full verification, and remote PR gates pass on the reconciled head.
+  - Check:
+    - Read-only merge analysis identified overlapping release workflows, Compose/env validation, quickstart smoke, and operator documentation; `PLAN.md` now records the reconciliation rules and validation plan.
+    - Current `main` is `0f557e81`; PR #1325 remains draft at `5d2f3d11`, with its historical CI green but its head non-mergeable until this reconciliation is complete.
+    - Merged current `main` locally without rewriting the published branch. The runtime/workflow changes combined automatically; eight planning/operator-doc conflicts were resolved to preserve the installer lifecycle, the verified media path, and the pre-tag availability boundary.
+    - In `golang:1.26.5-bookworm`, shell syntax, focused `./cmd/bitriver` and `./scripts` tests, the source-free release bundle, and the isolated Compose-host installer lifecycle all passed.
+    - The pinned nFPM v2.47.0 acceptance rebuilt and inspected amd64/arm64 `.deb` and `.rpm` payloads from the reconciled canonical release bundle.
+    - Literal `./scripts/verify.sh` passed in the pinned Go 1.26.5 plus Python Linux environment: release bundle, installer lifecycle, all first-party Go packages, architecture/dependency, CI contract, env hygiene, and generated-contract checks were green. Docker and viewer phases were explicitly skipped inside that tool-only container and are validated separately below.
+    - Viewer lint, all 25 Jest suites / 215 tests / 4 snapshots, and the Next.js 16.2.10 production build passed on the reconciled dependency baseline.
+    - The first live quickstart attempt exposed a backward-compatibility defect before container startup: when the smoke reused the operator's older root `.env`, Compose could not interpolate `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`. The plan now requires smoke-only public media defaults plus a regression for pre-existing env files.
+    - The second smoke reached clean image builds and exposed an upstream dependency regression already merged to `main`: `typescript@7.0.2` violates the latest `ts-jest@29.4.12` peer range (`typescript >=4.3 <7`), so Docker's clean `npm ci` fails. The release plan now restores the last proven TypeScript 6.0.3 pin instead of bypassing peer validation.
+    - After the TypeScript repair, the clean image build passed but identified peer overrides from ESLint 10 and a Node 26 type package against the declared Node 24 runtime. The reconciled release baseline now restores ESLint 9.39.5 and `@types/node` 24.13.3 as well.
+    - The official npm advisory audit classified the remaining three high findings as production dependencies through Next 16.2.10; npm identifies the aligned 16.2.11 patch as the non-major fix for Next, PostCSS, and Sharp.
+    - Next 16.2.11 removes the direct Next advisories but still pins vulnerable PostCSS 8.4.31 and Sharp 0.34.x. Because no newer stable Next exists and the viewer disables Next image optimization, the plan now requires explicit fixed-version overrides plus clean audit/build/boot evidence.
+    - The successful Compose build also showed a roughly 200 MB root build context traced to the user's untracked `deploy/transcoder-data/`; the release boundary now requires that runtime media directory to be ignored by Docker.
+    - The aligned Node 24 / TypeScript 6 / ESLint 9 baseline plus Next 16.2.11 and the fixed PostCSS/Sharp overrides passed an isolated clean `npm ci`, lint, 25 Jest suites / 215 tests / 4 snapshots, production build, and `npm audit --omit=dev --audit-level=high` with zero vulnerabilities.
+    - The rebuilt canonical quickstart passed OME helper render/validation, all image builds, migration completion, critical service health including OME, API health, and viewer reachability; cleanup left an empty Compose project and restored generated configuration.
+    - Adding `deploy/transcoder-data/` to the root `.dockerignore` reduced the helper rebuild context transfer from roughly 200 MB to 37 kB and kept the user's local media outside the builder.
+    - Reconciled CI run 30101348208 passed the unified Ubuntu gate, viewer CI/audit, Windows/macOS Go tests, entrypoint checks, docs, ShellCheck, and secret guard. Its sole failure was the blocking viewer image scan: the Node 24 Alpine base supplied global npm with `tar@7.5.15` (CVE-2026-59873), while the application tree was clean.
+    - The production viewer stage now removes unused npm/npx runtime payloads while retaining them in build stages. The focused runtime-baseline test passed; the rebuilt image retained Node 24, omitted npm/npx, and served `/viewer` with HTTP 200.
+    - Final reconciled CI run 30102433565 passed on head `e3f96cb5`, including the unified Ubuntu gate, first-party blocking image scan, viewer integration/build/audit, cross-platform Go, quickstart entrypoint matrix, and all secret/docs/shell/workflow guards. PR #1325 is mergeable and Task 7 is complete.
+
+### Execution log
+- Task 1 analysis:
+  - Confirmed #1297 requires artifact-only install/restart/reboot/status/log/upgrade/uninstall behavior and an explicit Ubuntu/Debian/ARM64 support matrix.
+  - Selected Ubuntu 24.04 amd64 as the first production target; Debian 12 and Linux arm64 remain provisional despite current cross-build/package jobs.
+  - Selected `/opt/bitriver-live`, `/etc/bitriver-live`, and `/var/lib/bitriver-live` as separate program/config/data boundaries with data-preserving uninstall.
+  - Identified local-only OME config image publication and packaged-root discovery as prerequisites to any truthful clean-host success claim.
+- Task 2 implementation:
+  - Replaced release-workflow copy fragments with a canonical manifest-driven asset staging step shared by binary archives and launcher/package payloads.
+  - Added explicit installed asset-root resolution so the Go renderer, Compose defaults, doctor, migrations, and release commands resolve the release bundle rather than the invoking shell's directory.
+  - Converted the OME helper from a local-only image name to a tagged/digest-pinnable GHCR contract and added it to multi-architecture publication plus vulnerability scanning.
+  - Expanded launcher/package builds to Linux arm64 without declaring support until clean-host evidence passes.
+- Task 3 implementation:
+  - Added a release-layout-aware host manager and systemd unit rather than extending the historical native API-only installer.
+  - Made package/archive installation safe-by-default: sample secrets are rotated, but no service is enabled before production network values and Docker prerequisites validate.
+  - Kept immutable source/package payloads separate from the installed runtime workspace and operator-owned configuration/data so upgrades and package removal cannot silently erase state.
+  - Added explicit OME failure/retry guidance while reserving real playback and restart acceptance for #1300/#1304.
+- Task 4 verification:
+  - Added permanent release-bundle, installer-lifecycle, and opt-in real Linux package acceptance scripts.
+  - Added container package-install/remove acceptance to the release workflow for Ubuntu 24.04, Debian 12, and Rocky Linux 9 while keeping the production support claim limited to Ubuntu 24.04 amd64.
+  - Proved nFPM emits all four Linux package variants and that the package payload is sourced from the same asset manifest as release archives.
+- Task 5 documentation:
+  - Established Ubuntu 24.04 amd64 as the production installation target while keeping Debian/RPM/arm64 claims provisional pending tagged clean-host evidence.
+  - Added a concrete XOA plus Nginx Proxy Manager runbook that separates HTTP reverse proxying from RTMP/WebRTC L4 and UDP exposure.
+  - Added clean-host/reboot evidence requirements to the production release gate and v1.2.3 draft notes instead of treating container health as end-to-end media proof.
+- Task 6 verification/publication:
+  - Passed literal repository verification in the pinned Go 1.26.5 environment, real PostgreSQL migration acceptance, real nFPM package generation, and a rebuilt Compose quickstart smoke through OME/API/viewer health; confirmed clean teardown afterward.
+  - Hardened verification against implicit VCS stamping and unbounded mounted-workspace traversal after the complete gate exposed both portability defects.
+  - Published the local candidate as draft PR #1325. The initial CI run's sole early failure was ShellCheck SC2016 on intentional literal variables; corrected it with escaped fixed-string assertions and passed the focused Linux syntax/bundle checks before republishing.
+  - The next vulnerability job found the main CI workflow still scanned the retired local OME helper tag. Unified both scan workflows around the image rendered by Compose and added a regression guard against missing, ambiguous, or legacy targets.
+  - After the image gate passed, the Ubuntu gate found quickstart's blanket non-buildable pull tried to fetch the locally built helper through its health-token sibling. Switched to local-first rendered-image inspection and passed the full host smoke plus clean teardown.
+  - Completed the local/publication task with required PR CI green. Kept PR #1325 draft and #1297 open because tagged XOA/reboot/media-path evidence necessarily remains pending.

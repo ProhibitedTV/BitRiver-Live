@@ -19,6 +19,8 @@ If you are evaluating the project, start here. If you are preparing a production
 
 There is no published GitHub Release, `.deb`, `.rpm`, Homebrew formula, or Windows installer at this time. Packaging code in the repository is development work, not an available download path.
 
+Once a tag actually publishes the matching images and checksummed assets, Ubuntu 24.04 amd64 operators can use the boot-managed archive or `.deb` path documented in [`installing-on-ubuntu.md`](installing-on-ubuntu.md). Until then, use the source-checkout path above; do not substitute guessed `releases/latest` URLs.
+
 The control centre's browser-based Home Server Installer now mirrors the Ubuntu helper with a seven-step flow: Welcome, System Check, Install Mode, Core Settings, Review, Installing, and Success. Quick Install is the default path, while Advanced Install opens the lower-level storage, network, and service controls only when you explicitly ask for them.
 
 ## Shared backend pipeline

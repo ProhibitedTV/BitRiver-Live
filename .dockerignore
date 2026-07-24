@@ -32,5 +32,6 @@ scripts/*
 !scripts/check-postgres-pgx.sh
 docs/
 deploy/data/
+deploy/transcoder-data/
 deploy/ome/
 deploy/srs/

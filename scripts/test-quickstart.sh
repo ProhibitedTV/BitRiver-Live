@@ -29,6 +29,9 @@ export BITRIVER_LIVE_IMAGE_DIGEST=""
 export BITRIVER_VIEWER_IMAGE_DIGEST=""
 export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
 export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
+export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-rtmp://localhost:1935/live}"
+export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"
+export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"
 
 if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
   COMPOSE_SMOKE_OVERRIDE="$(mktemp)"
@@ -354,8 +357,21 @@ PY
 echo "Building local docker compose images..."
 docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
 
-echo "Pulling missing third-party runtime images..."
-docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore-buildable --policy missing
+echo "Pulling missing runtime images..."
+mapfile -t runtime_images < <(
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" config --images | sort -u
+)
+for image in "${runtime_images[@]}"; do
+  if [[ -z "$image" ]]; then
+    continue
+  fi
+  if docker image inspect "$image" >/dev/null 2>&1; then
+    echo "Using local runtime image: $image"
+    continue
+  fi
+  echo "Pulling missing runtime image: $image"
+  docker pull "$image"
+done
 
 dump_compose_diagnostics() {
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true

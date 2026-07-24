@@ -54,6 +54,16 @@ func repoRoot() string {
 	if cachedRepoRoot != "" {
 		return cachedRepoRoot
 	}
+	if root := strings.TrimSpace(os.Getenv("BITRIVER_ROOT")); root != "" {
+		if hasInstalledDeployAssets(root) {
+			cachedRepoRoot = root
+			return cachedRepoRoot
+		}
+	}
+	if root := installedRootFromExecutable(); root != "" {
+		cachedRepoRoot = root
+		return cachedRepoRoot
+	}
 
 	dir, err := os.Getwd()
 	if err != nil {
@@ -74,6 +84,42 @@ func repoRoot() string {
 		}
 		current = parent
 	}
+}
+
+func hasInstalledDeployAssets(root string) bool {
+	required := []string{
+		filepath.Join(root, "deploy", "docker-compose.yml"),
+		filepath.Join(root, "deploy", ".env.example"),
+		filepath.Join(root, "deploy", "ome", "Server.xml"),
+	}
+	for _, path := range required {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+func installedRootFromExecutable() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	executable, err = filepath.EvalSymlinks(executable)
+	if err != nil {
+		return ""
+	}
+	binDir := filepath.Dir(executable)
+	candidates := []string{
+		filepath.Clean(filepath.Join(binDir, "..", "share", "bitriver-live")),
+		filepath.Clean(filepath.Join(binDir, "..")),
+	}
+	for _, candidate := range candidates {
+		if hasInstalledDeployAssets(candidate) {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // defaultEnvFile returns the default env file for the current runtime mode.
@@ -987,19 +1033,24 @@ func runPullImagePreflight(envValues map[string]string) error {
 
 func requiredGHCRImageRefs(values map[string]string) ([]string, error) {
 	refs := []struct {
-		name      string
-		tagKey    string
-		digestKey string
+		name           string
+		tagKey         string
+		fallbackTagKey string
+		digestKey      string
 	}{
 		{name: "ghcr.io/bitriver-live/bitriver-live", tagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_LIVE_IMAGE_DIGEST"},
 		{name: "ghcr.io/bitriver-live/bitriver-viewer", tagKey: "BITRIVER_VIEWER_IMAGE_TAG", digestKey: "BITRIVER_VIEWER_IMAGE_DIGEST"},
 		{name: "ghcr.io/bitriver-live/bitriver-srs-controller", tagKey: "BITRIVER_SRS_CONTROLLER_IMAGE_TAG", digestKey: "BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST"},
 		{name: "ghcr.io/bitriver-live/bitriver-transcoder", tagKey: "BITRIVER_TRANSCODER_IMAGE_TAG", digestKey: "BITRIVER_TRANSCODER_IMAGE_DIGEST"},
+		{name: "ghcr.io/bitriver-live/bitriver-ome-config", tagKey: "BITRIVER_OME_CONFIG_IMAGE_TAG", fallbackTagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_OME_CONFIG_IMAGE_DIGEST"},
 	}
 
 	resolved := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		tag := strings.TrimSpace(values[ref.tagKey])
+		if tag == "" && ref.fallbackTagKey != "" {
+			tag = strings.TrimSpace(values[ref.fallbackTagKey])
+		}
 		if tag == "" {
 			return nil, fmt.Errorf("GHCR preflight requires %s to be set", ref.tagKey)
 		}
@@ -1079,6 +1130,7 @@ func validatePinnedGHCRImageDigests(values map[string]string) error {
 		"BITRIVER_VIEWER_IMAGE_DIGEST",
 		"BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST",
 		"BITRIVER_TRANSCODER_IMAGE_DIGEST",
+		"BITRIVER_OME_CONFIG_IMAGE_DIGEST",
 	}
 
 	missing := make([]string, 0, len(refs))

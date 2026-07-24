@@ -6,6 +6,8 @@ The supported baseline is one operator-managed Linux host—or Docker Desktop us
 
 > **Release status:** install from a source checkout today. This repository does not currently publish a GitHub Release, Ubuntu package, or downloadable installer. The release workflows and Ubuntu installer work are being hardened, but this README will not point at artifacts that do not exist.
 
+The repository includes the candidate Ubuntu package, archive, and systemd lifecycle implementation so it can be exercised before the first tag. Those paths become downloadable only after a release publishes matching images, checksums, and assets.
+
 ![BitRiver Live viewer home showing one live channel](docs/assets/screenshots/viewer-home.png)
 
 _The shipped Next.js viewer, captured from the canonical Compose stack on Docker Desktop for Windows. The account and channel are local demo data; no mockup or concept art is used._
@@ -213,6 +215,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/testing.md`](docs/testing.md),
 - [Stream lifecycle](docs/stream-lifecycle.md)
 - [Operations](docs/operations.md)
 - [Single-host production baseline](docs/production-single-host.md)
+- [Ubuntu/XOA artifact installation target](docs/installing-on-ubuntu.md)
 - [Nginx Proxy Manager / Cloudflare](docs/reverse-proxy-npm-cloudflare.md)
 - [Security](docs/security.md)
 - [Release gates](docs/release-gates.md)

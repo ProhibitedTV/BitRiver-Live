@@ -17,14 +17,15 @@ Prerequisites:
 Options:
   --viewer  Force viewer lint/test checks even when no viewer changes are detected.
   --ci-viewer  In CI, force viewer lint/test checks for non-viewer workflows.
-  --go-packages  Optional Go package pattern for targeted tests (default: ./...).
+  --go-packages  Optional single Go package pattern for targeted tests.
+                 Default: ./cmd/... ./internal/... ./scripts/... ./web
   -h, --help  Show this help.
 USAGE
 }
 
 force_viewer_checks=false
 force_ci_viewer_checks=false
-go_test_packages="./..."
+go_test_packages=("./cmd/..." "./internal/..." "./scripts/..." "./web")
 
 while (($# > 0)); do
   case "$1" in
@@ -41,7 +42,7 @@ while (($# > 0)); do
         usage >&2
         exit 1
       fi
-      go_test_packages="$1"
+      go_test_packages=("$1")
       ;;
     -h|--help)
       usage
@@ -234,10 +235,21 @@ fi
 run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 run_step "CI workflow contract check" ./scripts/check-ci-contract.sh
 run_step "Env example placeholder hygiene" ./scripts/check-env-example-placeholders.sh
+run_step "Release bundle contents" bash ./scripts/test-release-bundle.sh
+if [[ "$(uname -s)" == "Linux" ]]; then
+  run_step "Compose host installer lifecycle" bash ./scripts/test-compose-host-installer.sh
+else
+  echo
+  echo "==> Compose host installer lifecycle"
+  echo "Skipping: Linux filesystem ownership and symlink semantics are required."
+fi
 
 require_tool "go" "Install Go to run repository Go tests."
+verify_go_flags=${GOFLAGS:-}
+verify_go_flags="${verify_go_flags:+$verify_go_flags }-buildvcs=false"
 run_step "Go tests" \
-  env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test "$go_test_packages" -count=1 -timeout=120s
+  env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOFLAGS="$verify_go_flags" \
+  go test "${go_test_packages[@]}" -count=1 -timeout=120s
 
 run_step "Architecture dependency direction check" ./scripts/check-architecture-deps.sh
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh

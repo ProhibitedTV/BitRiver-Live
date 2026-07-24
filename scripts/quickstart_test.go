@@ -464,6 +464,30 @@ func TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort(t *testing.T) {
 	}
 }
 
+func TestQuickstartSmokeSuppliesPublicMediaDefaultsForExistingEnv(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "test-quickstart.sh"))
+	if err != nil {
+		t.Fatalf("read test-quickstart: %v", err)
+	}
+
+	script := string(content)
+	for _, required := range []string{
+		`export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-rtmp://localhost:1935/live}"`,
+		`export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"`,
+		`export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("quickstart smoke must supply missing public media value %q when reusing an existing env", required)
+		}
+	}
+}
+
 func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

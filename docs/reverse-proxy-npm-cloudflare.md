@@ -137,7 +137,7 @@ OME manager route can read `default/live` before changing proxy rules.
 
 ## Related docs
 
-- [Ubuntu source-checkout deployment](installing-on-ubuntu.md)
+- [Ubuntu/XOA artifact installation target](installing-on-ubuntu.md)
 - [Single-host production baseline](production-single-host.md)
 - [Deployment contract](contract.md)
 - [Security](security.md)

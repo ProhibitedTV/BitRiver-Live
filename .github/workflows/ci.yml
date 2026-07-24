@@ -392,6 +392,7 @@ jobs:
           BITRIVER_VIEWER_IMAGE_TAG=ci
           BITRIVER_SRS_CONTROLLER_IMAGE_TAG=ci
           BITRIVER_TRANSCODER_IMAGE_TAG=ci
+          BITRIVER_OME_CONFIG_IMAGE_TAG=ci
           BITRIVER_SRS_IMAGE_TAG=v5.0.185
           BITRIVER_OME_IMAGE_TAG=0.16.0
           BITRIVER_LIVE_ADMIN_EMAIL=ci@example.com
@@ -438,7 +439,12 @@ jobs:
 
       - name: Verify ome-config has no OS-package CVEs
         run: |
-          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress bitriver-live/ome-config:local
+          mapfile -t ome_config_images < <(grep -E '^ghcr\.io/bitriver-live/bitriver-ome-config:' /tmp/compose-images.txt)
+          if ((${#ome_config_images[@]} != 1)); then
+            printf 'Expected exactly one Compose ome-config image, found %d\n' "${#ome_config_images[@]}" >&2
+            exit 1
+          fi
+          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress "${ome_config_images[0]}"
 
       - name: Scan first-party images for critical vulnerabilities (blocking)
         run: |

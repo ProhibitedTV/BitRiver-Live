@@ -343,7 +343,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-direct}
         GOSUMDB: ${GOSUMDB:-off}
-    image: bitriver-live/ome-config:local
+    image: ghcr.io/bitriver-live/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     working_dir: /workspace
     command: ["ome", "render", "--env-file", "/workspace/.env", "--force"]
     volumes:
@@ -359,7 +359,7 @@ services:
       - internal
 
   ome-health-token-check:
-    image: bitriver-live/ome-config:local
+    image: ghcr.io/bitriver-live/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     container_name: bitriver-ome-health-token-check
     working_dir: /workspace
     command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/workspace/deploy/ome/Server.generated.xml"]

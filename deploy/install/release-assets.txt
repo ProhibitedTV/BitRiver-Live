@@ -1,0 +1,27 @@
+# Canonical source-relative runtime assets copied into release archives/packages.
+# Keep paths slash-separated and free of generated deployment credentials.
+LICENSE
+README.md
+deploy/.env.example
+deploy/check-env.sh
+deploy/docker-compose.yml
+deploy/docker-compose.limits.yml
+deploy/docker-compose.tls.yml
+deploy/install
+deploy/installers/bitriver-live.desktop
+deploy/migrations
+deploy/nginx
+deploy/ome/Server.xml
+deploy/postgres-migrate.sh
+deploy/srs/conf/srs.conf
+deploy/systemd
+docs/contract.md
+docs/installing-on-ubuntu.md
+docs/operations.md
+docs/production-release.md
+docs/quickstart.md
+docs/reverse-proxy-npm-cloudflare.md
+docs/upgrades.md
+scripts/render-srs-config.sh
+scripts/bitriver-live-wrapper.sh
+scripts/stage-release-assets.sh

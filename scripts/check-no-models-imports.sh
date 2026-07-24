@@ -25,9 +25,15 @@ is_allowlisted() {
 }
 
 go_files=()
+GO_ROOTS=(cmd internal scripts web)
 while IFS= read -r file; do
   go_files+=("${file#./}")
-done < <(find . -type f -name '*.go' | LC_ALL=C sort)
+done < <(
+  {
+    find . -maxdepth 1 -type f -name '*.go'
+    find "${GO_ROOTS[@]}" -type f -name '*.go'
+  } | LC_ALL=C sort
+)
 
 if ((${#go_files[@]} == 0)); then
   echo "No Go files to check."

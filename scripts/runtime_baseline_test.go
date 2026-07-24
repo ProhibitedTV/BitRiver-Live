@@ -55,6 +55,48 @@ func TestGoRuntimeBaselineIsAligned(t *testing.T) {
 	}
 }
 
+func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	for _, path := range []string{
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".github", "workflows", "image-scan.yml"),
+	} {
+		workflow := readRepoFile(t, repoRoot, path)
+		if strings.Contains(workflow, "bitriver-live/ome-config:local") {
+			t.Errorf("%s must not scan the retired local-only OME helper tag", path)
+		}
+		for _, required := range []string{
+			"BITRIVER_OME_CONFIG_IMAGE_TAG=ci",
+			"mapfile -t ome_config_images",
+			"grep -E '^ghcr\\.io/bitriver-live/bitriver-ome-config:' /tmp/compose-images.txt",
+			"((${#ome_config_images[@]} != 1))",
+			`"${ome_config_images[0]}"`,
+		} {
+			if !strings.Contains(workflow, required) {
+				t.Errorf("%s missing Compose-derived OME scan invariant %q", path, required)
+			}
+		}
+	}
+}
+
+func TestQuickstartPullsOnlyMissingRenderedImages(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	quickstart := readRepoFile(t, repoRoot, filepath.Join("scripts", "test-quickstart.sh"))
+	if strings.Contains(quickstart, "pull --ignore-buildable --policy missing") {
+		t.Fatal("quickstart must not pull the non-buildable OME health sibling after building its shared helper image")
+	}
+	for _, required := range []string{
+		"mapfile -t runtime_images",
+		"config --images | sort -u",
+		`docker image inspect "$image"`,
+		`docker pull "$image"`,
+	} {
+		if !strings.Contains(quickstart, required) {
+			t.Errorf("quickstart missing local-first runtime image invariant %q", required)
+		}
+	}
+}
+
 func TestProductionBuildsUseCompleteUpstreamModuleGraph(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	releaseWorkflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "release.yml"))
@@ -91,6 +133,38 @@ func TestProductionBuildsUseCompleteUpstreamModuleGraph(t *testing.T) {
 	}
 }
 
+func TestArchitectureCheckDisablesVCSStamping(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	architectureCheck := readRepoFile(t, repoRoot, filepath.Join("scripts", "check-architecture-deps.sh"))
+	if !strings.Contains(architectureCheck, "-buildvcs=false") {
+		t.Fatal("architecture dependency check must disable VCS stamping for bounded mounted-workspace verification")
+	}
+}
+
+func TestModelsImportCheckStaysInsideFirstPartyGoRoots(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	modelsCheck := readRepoFile(t, repoRoot, filepath.Join("scripts", "check-no-models-imports.sh"))
+	if !strings.Contains(modelsCheck, "GO_ROOTS=(cmd internal scripts web)") {
+		t.Fatal("models import check must scope recursive traversal to first-party Go roots")
+	}
+	if strings.Contains(modelsCheck, "find . -type f") {
+		t.Fatal("models import check must not recursively traverse the entire workspace")
+	}
+}
+
+func TestVerifyUsesBoundedFirstPartyGoRoots(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	verifyScript := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
+	for _, required := range []string{"./cmd/...", "./internal/...", "./scripts/...", "./web", "-buildvcs=false"} {
+		if !strings.Contains(verifyScript, required) {
+			t.Fatalf("verify script missing bounded Go test invariant %q", required)
+		}
+	}
+	if strings.Contains(verifyScript, `go_test_packages="./..."`) {
+		t.Fatal("verify script must not recursively discover packages across non-Go workspace trees")
+	}
+}
+
 func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	viewerRoot := filepath.Join(repoRoot, "web", "viewer")
@@ -103,9 +177,14 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, required := range []string{
 		`"node": ">=24 <25"`,
 		`"npm": ">=11 <12"`,
-		`"next": "16.2.10"`,
+		`"next": "16.2.11"`,
 		`"react": "19.2.7"`,
 		`"react-dom": "19.2.7"`,
+		`"@types/node": "24.13.3"`,
+		`"eslint": "9.39.5"`,
+		`"typescript": "6.0.3"`,
+		`"postcss": "8.5.22"`,
+		`"sharp": "0.35.3"`,
 	} {
 		if !strings.Contains(packageJSON, required) {
 			t.Errorf("viewer package.json missing runtime invariant %q", required)
@@ -115,6 +194,16 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	viewerDockerfile := readRepoFile(t, viewerRoot, "Dockerfile")
 	if !strings.Contains(viewerDockerfile, "node:"+nodeMajorVersion+"-alpine") {
 		t.Fatalf("viewer Dockerfile must use node:%s-alpine", nodeMajorVersion)
+	}
+	for _, removedRuntimeTool := range []string{
+		"/usr/local/lib/node_modules/npm",
+		"/usr/local/bin/npm",
+		"/usr/local/bin/npx",
+	} {
+		if !strings.Contains(viewerDockerfile, "RUN rm -rf") ||
+			!strings.Contains(viewerDockerfile, removedRuntimeTool) {
+			t.Errorf("viewer production stage must remove unused runtime package-manager path %q", removedRuntimeTool)
+		}
 	}
 
 	setupAction := readRepoFile(t, repoRoot, filepath.Join(".github", "actions", "setup-node-viewer", "action.yml"))
@@ -132,6 +221,22 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, excluded := range []string{"node_modules", ".next", "playwright-report", "test-results"} {
 		if !strings.Contains(dockerignore, excluded) {
 			t.Errorf("viewer .dockerignore must exclude %q", excluded)
+		}
+	}
+}
+
+func TestRootDockerignoreExcludesRuntimeMedia(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	dockerignore := readRepoFile(t, repoRoot, ".dockerignore")
+	for _, excluded := range []string{
+		"deploy/data/",
+		"deploy/transcoder-data/",
+		".gocache*/",
+		"web/viewer/node_modules/",
+		"web/viewer/.next/",
+	} {
+		if !strings.Contains(dockerignore, excluded) {
+			t.Errorf("root .dockerignore must exclude runtime/build path %q", excluded)
 		}
 	}
 }

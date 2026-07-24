@@ -36,6 +36,14 @@ Use these category entrypoints from the repository root:
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) and `quickstart-smoke` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Release bundle:** `./scripts/test-release-bundle.sh`
+  - Stages the source-free release allowlist outside the checkout in a path containing spaces, checks asset parity, and rejects deployment-generated credential files.
+- **Ubuntu host lifecycle:** `./scripts/test-compose-host-installer.sh`
+  - Exercises rerunnable install/upgrade, separated configuration/data, bounded unit rendering, safe uninstall, rejected purge, and confirmed purge under an isolated root prefix.
+  - Runs automatically from `./scripts/verify.sh` on Linux.
+- **Linux package generation:** `BITRIVER_INSTALL_NFPM=1 ./scripts/test-linux-packages.sh`
+  - Installs the pinned nFPM version when opted in, then builds and inspects amd64/arm64 `.deb`/`.rpm` packages from the canonical bundle.
+  - The release workflow separately installs/removes the amd64 package in Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers before publication.
 - **Deploy smoke:** `./scripts/deploy-smoke.sh`
   - Boots the compose stack with an isolated temporary project name, waits for API `/readyz`, prints a short PASS/FAIL summary, and always tears down.
   - Operator-focused one-command confidence check before/after deploy changes.

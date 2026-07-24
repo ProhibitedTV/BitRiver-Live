@@ -58,6 +58,7 @@ jobs:
           BITRIVER_VIEWER_IMAGE_TAG: ${{ secrets.BITRIVER_VIEWER_IMAGE_TAG }}
           BITRIVER_SRS_CONTROLLER_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_CONTROLLER_IMAGE_TAG }}
           BITRIVER_TRANSCODER_IMAGE_TAG: ${{ secrets.BITRIVER_TRANSCODER_IMAGE_TAG }}
+          BITRIVER_OME_CONFIG_IMAGE_TAG: ${{ github.ref_name }}
           BITRIVER_SRS_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_IMAGE_TAG }}
           BITRIVER_OME_IMAGE_TAG: ${{ secrets.BITRIVER_OME_IMAGE_TAG }}
           BITRIVER_REDIS_IMAGE_DIGEST: ${{ secrets.BITRIVER_REDIS_IMAGE_DIGEST }}
@@ -113,6 +114,7 @@ jobs:
             BITRIVER_VIEWER_IMAGE_TAG
             BITRIVER_SRS_CONTROLLER_IMAGE_TAG
             BITRIVER_TRANSCODER_IMAGE_TAG
+            BITRIVER_OME_CONFIG_IMAGE_TAG
             BITRIVER_SRS_IMAGE_TAG
             BITRIVER_OME_IMAGE_TAG
             BITRIVER_REDIS_IMAGE_DIGEST
@@ -389,17 +391,7 @@ jobs:
             bin_ext=".exe"
           fi
 
-          deploy_dir="$out_dir/deploy"
-          mkdir -p "$deploy_dir"
-          cp -a deploy/migrations "$deploy_dir/migrations"
-          cp deploy/docker-compose.yml "$deploy_dir/docker-compose.yml"
-          cp deploy/.env.example "$deploy_dir/.env.example"
-          cp deploy/check-env.sh "$deploy_dir/check-env.sh"
-          cp -a deploy/install "$deploy_dir/install"
-          cp -a deploy/srs "$deploy_dir/srs"
-          cp -a deploy/ome "$deploy_dir/ome"
-          cp -a deploy/systemd "$deploy_dir/systemd"
-          cp -a deploy/nginx "$deploy_dir/nginx"
+          bash ./scripts/stage-release-assets.sh --output "$out_dir"
 
           declare -A bin_names=(
             ["server"]="bitriver-live"
@@ -483,6 +475,8 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: amd64
+          - goos: linux
+            goarch: arm64
           - goos: darwin
             goarch: amd64
           - goos: darwin
@@ -569,6 +563,8 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: amd64
+          - goos: linux
+            goarch: arm64
           - goos: darwin
             goarch: amd64
           - goos: darwin
@@ -613,6 +609,7 @@ jobs:
           launcher_root="dist/bitriver-launcher-${GOOS}-${GOARCH}"
           rm -rf "$launcher_root"
           mkdir -p "$launcher_root/bin" "$launcher_root/share/deploy"
+          bash ./scripts/stage-release-assets.sh --output "$launcher_root/share/bitriver-live"
 
           bin_ext=""
           archive_ext="tar.gz"
@@ -629,15 +626,13 @@ jobs:
 
           go build -modfile="$PRODUCTION_MODFILE" -trimpath -ldflags "${ldflags[*]}" -o "$launcher_root/bin/bitriver${bin_ext}" ./cmd/bitriver
           go run ./cmd/tools/verify-production-binary "$launcher_root/bin/bitriver${bin_ext}"
-          cp deploy/docker-compose.yml "$launcher_root/share/deploy/docker-compose.yml"
-          cp deploy/.env.example "$launcher_root/share/deploy/.env.example"
-
           if [ "$GOOS" = "windows" ]; then
             cp scripts/bitriver-live-wrapper.ps1 "$launcher_root/bin/bitriver-live.ps1"
             chmod +x "$launcher_root/bin/bitriver${bin_ext}"
           else
             cp scripts/bitriver-live-wrapper.sh "$launcher_root/bin/bitriver-live"
-            chmod +x "$launcher_root/bin/bitriver-live" "$launcher_root/bin/bitriver${bin_ext}"
+            cp deploy/install/compose-host.sh "$launcher_root/install.sh"
+            chmod +x "$launcher_root/install.sh" "$launcher_root/bin/bitriver-live" "$launcher_root/bin/bitriver${bin_ext}"
           fi
 
           cosign sign-blob --yes --output-signature "$launcher_root/bin/bitriver${bin_ext}.sig" "$launcher_root/bin/bitriver${bin_ext}"
@@ -650,11 +645,16 @@ jobs:
 
           if [ "$GOOS" = "linux" ]; then
             export PATH="$HOME/go/bin:$PATH"
-            go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.37.1
-            NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root" \
-              nfpm pkg --packager deb --config deploy/installers/nfpm.yaml --target "dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.deb"
-            NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root" \
-              nfpm pkg --packager rpm --config deploy/installers/nfpm.yaml --target "dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.rpm"
+            go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+            workspace="$PWD"
+            launcher_root_abs="$(cd "$launcher_root" && pwd -P)"
+            (
+              cd "$launcher_root_abs"
+              NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root_abs" \
+                GOMAXPROCS=2 nfpm pkg --packager deb --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.deb"
+              NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root_abs" \
+                GOMAXPROCS=2 nfpm pkg --packager rpm --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.rpm"
+            )
           fi
 
       - name: Upload launcher archives
@@ -669,7 +669,7 @@ jobs:
         if: matrix.goos == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: launcher-linux-packages
+          name: launcher-linux-packages-${{ matrix.goarch }}
           path: |
             dist/bitriver-live_${{ github.ref_name }}_${{ matrix.goarch }}.deb
             dist/bitriver-live_${{ github.ref_name }}_${{ matrix.goarch }}.rpm
@@ -756,6 +756,74 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  package-acceptance:
+    name: Package acceptance (${{ matrix.name }})
+    needs:
+      - build-launcher
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 24.04 deb
+            image: ubuntu:24.04
+            format: deb
+          - name: Debian 12 deb
+            image: debian:12
+            format: deb
+          - name: Rocky Linux 9 rpm
+            image: rockylinux:9
+            format: rpm
+    steps:
+      - name: Download amd64 Linux packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: launcher-linux-packages-amd64
+          path: packages
+
+      - name: Install, inspect, and remove package without deleting data
+        env:
+          TEST_IMAGE: ${{ matrix.image }}
+          PACKAGE_FORMAT: ${{ matrix.format }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --mount "type=bind,source=$PWD/packages,target=/packages,readonly" \
+            -e PACKAGE_FORMAT \
+            "$TEST_IMAGE" \
+            bash -euc '
+              case "$PACKAGE_FORMAT" in
+                deb)
+                  package=$(find /packages -maxdepth 1 -name "*.deb" -print -quit)
+                  dpkg -i "$package"
+                  ;;
+                rpm)
+                  package=$(find /packages -maxdepth 1 -name "*.rpm" -print -quit)
+                  rpm -i "$package"
+                  ;;
+                *) exit 2 ;;
+              esac
+
+              test -x /usr/local/bin/bitriver
+              test -x /usr/local/bin/bitriver-live
+              test -x /usr/local/sbin/bitriver-host
+              test -f /usr/local/share/bitriver-live/deploy/docker-compose.yml
+              test -f /usr/local/share/bitriver-live/deploy/postgres-migrate.sh
+              test -f /usr/local/share/bitriver-live/deploy/ome/Server.xml
+              test -f /usr/local/share/bitriver-live/deploy/systemd/bitriver-live-compose.service
+              test ! -e /usr/local/share/bitriver-live/deploy/ome/Server.generated.xml
+
+              mkdir -p /etc/bitriver-live /var/lib/bitriver-live
+              touch /etc/bitriver-live/operator-config /var/lib/bitriver-live/operator-data
+              if [ "$PACKAGE_FORMAT" = deb ]; then
+                dpkg -r bitriver-live
+              else
+                rpm -e bitriver-live
+              fi
+              test -f /etc/bitriver-live/operator-config
+              test -f /var/lib/bitriver-live/operator-data
+            '
+
   publish-images:
     name: Publish container images
     needs:
@@ -782,6 +850,10 @@ jobs:
             context: web/viewer
             dockerfile: web/viewer/Dockerfile
             image_name: bitriver-viewer
+          - component: ome-config
+            context: .
+            dockerfile: deploy/ome-config/Dockerfile
+            image_name: bitriver-ome-config
     env:
       REGISTRY: ghcr.io
       IMAGE_NAMESPACE: ghcr.io/bitriver-live
@@ -943,6 +1015,7 @@ jobs:
       - build
       - build-bitriver
       - build-launcher
+      - package-acceptance
       - build-viewer
       - publish-images
       - brew-formula

@@ -733,6 +733,7 @@ func validateEnvWithRuntimeMode(values map[string]string, runtimeMode string) en
 		"BITRIVER_VIEWER_IMAGE_TAG",
 		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG",
 		"BITRIVER_TRANSCODER_IMAGE_TAG",
+		"BITRIVER_OME_CONFIG_IMAGE_TAG",
 		"BITRIVER_SRS_IMAGE_TAG",
 		"BITRIVER_OME_IMAGE_TAG",
 	}
