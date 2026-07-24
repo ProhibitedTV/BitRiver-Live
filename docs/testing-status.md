@@ -37,11 +37,14 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
   admin-only enforcement using the `internal/testsupport.SessionStoreStub`.
   They run with the standard Go test environment (offline module settings,
   no external services required).
-- **Ingest end-to-end guard:** `scripts/test-ingest-e2e.sh` runs the storage
-  layer against the real HTTP ingest controller with `internal/testsupport/
-  ingeststub` to assert ingest endpoints, manifest URLs, and teardown calls are
-  recorded. A dedicated GitHub Actions job enforces the run on main branches
-  and tags.
+- **Production golden path:** `scripts/test-production-golden-path.sh` drives
+  the canonical Compose services through public HTTP/RTMP surfaces. It proves
+  1080p OME/transcoder decode, offline transition, chat/moderation, VOD
+  publication/playback, aggregate health, evidence scanning, and teardown.
+  `scripts/test-ingest-e2e.sh` remains the CI compatibility entrypoint.
+- **Ingest storage/controller guard:** `scripts/test-ingest-storage.sh` keeps
+  the former fast storage + HTTP controller integration test independently
+  callable without describing stubbed coverage as production E2E.
 - **Viewer playback + chat integration:** Playwright specs in
   `web/viewer/tests/channel-chat-playback.spec.ts` now cover channel page retry
   handling, HLS-ready states, chat send/receive, and chat authentication

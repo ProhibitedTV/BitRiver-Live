@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Git Bash rewrites POSIX-looking environment values before launching native
+# Windows executables. Compose must receive container paths such as /healthz
+# unchanged, while normal argument conversion remains enabled for temp files.
+if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
+  export MSYS2_ENV_CONV_EXCL="*"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/polling.sh"
@@ -9,6 +16,7 @@ ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 COMPOSE_SMOKE_OVERRIDE=""
+GOLDEN_PATH_METRICS_BEARER_FILE=""
 OME_CONFIG="$REPO_ROOT/deploy/ome/Server.generated.xml"
 OME_CONFIG_BACKUP=""
 OME_CONFIG_EXISTED=false
@@ -33,8 +41,8 @@ export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-r
 export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"
 export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"
 
+COMPOSE_SMOKE_OVERRIDE="$(mktemp)"
 if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
-  COMPOSE_SMOKE_OVERRIDE="$(mktemp)"
   host_uid="$(id -u)"
   host_gid="$(id -g)"
   cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML
@@ -49,12 +57,34 @@ services:
     user: "${host_uid}:${host_gid}"
   transcoder:
     user: "${host_uid}:${host_gid}"
+    volumes:
+      - bitriver-smoke-transcoder:/work
+  transcoder-public:
+    volumes:
+      - bitriver-smoke-transcoder:/work:ro
+volumes:
+  bitriver-smoke-transcoder:
 YAML
-  COMPOSE_RUNTIME_ARGS+=("-f" "$COMPOSE_SMOKE_OVERRIDE")
+else
+  cat >"$COMPOSE_SMOKE_OVERRIDE" <<'YAML'
+services:
+  transcoder:
+    volumes:
+      - bitriver-smoke-transcoder:/work
+  transcoder-public:
+    volumes:
+      - bitriver-smoke-transcoder:/work:ro
+volumes:
+  bitriver-smoke-transcoder:
+YAML
 fi
+COMPOSE_RUNTIME_ARGS+=("-f" "$COMPOSE_SMOKE_OVERRIDE")
 
 cleanup() {
   rm -f "$COMPOSE_CONFIG_OUTPUT"
+  if [[ -n "$GOLDEN_PATH_METRICS_BEARER_FILE" ]]; then
+    rm -f "$GOLDEN_PATH_METRICS_BEARER_FILE"
+  fi
   if docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps >/dev/null 2>&1; then
     docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   fi
@@ -405,6 +435,27 @@ set -a
 . "$ENV_FILE"
 set +a
 
+if [[ "${BITRIVER_TEST_GOLDEN_PATH:-}" == "1" ]]; then
+  # The production product exercise needs public account creation and media URLs
+  # that are reachable from the same host that runs ffmpeg/ffprobe. These
+  # release-gate overrides never rewrite the operator-owned .env file.
+  export BITRIVER_LIVE_MODE=development
+  export BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true
+  export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="rtmp://localhost:${BITRIVER_SRS_RTMP_PORT:-1935}/live"
+  export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="http://localhost:${BITRIVER_LIVE_PORT:-8080}/live"
+  export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="http://localhost:${BITRIVER_TRANSCODER_PUBLIC_PORT:-9080}/hls"
+  # Keep the content gate deterministic on two-core CI and Docker Desktop
+  # while retaining the required 1080p encode/decode path. Full ladder policy
+  # remains covered by transcoder contract tests; browser quality selection is
+  # a separate release gate.
+  export BITRIVER_TRANSCODE_LADDER="1080p:2500"
+  if [[ -n "${BITRIVER_LIVE_METRICS_TOKEN:-}" ]]; then
+    GOLDEN_PATH_METRICS_BEARER_FILE="$(mktemp)"
+    printf '%s\n' "$BITRIVER_LIVE_METRICS_TOKEN" >"$GOLDEN_PATH_METRICS_BEARER_FILE"
+    export BITRIVER_GOLDEN_PATH_METRICS_BEARER_FILE="$GOLDEN_PATH_METRICS_BEARER_FILE"
+  fi
+fi
+
 WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
 
 start_compose_services() {
@@ -625,5 +676,28 @@ VIEWER_PATH=${NEXT_VIEWER_BASE_PATH:-/viewer}
 echo "CURLing API and viewer endpoints..."
 wait_for_endpoint "API health" "http://localhost:${API_PORT}/healthz"
 wait_for_endpoint "viewer" "http://localhost:${API_PORT}${VIEWER_PATH}"
+
+if [[ "${BITRIVER_TEST_GOLDEN_PATH:-}" == "1" ]]; then
+  echo "Running production golden-path product assertions..."
+  set +e
+  "$SCRIPT_DIR/test-production-golden-path.sh" \
+    --stack running \
+    --artifact-dir "${BITRIVER_GOLDEN_PATH_ARTIFACT_DIR:-$REPO_ROOT/.artifacts/production-golden-path}" \
+    --base-url "http://localhost:${API_PORT}" \
+    --rtmp-base-url "$BITRIVER_SRS_PUBLIC_RTMP_BASE_URL" \
+    --viewer-path "$VIEWER_PATH"
+  golden_path_status=$?
+  set -e
+  if ((golden_path_status != 0)); then
+    emit_ci_error \
+      "production golden path failed" \
+      "Inspect the sanitized production-golden-path.json report for the first failed stage."
+    # Container state is safe to retain; raw media-service logs can include the
+    # per-run stream key and therefore remain on the operator host by default.
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true
+    echo "error: production golden-path assertions failed; raw service logs were not exported because they can contain the per-run stream key" >&2
+    exit "$golden_path_status"
+  fi
+fi
 
 echo "Quickstart compose smoke checks passed."

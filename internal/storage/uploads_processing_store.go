@@ -12,21 +12,19 @@ import (
 
 // UploadProcessingStore adapts repository operations for the upload processing service.
 type UploadProcessingStore struct {
-	repo interface {
-		ListChannels(ownerID, query string) []domain.Channel
-		ListUploads(channelID string) ([]domain.Upload, error)
-		GetUpload(id string) (domain.Upload, bool)
-		UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
-	}
+	repo uploadProcessingRepository
 }
 
-// NewUploadProcessingStore adapts a repository-capable service to the upload processor store contract.
-func NewUploadProcessingStore(repo interface {
+type uploadProcessingRepository interface {
 	ListChannels(ownerID, query string) []domain.Channel
 	ListUploads(channelID string) ([]domain.Upload, error)
 	GetUpload(id string) (domain.Upload, bool)
 	UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
-}) serviceuploads.Store {
+	EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error)
+}
+
+// NewUploadProcessingStore adapts the concrete persistence repository to the upload processor contract.
+func NewUploadProcessingStore(repo uploadProcessingRepository) serviceuploads.Store {
 	return UploadProcessingStore{repo: repo}
 }
 
@@ -92,19 +90,13 @@ func (s UploadProcessingStore) EnsureUploadRecording(ctx context.Context, upload
 	if s.repo == nil {
 		return "", fmt.Errorf("upload store unavailable")
 	}
-	recordings, ok := s.repo.(interface {
-		EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error)
-	})
-	if !ok {
-		return "", fmt.Errorf("upload recording store unavailable")
-	}
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
 	default:
 	}
 
-	recording, err := recordings.EnsureUploadRecording(uploadID, playbackURL, completedAt)
+	recording, err := s.repo.EnsureUploadRecording(uploadID, playbackURL, completedAt)
 	if err != nil {
 		return "", err
 	}

@@ -11,7 +11,7 @@ This is the artifact-only installation path for an operator-managed Ubuntu VM. I
 - Package install coverage: Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers.
 - Provisional until clean-host evidence is attached to a tagged release: Debian 12, Rocky Linux, arm64, XOA/XCP-ng reboot recovery, and public ingest/playback.
 
-The installer can prove rendered configuration, migration completion, process health, and critical Compose health. A release is not production-approved until the tagged artifacts also pass authenticated OvenMediaEngine control, real RTMP ingest, public playback, and reboot/recovery acceptance. Track those remaining gates in issues #1300 and #1304.
+The installer can prove rendered configuration, migration completion, process health, and critical Compose health. Source-built canonical Compose also has an automated real RTMP, OvenMediaEngine/transcoder decode, chat/moderation, VOD, and aggregate-health gate. A release is not production-approved until the tagged pull-only artifacts pass that same product gate on a clean Ubuntu host plus authenticated OvenMediaEngine control and reboot/recovery acceptance. Track those remaining host-specific gates in issues #1297 and #1304.
 
 ## XOA/XCP-ng VM baseline
 

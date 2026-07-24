@@ -1,8 +1,81 @@
 # TASKS
 
-## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
+## Scoped change: full-stack production golden-path E2E (#1300)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the existing E2E boundary and define the real product contract
+  - Acceptance criteria:
+    - `PLAN.md` records the real-stack stages, reusable execution shape, secret-safe evidence boundary, risks, and validation plan before implementation.
+    - Existing ingest, quickstart, release-gate, evidence-scan, Compose, auth/channel/chat/VOD, and workflow paths are inspected.
+    - `SPEC.md` distinguishes direct media/API proof from future pull-only, browser recovery, reboot, and stability evidence.
+  - Check:
+    - `scripts/test-ingest-e2e.sh` currently runs only `TestIngestPipelineEndToEnd` in `internal/storage`; it does not start or contact any canonical Compose service.
+    - The existing quickstart smoke already owns deterministic Compose startup, OME render/token/process health, migrations, API/viewer reachability, diagnostics, and clean teardown, making it the correct lifecycle host for a reusable running-stack product harness.
+    - Real self-signup/session cookies, first-channel creator bootstrap, RTMP callbacks, OME/transcoder adapters, Redis chat/moderation, multipart upload processing, recording publication, and public viewer/VOD APIs already exist; the missing release gate is orchestration and content-level evidence.
+    - `scripts/scan-release-evidence.sh` already supports external sentinel files and path-only findings, so new reports can reuse the established no-secret publication boundary.
+
+- [x] Task 2 - Build the running-stack media/API harness and evidence report
+  - Acceptance criteria:
+    - A standard-library harness creates creator/viewer sessions and a channel without direct database access.
+    - Runtime-generated 1080p/audio media publishes by RTMP and produces content-level OME/transcoder playback evidence plus an offline transition.
+    - Chat/history/moderation and VOD upload/transcode/publish/list/playback use authenticated real API paths.
+    - A versioned report records stage status/duration and sanitized evidence without credentials.
+  - Check:
+    - Added `scripts/production_golden_path.py`, a Python standard-library black-box client that uses only public HTTP/RTMP surfaces plus host `ffmpeg`/`ffprobe`.
+    - The harness creates separate creator/viewer sessions, bootstraps a channel, publishes deterministic 1920x1080 video plus audio, requires advancing and decodable OME/transcoder HLS, observes offline transition, exercises chat/history/timeout moderation, and uploads/transcodes/publishes/probes a public VOD.
+    - `bitriver.production-golden-path/v1` evidence is written atomically with per-stage timing, first-failure ownership, sanitized URLs/errors, and runtime sentinel redaction; credentials and stream keys are excluded.
+    - `python -B scripts/production_golden_path_test.py -v` passed 8 focused sanitization, polling, playlist, rendition-selection, and failed-evidence tests; AST parsing, CLI help, and `git diff --check` passed.
+    - Real Compose/media execution remains Task 6 acceptance; implementation completion is not being treated as runtime proof.
+
+- [x] Task 3 - Integrate the harness with canonical quickstart and safe diagnostics
+  - Acceptance criteria:
+    - The harness can validate an already-running stack and can run once inside quickstart before teardown.
+    - Failures name the stage, preserve bounded redacted diagnostics, scan sentinel secrets, and leave no running Compose project or generated credential diff.
+    - The cheap storage integration test remains separately named and callable.
+  - Check:
+    - `scripts/test-production-golden-path.sh` supports `running` and `quickstart` lifecycle modes plus host or Docker clients; both success and failure run the existing release-evidence sentinel scan.
+    - The quickstart smoke uses an isolated named transcoder volume, preserves operator-owned `.env` and runtime media, emits only safe Compose state on failure, and tears down services, networks, data, configs, and the media volume.
+    - Real Docker Desktop proof passed in 115.5 seconds. The retained report passed all eight stages in 27.998 seconds: accounts/channel, 1080p RTMP live state, advancing and decodable OME/transcoder HLS, offline transition, chat/timeout moderation, 1080p VOD upload/transcode/publication/playback, and final aggregate status (`ready`, seven checks, zero down).
+    - Both live paths and VOD decoded H.264 at 1920x1080 for three seconds; the evidence scanner passed and `docker ps -a --filter name=bitriver` plus the smoke-volume query returned empty after teardown.
+    - An isolated Alpine check reproduced Git Bash rewriting `/healthz` to `C:/Program Files/Git/healthz`; `MSYS2_ENV_CONV_EXCL=*` preserved the container path. The quickstart now applies only that environment guard and retains argument conversion for native Docker temp paths, with a focused Go contract test.
+
+- [x] Task 4 - Wire release-blocking workflows and regression tests
+  - Acceptance criteria:
+    - The ingest workflow runs the real canonical stack and uploads sanitized machine-readable evidence.
+    - CI path filters and `test-all` avoid duplicate expensive stack startups.
+    - Static/focused tests fail on legacy storage-only E2E wiring, missing scanner invocation, or unbounded stage configuration.
+  - Check:
+    - `scripts/test-ingest-e2e.sh` is now a compatibility entrypoint for the real canonical-Compose product gate; the prior storage/controller integration test remains available as the honestly named `scripts/test-ingest-storage.sh`.
+    - `test-all.sh` and `test-integration.sh` expose `--production-golden-path` plus a matching environment control, retain the old ingest aliases, and skip their ordinary quickstart when the product gate owns that lifecycle.
+    - `.github/workflows/ingest-e2e.yml` is now named `Production golden path`, has a 30-minute job bound, executes the real gate, and always attempts to upload only the scanner-approved versioned JSON report for 14 days.
+    - CI ingest path filters include the harness, client image, wrapper, and separated storage guard; the unified Ubuntu gate enables the accurately named product control.
+    - Pinned Go 1.26.5 `go test ./scripts -count=1 -timeout=120s` passed, including a regression that rejects storage-only E2E wiring, missing bounded/upload workflow controls, or duplicate quickstart ownership. Shell syntax, eight Python harness tests, and `git diff --check` passed.
+
+- [x] Task 5 - Document the canonical gate and honest release boundary
+  - Acceptance criteria:
+    - `docs/release-gates.md`, testing docs, production release guidance, and release notes identify the new gate and its evidence.
+    - Build-mode, pull-only/tagged, browser, reboot, and repeated-run claims remain explicit and separate.
+  - Check:
+    - README operator acceptance now includes the lifecycle warning, exact product-gate command, and sanitized report location.
+    - Testing/status docs distinguish the cheap storage/controller guard from real product acceptance and document opt-in umbrella controls, stages, evidence, and running-stack semantics.
+    - `docs/release-gates.md` adds a blocking production media/workflow gate and renumbers scorecard/readiness/canary references consistently; the production runbook requires source proof before tag and pull-only clean-host repetition before stable promotion.
+    - Ubuntu installation guidance and v1.2.3 draft notes state that source-built Compose proof exists while tagged images/packages, clean-host Ubuntu, reboot recovery, and browser recovery/quality remain unproved.
+    - `check-doc-installer-language.sh`, generated contract freshness, targeted wording/reference searches, and `git diff --check` passed.
+
+- [-] Task 6 - Run local Docker proof, full verification, and publication lifecycle
+  - Acceptance criteria:
+    - The real-stack gate passes locally with media/API evidence and clean teardown.
+    - Required repository checks and remote CI pass; diff review excludes secrets, generated configs, runtime media, and unrelated user files.
+    - PR/issue evidence states exactly what remains for #1297/#1300/#1304.
+  - Check:
+    - Local real-stack product gate passed all eight stages and evidence scanning on Docker Desktop; teardown left no BitRiver containers or smoke transcoder volume.
+    - Pinned Go 1.26.5 focused runtime/workflow packages passed; eight Python harness tests, shell syntax, generated contract freshness, installer wording, and diff checks passed.
+    - Full clean-checkout `./scripts/verify.sh --viewer` passed in 208.3 seconds: all Go packages, architecture/dependency/contract checks, release bundle, Postgres migrations, Compose validation, quickstart smoke, viewer lint, and 25 viewer suites (215 tests, four snapshots).
+    - The operator-local root `.env` was moved outside the checkout only for the clean-checkout verification and restored in a guaranteed `finally` block; no backup/leftover file or runtime container/volume remained.
+    - Remote PR checks and merge/issue publication evidence remain pending.
+
+## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
 
 - [x] Task 1 - Inventory release packages and define the clean-host contract
   - Acceptance criteria:

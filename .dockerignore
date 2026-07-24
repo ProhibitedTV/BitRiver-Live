@@ -30,6 +30,7 @@ scripts/
 !scripts/
 scripts/*
 !scripts/check-postgres-pgx.sh
+!scripts/production_golden_path.py
 docs/
 deploy/data/
 deploy/transcoder-data/

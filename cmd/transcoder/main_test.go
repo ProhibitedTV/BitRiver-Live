@@ -613,6 +613,39 @@ func TestAuthorizeInvalidTokenLogsWarning(t *testing.T) {
 	}
 }
 
+func TestProcessLoggerUsesUploadContext(t *testing.T) {
+	var logs bytes.Buffer
+	srv := &server{
+		logger: slog.New(slog.NewTextHandler(&logs, nil)),
+		jobs:   make(map[string]*job),
+		uploads: map[string]*uploadJob{
+			"upload-job": {
+				ID:        "upload-job",
+				UploadID:  "upload-record",
+				ChannelID: "channel-1",
+				SourceURL: "https://media.example/source.mp4?token=secret",
+			},
+		},
+	}
+
+	srv.processLogger("upload-job").Error("ffmpeg exited", "error", "exit status 1")
+
+	output := logs.String()
+	for _, expected := range []string{
+		"job_id=upload-job",
+		"upload_id=upload-record",
+		"channel_id=channel-1",
+		"msg=\"ffmpeg exited\"",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("upload process log missing %q: %s", expected, output)
+		}
+	}
+	if strings.Contains(output, "token=secret") {
+		t.Fatalf("upload process log exposed the signed source URL: %s", output)
+	}
+}
+
 func TestBuildTranscodePlanUsesSupportedHLSVariantMap(t *testing.T) {
 	plan, err := buildTranscodePlan("rtmp://srs:1935/live/key", filepath.Join(t.TempDir(), "live"), []rendition{
 		{Name: "1080p", Bitrate: 6000},
@@ -1029,6 +1062,30 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	if uploadResp.JobID == "" {
 		t.Fatal("expected job id in upload response")
 	}
+	readStatus := func() uploadStatusResponse {
+		t.Helper()
+		statusReq, err := http.NewRequest(http.MethodGet, ts.URL+"/v1/uploads/"+uploadResp.JobID, nil)
+		if err != nil {
+			t.Fatalf("build upload status request: %v", err)
+		}
+		statusReq.Header.Set("Authorization", authHeader)
+		statusResp, err := client.Do(statusReq)
+		if err != nil {
+			t.Fatalf("get upload status: %v", err)
+		}
+		defer statusResp.Body.Close()
+		if statusResp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected upload status response: %d", statusResp.StatusCode)
+		}
+		var payload uploadStatusResponse
+		if err := json.NewDecoder(statusResp.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode upload status: %v", err)
+		}
+		return payload
+	}
+	if status := readStatus(); status.Status != "running" {
+		t.Fatalf("expected running upload status before FFmpeg completion, got %+v", status)
+	}
 	expectedPlayback := fmt.Sprintf("https://cdn.example.com/hls/uploads/%s/index.m3u8", uploadResp.JobID)
 	if uploadResp.PlaybackURL != expectedPlayback {
 		t.Fatalf("unexpected playback url: %s", uploadResp.PlaybackURL)
@@ -1075,6 +1132,9 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	})
 	if persisted.Playback != expectedPlayback {
 		t.Fatalf("unexpected persisted playback url: %s", persisted.Playback)
+	}
+	if status := readStatus(); status.Status != "completed" || status.Error != "" {
+		t.Fatalf("expected completed upload status, got %+v", status)
 	}
 	for _, rendition := range persisted.Renditions {
 		if !strings.HasPrefix(rendition.ManifestURL, prefix) {

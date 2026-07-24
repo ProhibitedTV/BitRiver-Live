@@ -283,16 +283,21 @@ func (p *UploadProcessor) processUpload(id string) {
 	progress := 10
 	metadata := cloneMetadata(upload.Metadata)
 	metadata["sourceUrl"] = source
-	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
-		Status:   &processing,
-		Progress: &progress,
-		Metadata: metadata,
-		Error:    stringPtr(""),
+	var processingUpload domain.Upload
+	if err := p.retryPersistence("mark upload processing", id, func() error {
+		var updateErr error
+		processingUpload, updateErr = p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
+			Status:   &processing,
+			Progress: &progress,
+			Metadata: metadata,
+			Error:    stringPtr(""),
+		})
+		return updateErr
 	}); err != nil {
 		p.logger.Error("failed to mark upload processing", "upload_id", id, "error", err)
-		p.scheduleRetry(id, uploadRetryBaseDelay)
 		return
 	}
+	upload = processingUpload
 
 	if p.ingest == nil {
 		p.failUpload(upload, fmt.Errorf("ingest controller unavailable"), 0, time.Time{})
@@ -344,27 +349,40 @@ func (p *UploadProcessor) processUpload(id string) {
 		}
 	}
 	metadata["playbackUrl"] = playbackURL
-	recordingID, err := p.store.EnsureUploadRecording(p.ctx, id, playbackURL, completedAt)
-	if err != nil {
+	var recordingID string
+	if err := p.retryPersistence("ensure upload recording", id, func() error {
+		var ensureErr error
+		recordingID, ensureErr = p.store.EnsureUploadRecording(p.ctx, id, playbackURL, completedAt)
+		return ensureErr
+	}); err != nil {
 		p.logger.Error("failed to ensure upload recording", "upload_id", id, "error", err)
-		p.scheduleRetry(id, uploadRetryBaseDelay)
+		upload.Metadata = metadata
+		upload.PlaybackURL = playbackURL
+		p.failUpload(upload, err, uploadMaxRetryAttempts, time.Time{})
 		return
 	}
 	if recordingID != "" {
 		metadata["recordingId"] = recordingID
 	}
-	updatedUpload, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
-		Status:      &ready,
-		Progress:    &progress,
-		RecordingID: &recordingID,
-		PlaybackURL: &playbackURL,
-		Metadata:    metadata,
-		CompletedAt: &completedAt,
-		Error:       stringPtr(""),
-	})
-	if err != nil {
+	var updatedUpload domain.Upload
+	if err := p.retryPersistence("mark upload ready", id, func() error {
+		var updateErr error
+		updatedUpload, updateErr = p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
+			Status:      &ready,
+			Progress:    &progress,
+			RecordingID: &recordingID,
+			PlaybackURL: &playbackURL,
+			Metadata:    metadata,
+			CompletedAt: &completedAt,
+			Error:       stringPtr(""),
+		})
+		return updateErr
+	}); err != nil {
 		p.logger.Error("failed to mark upload ready", "upload_id", id, "error", err)
-		p.scheduleRetry(id, uploadRetryBaseDelay)
+		upload.Metadata = metadata
+		upload.PlaybackURL = playbackURL
+		upload.RecordingID = &recordingID
+		p.failUpload(upload, err, uploadMaxRetryAttempts, time.Time{})
 		return
 	}
 	p.scheduleSourceCleanup(updatedUpload, ready)
@@ -396,6 +414,43 @@ func (p *UploadProcessor) scheduleRetry(id string, delay time.Duration) {
 	}()
 }
 
+func (p *UploadProcessor) retryPersistence(operation string, uploadID string, fn func() error) error {
+	if p == nil || fn == nil {
+		return fmt.Errorf("%s persistence unavailable", strings.TrimSpace(operation))
+	}
+	operation = strings.TrimSpace(operation)
+	if operation == "" {
+		operation = "upload"
+	}
+	var lastErr error
+	for attempt := 1; attempt <= uploadMaxRetryAttempts; attempt++ {
+		if err := fn(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if attempt >= uploadMaxRetryAttempts {
+			break
+		}
+		delay := uploadRetryBaseDelay * time.Duration(1<<(attempt-1))
+		p.logger.Warn("upload persistence transient failure",
+			"upload_id", uploadID,
+			"operation", operation,
+			"attempt", attempt,
+			"next_retry_in", delay,
+			"error", lastErr,
+		)
+		timer := time.NewTimer(delay)
+		select {
+		case <-p.ctx.Done():
+			timer.Stop()
+			return p.ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return fmt.Errorf("%s persistence retry budget exhausted after %d attempts: %w", operation, uploadMaxRetryAttempts, lastErr)
+}
+
 func (p *UploadProcessor) handleTranscodeError(upload domain.Upload, source string, err error) {
 	attempt := parseRetryAttempt(upload.Metadata) + 1
 	if !isTransientTranscodeError(err) {
@@ -416,14 +471,16 @@ func (p *UploadProcessor) handleTranscodeError(upload domain.Upload, source stri
 	metadata["sourceUrl"] = source
 	metadata[metadataRetryAttemptKey] = strconv.Itoa(attempt)
 	metadata[metadataNextRetryAtKey] = nextRetry.Format(time.RFC3339Nano)
-	if _, updateErr := p.store.UpdateUpload(p.ctx, upload.ID, domain.UploadUpdate{
-		Status:   &status,
-		Progress: &progress,
-		Metadata: metadata,
-		Error:    &message,
+	if updateErr := p.retryPersistence("mark upload for retry", upload.ID, func() error {
+		_, persistErr := p.store.UpdateUpload(p.ctx, upload.ID, domain.UploadUpdate{
+			Status:   &status,
+			Progress: &progress,
+			Metadata: metadata,
+			Error:    &message,
+		})
+		return persistErr
 	}); updateErr != nil {
 		p.logger.Error("failed to mark upload for retry", "upload_id", upload.ID, "error", updateErr, "failure", err)
-		p.scheduleRetry(upload.ID, delay)
 		return
 	}
 	p.logger.Warn("upload transcode transient failure", "upload_id", upload.ID, "attempt", attempt, "next_retry_at", nextRetry, "error", err)

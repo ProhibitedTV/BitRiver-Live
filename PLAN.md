@@ -1,5 +1,46 @@
 # PLAN
 
+## Current scope - production golden-path E2E (#1300, 2026-07-24)
+
+- Replace the misleading ingest "E2E" boundary, which currently runs only a storage package test, with one reusable acceptance harness against the real canonical Compose stack: Postgres, Redis, SRS, controller, transcoder, OvenMediaEngine, API, and viewer.
+- Generate deterministic 1080p video plus audio at runtime; publish it over the creator-facing RTMP path; require the channel to transition live and back offline; and prove both OME LL-HLS and transcoder HLS are decodable and advancing rather than checking only HTTP status.
+- Exercise real self-signup/session cookies, first-channel creator bootstrap, chat send/history, an owner moderation action, multipart VOD upload/transcode/publication, viewer metadata, and health/readiness/status surfaces.
+- Emit a versioned machine-readable stage report, media probe evidence, endpoint summaries, timing, and failure context without retaining credentials. Scan retained evidence against per-run sentinel values before accepting it.
+- Make the live-stack tier reusable from source quickstart, release workflows, and an already-running clean-host installation. Keep the cheap storage integration test separate so local unit/integration commands do not accidentally claim production coverage.
+
+### Golden-path design
+
+- Implement the product exercise as a standard-library Python harness plus a small shell entrypoint. The harness talks only through public HTTP/RTMP surfaces and invokes host `ffmpeg`/`ffprobe`; it must not reach directly into Postgres or mutate containers to manufacture success.
+- The shell entrypoint supports two modes: `--stack running` validates an already-running deployment, while `--stack quickstart` delegates lifecycle to the canonical quickstart smoke and runs the same product assertions before teardown.
+- Test credentials and stream keys exist only in process memory or a temporary sentinel file outside the evidence directory. Reports store stable labels, IDs, status, durations, URLs with query/userinfo removed, and redacted command descriptions.
+- A phase fails with a bounded, stage-specific error. The wrapper then captures Compose state and selected recent logs through the existing redaction/scanning boundary; success and failure both leave a report that names the first failed stage.
+- Keep the first PR tier build-based for deterministic source validation. Tagged RC/stable promotion must call the same running-stack harness after pull-only immutable images are installed; build-mode success alone is not publication approval.
+
+### Golden-path risks
+
+- LL-HLS manifests can exist before media is decodable. Require a media probe and advancing segment/timestamp evidence, not a single successful manifest GET.
+- RTMP publication is asynchronous across SRS callbacks, OME forwarding, and transcoder startup. Use explicit per-stage deadlines with last-observed state; do not use unbounded sleeps or retries that hide hangs.
+- The first real VOD run exposed that the runtime passed `storeUseCases` into the upload-processing adapter even though that facade does not preserve the repository's upload-recording method. A successful transcode was therefore followed by `upload recording store unavailable`; the unbudgeted persistence retry re-enqueued the whole upload and submitted thousands of duplicate jobs. Wire the concrete repository through a compile-time-complete narrow adapter, retry persistence operations in place with a fixed budget, and never resubmit an accepted transcode merely because recording/update persistence failed.
+- The next VOD run exposed two additional contract gaps hidden by handler-only tests: global API authentication rejected the signed `GET /api/uploads/{id}/media` request before its constant-time media-token check, and Compose did not pass the supported `BITRIVER_TRANSCODE_LADDER` setting into the API container. Exempt only the exact signed-media GET route from session auth, keep all neighboring upload routes protected, and add the ladder variable to Compose/env/documentation together.
+- Upload FFmpeg failures were also silent because the shared launcher selected log context only from the live-job map. Resolve live or upload metadata under the server lock before constructing the process logger so a failed VOD job remains diagnosable without placing signed source URLs in retained release evidence.
+- The authenticated source then proved that `POST /v1/uploads` is asynchronous while `UploadProcessor` treated acceptance as completion: it marked the upload ready and deleted the source before FFmpeg opened it, producing a 404. Add an authenticated upload-job status resource, persist success/failure state, and make the HTTP ingest adapter wait under the processor's existing bounded context. Source cleanup and public readiness may occur only after FFmpeg plus publication complete.
+- The final operator probe identified a Docker Desktop/Git Bash harness distortion rather than unhealthy services: MSYS rewrote the exported `/healthz` value to `C:/Program Files/Git/healthz` before Compose passed it into the Linux API container. Disable only MSYS environment conversion for native Docker invocations in the Windows smoke path; retain argument conversion so temporary Compose paths still resolve, then require the aggregate status to pass against the unmodified container endpoint.
+- Multipart VOD source URLs generated from a host request must also be reachable from the transcoder container. Set the request Host to the canonical internal API origin while connecting through the published host port, then verify the returned playback URL externally.
+- Live and VOD transcoding are CPU-heavy on hosted runners and Docker Desktop. Use a deterministic short fixture, a release-grade timeout, and measured phase durations; do not lower the 1080p content assertion.
+- Raw Compose logs and generated configuration can contain operator credentials. Never put `.env`, generated OME/SRS config, request cookies, authorization headers, or unredacted command lines in the evidence directory.
+- Browser playback proof may need a separate Playwright phase after the media/API harness is stable. Do not claim browser recovery/quality behavior from FFprobe evidence alone.
+- The current workflow may invoke quickstart and the legacy ingest test in one job. Rewire it so the expensive real-stack path runs once, while the cheap storage test remains independently callable.
+
+### Golden-path test plan
+
+- Add static/unit coverage for report redaction, URL sanitization, timeout/failure stage reporting, deterministic fixture/probe parsing, and workflow wiring.
+- Add a runtime-wiring regression plus processor tests that force recording and ready-state persistence failures; require a bounded terminal state and exactly one ingest submission.
+- Run the cheap storage ingest integration test separately and prove its name/docs no longer describe it as the canonical product E2E.
+- Run the new harness against Docker Desktop from a clean Compose teardown, require real 1080p RTMP publish, SRS live state, OME and transcoder playback probes, chat/moderation, VOD publication/playback, health surfaces, offline transition, evidence scan, and clean teardown.
+- Deliberately break at least one dependency input in a focused test and require a failure at the named stage with no secret echoed.
+- Run `./scripts/verify.sh`, viewer checks where browser evidence changes, Compose config validation, the upgraded ingest workflow contract tests, and required remote CI before merge.
+- Leave tagged pull-only Ubuntu/XOA repetition, repeated-run flake measurements, and browser player recovery/quality evidence explicitly pending until their direct runs exist.
+
 ## Scope
 - Advance production blocker #1297 with a clean-host Linux Compose installer that consumes release artifacts only and targets Ubuntu 24.04 LTS x86_64 first.
 - Make launcher archives plus `.deb`/`.rpm` packages self-contained for the canonical pull-only stack: CLI/wrapper, Compose/env contract, migrations, renderers/templates, proxy config, systemd integration, and operator docs.

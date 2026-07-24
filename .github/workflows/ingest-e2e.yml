@@ -1,4 +1,4 @@
-name: Ingest end-to-end
+name: Production golden path
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,11 +13,14 @@ permissions:
 
 jobs:
   ingest-e2e:
+    name: Canonical Compose product acceptance
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       GOTOOLCHAIN: local
       GOPROXY: off
       GOSUMDB: off
+      BITRIVER_GOLDEN_PATH_ARTIFACT_DIR: .artifacts/production-golden-path
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -25,5 +28,14 @@ jobs:
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
 
-      - name: Run ingest pipeline integration test
-        run: ./scripts/test-ingest-e2e.sh
+      - name: Run production golden path
+        run: ./scripts/test-production-golden-path.sh --stack quickstart --client docker
+
+      - name: Upload sanitized production evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-golden-path-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/production-golden-path/production-golden-path.json
+          if-no-files-found: warn
+          retention-days: 14

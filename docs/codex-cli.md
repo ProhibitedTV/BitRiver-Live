@@ -84,7 +84,7 @@ Validate the PR body draft locally:
 ./scripts/check-pr-release-scorecard.sh --body pr-body.md
 ```
 
-For medium/high-risk changes, include concrete evidence or an explicit blocked-check explanation. See `docs/pr-release-scorecard.md` for the Gate 4 expectations.
+For medium/high-risk changes, include concrete evidence or an explicit blocked-check explanation. See `docs/pr-release-scorecard.md` for the Gate 5 expectations.
 
 ### Keep the CLI up to date
 

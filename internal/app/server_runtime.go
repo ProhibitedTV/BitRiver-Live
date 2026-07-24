@@ -294,7 +294,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	if ingestController != nil {
 		uploadSourceCfg := uploadSourceStorageConfigFromObjectStorage(objectCfg)
 		uploadProcessor = serviceuploads.NewUploadProcessor(serviceuploads.UploadProcessorConfig{
-			Store:                 storage.NewUploadProcessingStore(useCases),
+			Store:                 storage.NewUploadProcessingStore(store),
 			Ingest:                ingestController,
 			Cleaner:               api.NewUploadSourceCleaner(uploadSourceCfg, "", logging.WithComponent(in.Logger, "uploads")),
 			Renditions:            in.IngestConfig.LadderProfiles,

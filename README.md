@@ -161,6 +161,22 @@ docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 bitr
 go run ./cmd/bitriver smoke --env-file ./.env
 ```
 
+For a destructive local release rehearsal that owns a disposable quickstart
+stack, creates real accounts and a channel, publishes deterministic 1080p RTMP,
+decodes both OME and transcoder playback, exercises chat/moderation and VOD,
+scans its evidence, and tears everything down:
+
+```bash
+./scripts/test-production-golden-path.sh \
+  --stack quickstart \
+  --client docker
+```
+
+The sanitized result is
+`.artifacts/production-golden-path/production-golden-path.json`. Do not point
+this lifecycle-owning mode at an operator stack whose data must be preserved;
+use `--stack running` against a deliberately prepared staging installation.
+
 ## Support boundary
 
 Supported and actively hardened:

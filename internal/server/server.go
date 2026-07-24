@@ -728,6 +728,8 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 			switch {
 			case isPublicDirectoryPath(path):
 				optionalAuth = true
+			case isUploadMediaPath(path):
+				optionalAuth = true
 			case strings.HasPrefix(path, "/api/channels/"):
 				optionalAuth = true
 			case strings.HasPrefix(path, "/api/recordings"):
@@ -767,6 +769,15 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 
 func isSRSHookPath(path string) bool {
 	return path == "/api/ingest/srs-hook" || strings.HasPrefix(path, "/api/ingest/srs/")
+}
+
+func isUploadMediaPath(path string) bool {
+	const prefix = "/api/uploads/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
+	return len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && parts[1] == "media"
 }
 
 func isPublicDirectoryPath(path string) bool {

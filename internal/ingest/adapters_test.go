@@ -356,32 +356,44 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 func TestHTTPTranscoderAdapterStartUpload(t *testing.T) {
 	t.Helper()
 	var started bool
+	var statusReads int
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/uploads" {
-			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
-		}
-		started = true
 		if got := r.Header.Get("Authorization"); got != "Bearer job-token" {
 			t.Fatalf("expected bearer token, got %q", got)
 		}
-		var payload ffmpegUploadRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		if payload.ChannelID != "channel-123" || payload.UploadID != "upload-abc" || payload.SourceURL != "https://cdn/source.mp4" {
-			t.Fatalf("unexpected payload: %+v", payload)
-		}
-		if err := json.NewEncoder(w).Encode(ffmpegUploadResponse{
-			JobID:       "job-upload",
-			PlaybackURL: "https://cdn/hls/index.m3u8",
-			Renditions: []Rendition{{
-				Name:        "720p",
-				ManifestURL: "https://cdn/hls/720p.m3u8",
-				Bitrate:     3000,
-			}},
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/uploads":
+			started = true
+			var payload ffmpegUploadRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if payload.ChannelID != "channel-123" || payload.UploadID != "upload-abc" || payload.SourceURL != "https://cdn/source.mp4" {
+				t.Fatalf("unexpected payload: %+v", payload)
+			}
+			if err := json.NewEncoder(w).Encode(ffmpegUploadResponse{
+				JobID:       "job-upload",
+				PlaybackURL: "https://cdn/hls/index.m3u8",
+				Renditions: []Rendition{{
+					Name:        "720p",
+					ManifestURL: "https://cdn/hls/720p.m3u8",
+					Bitrate:     3000,
+				}},
+			}); err != nil {
+				t.Fatalf("encode response: %v", err)
+			}
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/uploads/job-upload":
+			statusReads++
+			status := "running"
+			if statusReads > 1 {
+				status = "completed"
+			}
+			if err := json.NewEncoder(w).Encode(ffmpegUploadStatusResponse{JobID: "job-upload", Status: status}); err != nil {
+				t.Fatalf("encode status response: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 	}))
 	defer server.Close()
@@ -403,11 +415,42 @@ func TestHTTPTranscoderAdapterStartUpload(t *testing.T) {
 	if !started {
 		t.Fatal("expected upload endpoint to be invoked")
 	}
+	if statusReads < 2 {
+		t.Fatalf("expected adapter to wait for completed job status, got %d reads", statusReads)
+	}
 	if result.JobID != "job-upload" || result.PlaybackURL != "https://cdn/hls/index.m3u8" {
 		t.Fatalf("unexpected upload result: %+v", result)
 	}
 	if len(result.Renditions) != 1 || result.Renditions[0].ManifestURL != "https://cdn/hls/720p.m3u8" {
 		t.Fatalf("unexpected renditions: %+v", result.Renditions)
+	}
+}
+
+func TestHTTPTranscoderAdapterStartUploadReturnsJobFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/uploads":
+			_ = json.NewEncoder(w).Encode(ffmpegUploadResponse{JobID: "job-failed"})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/uploads/job-failed":
+			_ = json.NewEncoder(w).Encode(ffmpegUploadStatusResponse{
+				JobID:  "job-failed",
+				Status: "failed",
+				Error:  "exit status 1",
+			})
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 1, time.Nanosecond)
+	_, err := adapter.StartUpload(context.Background(), uploadJobRequest{
+		ChannelID: "channel-123",
+		UploadID:  "upload-abc",
+		SourceURL: "https://cdn/source.mp4",
+	})
+	if err == nil || !strings.Contains(err.Error(), "upload job failed: exit status 1") {
+		t.Fatalf("expected terminal upload job failure, got %v", err)
 	}
 }
 

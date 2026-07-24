@@ -254,8 +254,12 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", upload.ChannelID))
 		return
 	}
-	if len(parts) > 1 && strings.TrimSpace(parts[1]) == "media" {
-		h.serveUploadMedia(w, r, upload)
+	if len(parts) > 1 {
+		if len(parts) == 2 && strings.TrimSpace(parts[1]) == "media" {
+			h.serveUploadMedia(w, r, upload)
+			return
+		}
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown upload path"))
 		return
 	}
 	actor, hasActor := UserFromContext(r.Context())

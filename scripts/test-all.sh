@@ -6,34 +6,37 @@ cd "$REPO_ROOT"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/test-all.sh [--ingest-e2e]
+Usage: ./scripts/test-all.sh [--production-golden-path]
 
 Runs local validation entrypoints in one command:
   - ./scripts/test-unit.sh
   - ./scripts/verify.sh
   - ./scripts/test-postgres.sh (opt-in)
   - ./scripts/test-quickstart.sh (opt-in)
-  - ./scripts/test-ingest-e2e.sh (opt-in)
+  - ./scripts/test-production-golden-path.sh via canonical quickstart (opt-in)
   - viewer integration tests (when node + npm + playwright are available)
 
 Integration controls:
   BITRIVER_TEST_POSTGRES=1       Run Postgres integration tests.
   BITRIVER_TEST_QUICKSTART=1     Run quickstart smoke test.
 
-Ingest e2e controls:
-  --ingest-e2e                    Run ingest e2e in this invocation.
-  BITRIVER_TEST_ALL_INGEST_E2E=1  Run ingest e2e by environment override.
+Production golden-path controls:
+  --production-golden-path                    Run the real product gate.
+  BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1  Run it by environment override.
+
+Compatibility:
+  --ingest-e2e and BITRIVER_TEST_ALL_INGEST_E2E=1 remain accepted aliases.
 USAGE
 }
 
-run_ingest_e2e=false
+run_production_golden_path=false
 run_postgres=false
 run_quickstart=false
 
 while (($# > 0)); do
   case "$1" in
-    --ingest-e2e)
-      run_ingest_e2e=true
+    --production-golden-path|--ingest-e2e)
+      run_production_golden_path=true
       ;;
     -h|--help)
       usage
@@ -48,8 +51,8 @@ while (($# > 0)); do
   shift
 done
 
-if [[ "${BITRIVER_TEST_ALL_INGEST_E2E:-}" == "1" ]]; then
-  run_ingest_e2e=true
+if [[ "${BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH:-}" == "1" || "${BITRIVER_TEST_ALL_INGEST_E2E:-}" == "1" ]]; then
+  run_production_golden_path=true
 fi
 
 if [[ "${BITRIVER_TEST_POSTGRES:-}" == "1" ]]; then
@@ -98,7 +101,11 @@ if [[ "$run_quickstart" == true ]]; then
       --tier fast \
       --artifact-dir "${BITRIVER_RELEASE_GATE_ARTIFACT_DIR:-.artifacts/release-gate-fast}" \
       --target "${BITRIVER_RELEASE_GATE_TARGET:-v0.0.0-ci}"
-    run_step "Quickstart smoke" ./scripts/test-quickstart.sh
+    if [[ "$run_production_golden_path" == true ]]; then
+      skip_step "Quickstart smoke" "the production golden path owns the same canonical quickstart lifecycle."
+    else
+      run_step "Quickstart smoke" ./scripts/test-quickstart.sh
+    fi
   else
     skip_step "Release smoke gate fast tier" "docker compose is not installed, not on PATH, or unavailable."
     skip_step "Quickstart smoke" "docker compose is not installed, not on PATH, or unavailable."
@@ -107,10 +114,12 @@ else
   skip_step "Quickstart smoke" "disabled by default (set BITRIVER_TEST_QUICKSTART=1 to enable)."
 fi
 
-if [[ "$run_ingest_e2e" == true ]]; then
-  run_step "Ingest end-to-end tests" ./scripts/test-ingest-e2e.sh
+if [[ "$run_production_golden_path" == true ]]; then
+  run_step "Production golden path" ./scripts/test-production-golden-path.sh \
+    --stack quickstart \
+    --client "${BITRIVER_GOLDEN_PATH_CLIENT:-docker}"
 else
-  skip_step "Ingest end-to-end tests" "disabled by default (use --ingest-e2e or BITRIVER_TEST_ALL_INGEST_E2E=1)."
+  skip_step "Production golden path" "disabled by default (use --production-golden-path or BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1)."
 fi
 
 if [ ! -d web/viewer ]; then
