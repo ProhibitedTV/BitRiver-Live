@@ -26,6 +26,14 @@
 - Multi-architecture image publication is slower than registry index propagation. Use bounded manifest retries before the pull-only gate, not unbounded sleeps.
 - Production mode currently requires third-party digest pins but not first-party pins. Resolve and record first-party manifest digests in candidate evidence/release notes; do not claim digest-pinned clean-host proof from tag-only pulls.
 - The existing Windows workflow passes `v...` directly to WiX and stages files under paths WiX does not read. Static checks are insufficient; the remote Windows MSI job remains required before candidate publication.
+- The Jul 24 GitHub Advisory Database update for
+  `GHSA-mh99-v99m-4gvg` marks every `brace-expansion` release through 5.0.7
+  vulnerable to attacker-controlled memory exhaustion and names 5.0.8 as the
+  patched release. Viewer CI installs older transitive majors through
+  ESLint/Jest tooling, and ordinary `npm audit fix` cannot update those parent
+  ranges without a breaking ESLint major. Use one explicit npm override to
+  5.0.8 only if clean `npm ci`, lint, unit, browser, build, and audit all pass;
+  do not accept `--force` or suppress the advisory.
 - GitHub-hosted pull-only proof still is not a clean Ubuntu/XOA install, Nginx Proxy Manager/browser test, or host reboot. Those remain explicit #1297/#1304 promotion gates.
 
 ### Release-candidate test plan
@@ -35,6 +43,13 @@
 - Add quickstart regression tests proving build/development remains the default and pull/production performs no build while enforcing the supplied external env/digest contract.
 - Run shell syntax/ShellCheck, generated contract checks, focused Go/Python tests, Compose rendering in both build and pull shapes, release-bundle/package tests, and `git diff --check`.
 - Run `./scripts/verify.sh --viewer` and the full PR matrix. After merge, tag the RC, monitor every release job, inspect/download the published assets/checksums, verify anonymous GHCR access and image digests, and run a Docker Desktop pull-only golden path before handing the candidate to the clean Ubuntu/XOA gate.
+- For `GHSA-mh99-v99m-4gvg`, require the lock graph to contain only
+  `brace-expansion@5.0.8`, `npm audit --audit-level=high` to report zero
+  vulnerabilities, and the complete viewer lint/unit/Playwright/build sequence
+  to pass after a clean install. Build the real viewer container too, because
+  its dependency stage must copy the local compatibility hook before `npm ci`.
+  Keep the override registry-backed so nested consumers receive ordinary
+  package copies and `npm ls` reports a valid dependency graph.
 
 ## Current scope - production golden-path E2E (#1300, 2026-07-24)
 

@@ -79,6 +79,16 @@ func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
 	}
 }
 
+func TestViewerImageStagesLocalDependencyBeforeCleanInstall(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	dockerfile := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "Dockerfile"))
+	vendorCopy := strings.Index(dockerfile, "COPY vendor ./vendor")
+	cleanInstall := strings.Index(dockerfile, "RUN npm ci")
+	if vendorCopy == -1 || cleanInstall == -1 || vendorCopy > cleanInstall {
+		t.Fatal("viewer image must stage local dependency adapters before npm ci")
+	}
+}
+
 func TestQuickstartPullsOnlyMissingRenderedImages(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	quickstart := readRepoFile(t, repoRoot, filepath.Join("scripts", "test-quickstart.sh"))

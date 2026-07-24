@@ -74,6 +74,39 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Eleven Python release-helper tests, focused Go CLI/workflow tests, YAML/WiX parsing, shell syntax, generated contract checks, doc consistency checks, and `git diff --check` passed.
     - First PR run `30132326373` exposed ShellCheck SC1007 on the intentionally empty stable nFPM prerelease assignment. Changed it to the explicit `NFPM_PRERELEASE=''` form; no package behavior changed.
     - Replacement run `30132400350` then exposed two escaped OME-helper selectors in the CI/standalone image-scan workflows that still matched the retired namespace even though the images built under the new namespace. Updated both selectors and their shared regression test; the failure occurred before Trivy evaluated any CVE, so it was workflow drift rather than a vulnerability finding.
+    - Current-head run `30132686142` passed Ubuntu full-stack, image CVE,
+      cross-platform Go/entrypoint, lint, unit, browser, and viewer build work,
+      then `npm audit` blocked on newly published
+      `GHSA-mh99-v99m-4gvg` (`brace-expansion<=5.0.7`). The advisory names
+      5.0.8 as the only patched release; ordinary non-breaking `npm audit fix`
+      could update only the existing v5 copy and still reported 27 vulnerable
+      transitive paths. A tested 5.0.8 override is therefore the next release
+      gate; force-upgrading ESLint or suppressing the advisory is not accepted.
+    - A direct all-majors override cleared audit but broke legacy minimatch's
+      callable CommonJS contract, so it was rejected. The final install hook
+      keeps the exact upstream `brace-expansion@5.0.8` package and implementation
+      and changes only its CommonJS export shape so legacy callable and current
+      named-export consumers both work; no vulnerable expansion implementation
+      is copied or retained. Focused unit coverage protects both export shapes
+      and the patched maximum-length behavior.
+    - The viewer image dependency stage now copies `vendor/` before `npm ci`;
+      a Go workflow regression test enforces that ordering so the local
+      compatibility hook cannot pass host CI while failing the published
+      container build.
+    - A folder-based first draft installed and executed correctly but left npm
+      reporting nested local links as invalid. Keep the override registry-backed
+      and apply the reviewed legacy CommonJS export hook during `postinstall`;
+      require clean `npm ci`, `npm ls`, audit, tests, and the real container
+      build before publication.
+    - Final proof passed: clean `npm ci`; a valid, fully deduplicated
+      `npm ls brace-expansion --all` graph containing only 5.0.8; live
+      `npm audit --audit-level=high` with zero vulnerabilities; viewer lint;
+      26 suites/217 tests; all 36 Playwright tests; Next.js production builds;
+      and a clean viewer Docker build (`sha256:5c8e3407...`). The complete
+      `./scripts/verify.sh --viewer` gate then passed in 194 seconds with Go
+      1.26.5, all Go/contract/Postgres checks, Docker Compose full-stack
+      quickstart, OME health, API/viewer probes, and matching private `.env`
+      restoration hash.
     - PR, remote CI, merge, immutable RC tag, published assets/images, anonymous pull, and tag-workflow product evidence remain pending.
 
 ## Scoped change: full-stack production golden-path E2E (#1300)
