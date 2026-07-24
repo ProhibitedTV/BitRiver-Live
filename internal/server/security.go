@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -69,11 +70,11 @@ func defaultContentSecurityPolicy(frameAncestors string) string {
 	return buildContentSecurityPolicy(frameAncestors, false)
 }
 
-func defaultViewerContentSecurityPolicy(frameAncestors string) string {
-	return buildContentSecurityPolicy(frameAncestors, true)
+func defaultViewerContentSecurityPolicy(frameAncestors string, mediaOrigins ...string) string {
+	return buildContentSecurityPolicy(frameAncestors, true, mediaOrigins...)
 }
 
-func buildContentSecurityPolicy(frameAncestors string, allowInlineScripts bool) string {
+func buildContentSecurityPolicy(frameAncestors string, allowInlineScripts bool, mediaOrigins ...string) string {
 	value := frameAncestors
 	if value == "" {
 		value = defaultFrameAncestors
@@ -83,9 +84,25 @@ func buildContentSecurityPolicy(frameAncestors string, allowInlineScripts bool) 
 	if allowInlineScripts {
 		scriptSource = "script-src 'self' 'unsafe-inline'; "
 	}
+	mediaSources := []string{"'self'"}
+	seen := map[string]struct{}{"'self'": {}}
+	for _, raw := range mediaOrigins {
+		parsed, err := url.Parse(strings.TrimSpace(raw))
+		if err != nil || parsed.User != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			continue
+		}
+		origin := strings.ToLower(parsed.Scheme) + "://" + parsed.Host
+		if _, ok := seen[origin]; ok {
+			continue
+		}
+		seen[origin] = struct{}{}
+		mediaSources = append(mediaSources, origin)
+	}
+	mediaSource := strings.Join(mediaSources, " ")
 
 	return "default-src 'self'; " +
-		"connect-src 'self'; " +
+		"connect-src " + mediaSource + "; " +
+		"media-src " + mediaSource + "; " +
 		"img-src 'self' data:; " +
 		scriptSource +
 		"style-src 'self'; " +

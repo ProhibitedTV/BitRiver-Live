@@ -146,7 +146,7 @@ func runFFmpegStub(args []string) error {
 	for idx, name := range names {
 		bandwidth := bandwidths[idx]
 		if bandwidth == "" {
-			bandwidth = "1000000"
+			bandwidth = strconv.Itoa((idx + 1) * 1000000)
 		}
 		master.WriteString("#EXT-X-STREAM-INF:BANDWIDTH=" + bandwidth + "\n")
 		master.WriteString(name + "/index.m3u8\n")
@@ -210,21 +210,19 @@ func joinSlash(parts ...string) string {
 func parseVariantStreamMap(value string) ([]string, []string) {
 	var names []string
 	var bandwidths []string
-	current := -1
-	for _, token := range strings.Fields(value) {
-		switch {
-		case strings.HasPrefix(token, "name:"):
-			names = append(names, strings.TrimPrefix(token, "name:"))
-			bandwidths = append(bandwidths, "")
-			current = len(names) - 1
-		case strings.HasPrefix(token, "bandwidth:"):
-			if current == -1 {
-				names = append(names, fmt.Sprintf("variant-%d", len(names)))
-				bandwidths = append(bandwidths, "")
-				current = len(names) - 1
+	for idx, entry := range strings.Fields(value) {
+		name := fmt.Sprintf("variant-%d", idx)
+		bandwidth := ""
+		for _, token := range strings.Split(entry, ",") {
+			switch {
+			case strings.HasPrefix(token, "name:"):
+				name = strings.TrimPrefix(token, "name:")
+			case strings.HasPrefix(token, "bandwidth:"):
+				bandwidth = strings.TrimPrefix(token, "bandwidth:")
 			}
-			bandwidths[current] = strings.TrimPrefix(token, "bandwidth:")
 		}
+		names = append(names, name)
+		bandwidths = append(bandwidths, bandwidth)
 	}
 	return names, bandwidths
 }
@@ -368,19 +366,17 @@ func run(args []string) error {
 	}
 
 	variants := []variant{}
-	current := -1
-	for _, token := range strings.Fields(varStreamMap) {
-		switch {
-		case strings.HasPrefix(token, "name:"):
-			variants = append(variants, variant{name: strings.TrimPrefix(token, "name:")})
-			current = len(variants) - 1
-		case strings.HasPrefix(token, "bandwidth:"):
-			if current == -1 {
-				variants = append(variants, variant{name: fmt.Sprintf("variant-%d", len(variants))})
-				current = len(variants) - 1
+	for idx, entry := range strings.Fields(varStreamMap) {
+		current := variant{name: fmt.Sprintf("variant-%d", idx)}
+		for _, token := range strings.Split(entry, ",") {
+			switch {
+			case strings.HasPrefix(token, "name:"):
+				current.name = strings.TrimPrefix(token, "name:")
+			case strings.HasPrefix(token, "bandwidth:"):
+				current.bandwidth = strings.TrimPrefix(token, "bandwidth:")
 			}
-			variants[current].bandwidth = strings.TrimPrefix(token, "bandwidth:")
 		}
+		variants = append(variants, current)
 	}
 	if len(variants) == 0 {
 		variants = append(variants, variant{name: "variant"})
@@ -389,10 +385,10 @@ func run(args []string) error {
 	var master strings.Builder
 	master.WriteString("#EXTM3U\n")
 	master.WriteString("#EXT-X-VERSION:3\n")
-	for _, currentVariant := range variants {
+	for idx, currentVariant := range variants {
 		bandwidth := currentVariant.bandwidth
 		if bandwidth == "" {
-			bandwidth = "1000000"
+			bandwidth = strconv.Itoa((idx + 1) * 1000000)
 		}
 		fmt.Fprintf(&master, "#EXT-X-STREAM-INF:BANDWIDTH=%s\n", bandwidth)
 		fmt.Fprintf(&master, "%s/index.m3u8\n", currentVariant.name)
@@ -614,6 +610,41 @@ func TestAuthorizeInvalidTokenLogsWarning(t *testing.T) {
 	}
 	if !strings.Contains(log, "invalid_token") {
 		t.Fatalf("expected reason to mention invalid token, got: %s", log)
+	}
+}
+
+func TestBuildTranscodePlanUsesSupportedHLSVariantMap(t *testing.T) {
+	plan, err := buildTranscodePlan("rtmp://srs:1935/live/key", filepath.Join(t.TempDir(), "live"), []rendition{
+		{Name: "1080p", Bitrate: 6000},
+		{Name: "720p", Bitrate: 4000},
+	})
+	if err != nil {
+		t.Fatalf("buildTranscodePlan: %v", err)
+	}
+
+	var variantMap string
+	for idx, arg := range plan.args {
+		if arg == "-var_stream_map" && idx+1 < len(plan.args) {
+			variantMap = plan.args[idx+1]
+			break
+		}
+	}
+	want := "v:0,a:0,name:1080p v:1,a:1,name:720p"
+	if variantMap != want {
+		t.Fatalf("unexpected HLS variant map: got %q want %q", variantMap, want)
+	}
+	if strings.Contains(variantMap, "bandwidth:") || strings.Contains(variantMap, "resolution:") {
+		t.Fatalf("variant map contains unsupported HLS keys: %q", variantMap)
+	}
+}
+
+func TestWindowsCommandInterpreterPrefersComSpec(t *testing.T) {
+	want := filepath.Join(t.TempDir(), "custom-cmd.exe")
+	t.Setenv("COMSPEC", want)
+	t.Setenv("SystemRoot", filepath.Join(t.TempDir(), "windows"))
+
+	if got := windowsCommandInterpreter(); got != want {
+		t.Fatalf("unexpected Windows command interpreter: got %q want %q", got, want)
 	}
 }
 
@@ -912,6 +943,10 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 
 	metaPath2 := filepath.Join(tempDir, "live", jobID2, "metadata.json")
 	waitForStoppedJobMetadata(t, metaPath2, "expected stopped metadata for cancelled job")
+	health, status := fetchHealth(t, ts)
+	if status != http.StatusOK || health.Status != "ok" {
+		t.Fatalf("intentional job stop must not leave transcoder unhealthy: status=%d payload=%+v", status, health)
+	}
 }
 
 func TestNewServerRequiresPublicBaseURL(t *testing.T) {

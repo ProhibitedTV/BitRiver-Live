@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -71,9 +72,18 @@ type uploadJob struct {
 }
 
 type processState struct {
-	cmd    *exec.Cmd
-	cancel context.CancelFunc
-	done   chan struct{}
+	cmd           *exec.Cmd
+	cancel        context.CancelFunc
+	done          chan struct{}
+	stopRequested atomic.Bool
+}
+
+func (p *processState) stop() {
+	if p == nil {
+		return
+	}
+	p.stopRequested.Store(true)
+	p.cancel()
 }
 
 type server struct {
@@ -801,7 +811,7 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 	jobLogger := s.jobLogger(id, meta)
 
 	if proc != nil {
-		proc.cancel()
+		proc.stop()
 		select {
 		case <-proc.done:
 		case <-time.After(15 * time.Second):
@@ -1228,8 +1238,7 @@ func buildTranscodePlan(input, outputDir string, ladder []rendition) (*transcode
 	segmentPattern := filepath.ToSlash(filepath.Join(absDir, "%v", "segment_%06d.ts"))
 	varStreamMap := make([]string, 0, len(updated))
 	for idx := range updated {
-		bandwidth := (videoBitrates[idx] + audioBitrates[idx]) * 1000
-		entry := fmt.Sprintf("v:%d,a:%d name:%s bandwidth:%d resolution:%dx%d", idx, idx, variantNames[idx], bandwidth, widths[idx], heights[idx])
+		entry := fmt.Sprintf("v:%d,a:%d,name:%s", idx, idx, variantNames[idx])
 		varStreamMap = append(varStreamMap, entry)
 	}
 
@@ -1269,15 +1278,23 @@ func (s *server) startFFmpeg(jobID string, plan *transcodePlan, onExit func(erro
 	proc := &processState{cmd: cmd, cancel: cancel, done: make(chan struct{})}
 	go func() {
 		err := cmd.Wait()
+		requestedStop := proc.stopRequested.Load()
 		if processLogger != nil {
-			if err != nil {
+			switch {
+			case requestedStop:
+				processLogger.Info("ffmpeg stopped")
+			case err != nil:
 				processLogger.Error("ffmpeg exited", "error", err)
-			} else {
+			default:
 				processLogger.Info("ffmpeg completed")
 			}
 		}
 		if onExit != nil {
-			onExit(err)
+			if requestedStop {
+				onExit(nil)
+			} else {
+				onExit(err)
+			}
 		}
 		cancel()
 		close(proc.done)
@@ -1640,7 +1657,7 @@ func createLiveMirror(src string, dest string) error {
 }
 
 func createWindowsDirectoryJunction(linkPath string, targetPath string) error {
-	cmd := exec.Command("cmd", "/c", "mklink", "/J", linkPath, targetPath)
+	cmd := exec.Command(windowsCommandInterpreter(), "/c", "mklink", "/J", linkPath, targetPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		trimmed := strings.TrimSpace(string(output))
@@ -1650,6 +1667,18 @@ func createWindowsDirectoryJunction(linkPath string, targetPath string) error {
 		return fmt.Errorf("%w: %s", err, trimmed)
 	}
 	return nil
+}
+
+func windowsCommandInterpreter() string {
+	for _, key := range []string{"COMSPEC", "ComSpec"} {
+		if command := strings.TrimSpace(os.Getenv(key)); command != "" {
+			return command
+		}
+	}
+	if systemRoot := strings.TrimSpace(os.Getenv("SystemRoot")); systemRoot != "" {
+		return filepath.Join(systemRoot, "System32", "cmd.exe")
+	}
+	return "cmd.exe"
 }
 
 // removeLiveMirror performs remove live mirror and propagates validation or dependency failures to the caller.

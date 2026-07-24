@@ -251,14 +251,14 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	if !strings.Contains(script, "$goPath = (Get-Command go -ErrorAction Stop).Source") {
 		t.Fatalf("expected PowerShell quickstart wrapper to resolve the absolute go.exe path before launching the CLI")
 	}
-	if !strings.Contains(script, "Start-Process -FilePath $goPath") {
-		t.Fatalf("expected PowerShell quickstart wrapper to invoke the CLI through Start-Process using the resolved go.exe path")
+	if !strings.Contains(script, "SetEnvironmentVariable('GOTOOLCHAIN', 'local', 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to inspect and build with the installed local Go toolchain")
 	}
-	if !strings.Contains(script, "$processPath = [System.Environment]::GetEnvironmentVariable('Path', 'Process')") {
-		t.Fatalf("expected PowerShell quickstart wrapper to capture the process Path value before normalizing environment casing")
+	if !strings.Contains(script, "$buildOutput = @(& $goPath @buildArgs 2>&1)") {
+		t.Fatalf("expected PowerShell quickstart wrapper to compile the CLI directly with the resolved go.exe path")
 	}
-	if !strings.Contains(script, "$processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')") {
-		t.Fatalf("expected PowerShell quickstart wrapper to capture the process PATH value before normalizing environment casing")
+	if !strings.Contains(script, "$cliOutput = @(& $tempBinary @CliArgs 2>&1)") {
+		t.Fatalf("expected PowerShell quickstart wrapper to invoke the compiled CLI without leaking build-only Go environment settings")
 	}
 	if !strings.Contains(script, "$processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to capture the process GOCACHE value before launching the CLI")
@@ -270,18 +270,15 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 		t.Fatalf("expected PowerShell quickstart wrapper to set GOCACHE before launching the CLI")
 	}
 	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')") {
-		t.Fatalf("expected PowerShell quickstart wrapper to restore the original GOCACHE value after Start-Process")
+		t.Fatalf("expected PowerShell quickstart wrapper to restore the original GOCACHE value after compiling the CLI")
 	}
-	if !strings.Contains(script, "SetEnvironmentVariable('Path', $normalizedPath, 'Process')") {
-		t.Fatalf("expected PowerShell quickstart wrapper to preserve a canonical Path value for the child process")
+	if !strings.Contains(script, "SetEnvironmentVariable('GOPROXY', $processGOPROXY, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to restore GOPROXY before running Docker-backed CLI stages")
 	}
-	if !strings.Contains(script, "SetEnvironmentVariable('PATH', $null, 'Process')") {
-		t.Fatalf("expected PowerShell quickstart wrapper to drop the duplicate PATH key before Start-Process")
+	if strings.Contains(script, "SetEnvironmentVariable('PATH', $null, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper not to clear PATH after setting Path on case-insensitive Windows")
 	}
-	if !strings.Contains(script, "SetEnvironmentVariable('PATH', $processPATH, 'Process')") {
-		t.Fatalf("expected PowerShell quickstart wrapper to restore the original PATH value after Start-Process")
-	}
-	if !strings.Contains(script, "$process.ExitCode") {
+	if !strings.Contains(script, "$exitCode = $LASTEXITCODE") {
 		t.Fatalf("expected PowerShell quickstart wrapper to inspect the child process exit code")
 	}
 	if !strings.Contains(script, "flag: help requested") {
@@ -289,6 +286,125 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	}
 	if !strings.Contains(script, "exit $exitCode") {
 		t.Fatalf("expected PowerShell quickstart wrapper to return non-zero CLI exit codes")
+	}
+}
+
+func TestWindowsDockerDesktopProofUsesCanonicalQuickstart(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	scriptPath := filepath.Join(repoRoot, "scripts", "verify-windows-docker.ps1")
+	content, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read verify-windows-docker.ps1: %v", err)
+	}
+
+	script := string(content)
+	for _, expected := range []string{
+		"docker' -Arguments @('version', '--format', '{{.Server.Os}}|{{.Server.Arch}}|{{.Server.Version}}')",
+		"docker' -Arguments @('info', '--format', '{{.OperatingSystem}}|{{.OSType}}|{{.Architecture}}')",
+		"'compose', '--env-file', $envPath, '-f', $composePath, 'config', '--quiet'",
+		"$runtimeEnvPath = New-EvaluationEnvFile -SourcePath $envPath",
+		"SetEnvironmentVariable('GOTOOLCHAIN', 'local', 'Process')",
+		"& $quickstartPath --env-file $runtimeEnvPath --compose-file $composePath --image-source build",
+		"@('/healthz', '/readyz', '/viewer', '/admin')",
+		"Cleanup (PowerShell): `$env:BITRIVER_SRS_PUBLIC_RTMP_BASE_URL='rtmp://localhost:1935/live'; `$env:BITRIVER_OME_PUBLIC_LLHLS_BASE_URL='http://localhost:8080/live'",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("expected Windows Docker Desktop proof script to contain %q", expected)
+		}
+	}
+	if strings.Contains(script, "docker compose up") {
+		t.Fatal("expected Windows proof script to delegate startup to the canonical quickstart instead of duplicating Compose orchestration")
+	}
+}
+
+func TestWorkflowComposeFixturesIncludePublicMediaURLs(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+	assignments := []string{
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://example.com/live",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://example.com/live",
+	}
+	for _, relativePath := range []string{
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".github", "workflows", "image-scan.yml"),
+	} {
+		contents, readErr := os.ReadFile(filepath.Join(repoRoot, relativePath))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", relativePath, readErr)
+		}
+		workflow := string(contents)
+		for _, assignment := range assignments {
+			if !strings.Contains(workflow, assignment) {
+				t.Fatalf("%s must include %q in its Compose fixture", relativePath, assignment)
+			}
+		}
+	}
+
+	releasePath := filepath.Join(repoRoot, ".github", "workflows", "release.yml")
+	releaseContents, err := os.ReadFile(releasePath)
+	if err != nil {
+		t.Fatalf("read release workflow: %v", err)
+	}
+	for _, variable := range []string{
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL: ${{ secrets.BITRIVER_SRS_PUBLIC_RTMP_BASE_URL }}",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL: ${{ secrets.BITRIVER_OME_PUBLIC_LLHLS_BASE_URL }}",
+	} {
+		if !strings.Contains(string(releaseContents), variable) {
+			t.Fatalf("release workflow must forward %q", variable)
+		}
+	}
+}
+
+func TestTranscoderPublicNginxMapsDocumentedHLSPrefix(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+	paths := []string{
+		filepath.Join(repoRoot, "deploy", "nginx", "transcoder-public.conf"),
+		filepath.Join(repoRoot, "deploy", "helm", "bitriver-live", "files", "transcoder-public.conf"),
+	}
+	for _, path := range paths {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		config := string(contents)
+		if !strings.Contains(config, "location /hls/") || !strings.Contains(config, "alias /work/public/") {
+			t.Fatalf("%s must map the documented /hls public base to /work/public", path)
+		}
+	}
+}
+
+func TestOmeLLHLSPublisherAllowsBrowserPlayback(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+	paths := []string{
+		filepath.Join(repoRoot, "deploy", "ome", "Server.xml"),
+		filepath.Join(repoRoot, "deploy", "ome", "Server.generated.xml"),
+		filepath.Join(repoRoot, "deploy", "helm", "bitriver-live", "templates", "configmap-ome.yaml"),
+	}
+	llhlsCORS := regexp.MustCompile(`(?s)<LLHLS>\s*<ChunkDuration>[^<]+</ChunkDuration>.*?<CrossDomains>\s*<Url>\*</Url>\s*</CrossDomains>\s*</LLHLS>`)
+	for _, path := range paths {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !llhlsCORS.Match(contents) {
+			t.Fatalf("%s must allow browser CORS on the application LL-HLS publisher", path)
+		}
 	}
 }
 
@@ -307,6 +423,9 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 
 	if !strings.Contains(string(content), "Server.generated.xml") {
 		t.Fatalf("base compose file should mount generated OME Server.xml by default")
+	}
+	if !strings.Contains(string(content), "BITRIVER_OME_LLHLS_ORIGIN: ${BITRIVER_OME_LLHLS_ORIGIN:-http://ome:${BITRIVER_OME_LLHLS_PORT:-8080}}") {
+		t.Fatalf("base compose file should route same-origin /live playback to the internal OME LL-HLS listener")
 	}
 }
 
@@ -342,6 +461,30 @@ func TestQuickstartSmokeGeneratedEnvUsesNonDefaultHostPort(t *testing.T) {
 	}
 	if !strings.Contains(script, `grep_healthcheck "bitriver-live" "http://localhost:8080/healthz"`) {
 		t.Fatalf("compose healthcheck validation should continue to assert the in-container API port")
+	}
+}
+
+func TestQuickstartSmokeSuppliesPublicMediaDefaultsForExistingEnv(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "test-quickstart.sh"))
+	if err != nil {
+		t.Fatalf("read test-quickstart: %v", err)
+	}
+
+	script := string(content)
+	for _, required := range []string{
+		`export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-rtmp://localhost:1935/live}"`,
+		`export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"`,
+		`export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("quickstart smoke must supply missing public media value %q when reusing an existing env", required)
+		}
 	}
 }
 

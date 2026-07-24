@@ -177,9 +177,14 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, required := range []string{
 		`"node": ">=24 <25"`,
 		`"npm": ">=11 <12"`,
-		`"next": "16.2.10"`,
+		`"next": "16.2.11"`,
 		`"react": "19.2.7"`,
 		`"react-dom": "19.2.7"`,
+		`"@types/node": "24.13.3"`,
+		`"eslint": "9.39.5"`,
+		`"typescript": "6.0.3"`,
+		`"postcss": "8.5.22"`,
+		`"sharp": "0.35.3"`,
 	} {
 		if !strings.Contains(packageJSON, required) {
 			t.Errorf("viewer package.json missing runtime invariant %q", required)
@@ -206,6 +211,22 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, excluded := range []string{"node_modules", ".next", "playwright-report", "test-results"} {
 		if !strings.Contains(dockerignore, excluded) {
 			t.Errorf("viewer .dockerignore must exclude %q", excluded)
+		}
+	}
+}
+
+func TestRootDockerignoreExcludesRuntimeMedia(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	dockerignore := readRepoFile(t, repoRoot, ".dockerignore")
+	for _, excluded := range []string{
+		"deploy/data/",
+		"deploy/transcoder-data/",
+		".gocache*/",
+		"web/viewer/node_modules/",
+		"web/viewer/.next/",
+	} {
+		if !strings.Contains(dockerignore, excluded) {
+			t.Errorf("root .dockerignore must exclude runtime/build path %q", excluded)
 		}
 	}
 }

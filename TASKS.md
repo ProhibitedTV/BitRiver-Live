@@ -94,6 +94,20 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Check:
     - Read-only merge analysis identified overlapping release workflows, Compose/env validation, quickstart smoke, and operator documentation; `PLAN.md` now records the reconciliation rules and validation plan.
     - Current `main` is `0f557e81`; PR #1325 remains draft at `5d2f3d11`, with its historical CI green but its head non-mergeable until this reconciliation is complete.
+    - Merged current `main` locally without rewriting the published branch. The runtime/workflow changes combined automatically; eight planning/operator-doc conflicts were resolved to preserve the installer lifecycle, the verified media path, and the pre-tag availability boundary.
+    - In `golang:1.26.5-bookworm`, shell syntax, focused `./cmd/bitriver` and `./scripts` tests, the source-free release bundle, and the isolated Compose-host installer lifecycle all passed.
+    - The pinned nFPM v2.47.0 acceptance rebuilt and inspected amd64/arm64 `.deb` and `.rpm` payloads from the reconciled canonical release bundle.
+    - Literal `./scripts/verify.sh` passed in the pinned Go 1.26.5 plus Python Linux environment: release bundle, installer lifecycle, all first-party Go packages, architecture/dependency, CI contract, env hygiene, and generated-contract checks were green. Docker and viewer phases were explicitly skipped inside that tool-only container and are validated separately below.
+    - Viewer lint, all 25 Jest suites / 215 tests / 4 snapshots, and the Next.js 16.2.10 production build passed on the reconciled dependency baseline.
+    - The first live quickstart attempt exposed a backward-compatibility defect before container startup: when the smoke reused the operator's older root `.env`, Compose could not interpolate `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`. The plan now requires smoke-only public media defaults plus a regression for pre-existing env files.
+    - The second smoke reached clean image builds and exposed an upstream dependency regression already merged to `main`: `typescript@7.0.2` violates the latest `ts-jest@29.4.12` peer range (`typescript >=4.3 <7`), so Docker's clean `npm ci` fails. The release plan now restores the last proven TypeScript 6.0.3 pin instead of bypassing peer validation.
+    - After the TypeScript repair, the clean image build passed but identified peer overrides from ESLint 10 and a Node 26 type package against the declared Node 24 runtime. The reconciled release baseline now restores ESLint 9.39.5 and `@types/node` 24.13.3 as well.
+    - The official npm advisory audit classified the remaining three high findings as production dependencies through Next 16.2.10; npm identifies the aligned 16.2.11 patch as the non-major fix for Next, PostCSS, and Sharp.
+    - Next 16.2.11 removes the direct Next advisories but still pins vulnerable PostCSS 8.4.31 and Sharp 0.34.x. Because no newer stable Next exists and the viewer disables Next image optimization, the plan now requires explicit fixed-version overrides plus clean audit/build/boot evidence.
+    - The successful Compose build also showed a roughly 200 MB root build context traced to the user's untracked `deploy/transcoder-data/`; the release boundary now requires that runtime media directory to be ignored by Docker.
+    - The aligned Node 24 / TypeScript 6 / ESLint 9 baseline plus Next 16.2.11 and the fixed PostCSS/Sharp overrides passed an isolated clean `npm ci`, lint, 25 Jest suites / 215 tests / 4 snapshots, production build, and `npm audit --omit=dev --audit-level=high` with zero vulnerabilities.
+    - The rebuilt canonical quickstart passed OME helper render/validation, all image builds, migration completion, critical service health including OME, API health, and viewer reachability; cleanup left an empty Compose project and restored generated configuration.
+    - Adding `deploy/transcoder-data/` to the root `.dockerignore` reduced the helper rebuild context transfer from roughly 200 MB to 37 kB and kept the user's local media outside the builder.
 
 ### Execution log
 - Task 1 analysis:

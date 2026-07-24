@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,6 +25,16 @@ const (
 )
 
 var defaultHTTPClient = &http.Client{Timeout: defaultHTTPTimeout}
+
+type httpStatusError struct {
+	statusCode int
+	status     string
+	body       string
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("%s: %s", e.status, e.body)
+}
 
 type adapterConfig struct {
 	logger   *slog.Logger
@@ -53,11 +65,12 @@ func normalizeAdapterConfig(logger *slog.Logger, attempts int, interval time.Dur
 //
 // Implementations are responsible for contacting the appropriate control
 // plane and returning primary/backup ingest URLs for a given channel ID and
-// stream key.
+// stream key. The origin URL is an internal address that the transcoder can
+// reach; primary/backup URLs are safe to show to the creator.
 type channelAdapter interface {
 	// CreateChannel provisions a new ingest channel identified by channelID
-	// and secured by streamKey. It returns primary and backup ingest URLs.
-	CreateChannel(ctx context.Context, channelID, streamKey string) (primary string, backup string, err error)
+	// and secured by streamKey.
+	CreateChannel(ctx context.Context, channelID, streamKey string) (primary string, backup string, origin string, err error)
 
 	// DeleteChannel tears down the ingest channel associated with channelID.
 	DeleteChannel(ctx context.Context, channelID string) error
@@ -66,15 +79,16 @@ type channelAdapter interface {
 // applicationAdapter defines the behavior required to manage streaming
 // applications on an origin server (e.g. OvenMediaEngine).
 //
-// Implementations typically create an application per channel and return
-// both origin (pull) URLs for the transcoder and playback URLs for viewers.
+// The canonical OME application is declared in Server.xml and must not be
+// mutated through the REST API. Implementations validate that application and
+// derive a per-channel playback URL.
 type applicationAdapter interface {
-	// CreateApplication provisions a new application for the given channelID
-	// and renditions. It returns the origin URL (used by the transcoder) and
-	// the playback URL (used by viewers).
-	CreateApplication(ctx context.Context, channelID string, renditions []string) (originURL, playbackURL string, err error)
+	// CreateApplication validates the configured application for channelID and
+	// returns the supplied origin URL plus the viewer playback URL.
+	CreateApplication(ctx context.Context, channelID, originURL string, renditions []string) (validatedOriginURL, playbackURL string, err error)
 
-	// DeleteApplication removes the application associated with channelID.
+	// DeleteApplication releases per-stream application state. The canonical
+	// static OME application implementation intentionally performs no mutation.
 	DeleteApplication(ctx context.Context, channelID string) error
 }
 
@@ -110,14 +124,15 @@ type httpChannelAdapter struct {
 // that communicates with an OvenMediaEngine (OME) API using the rendered
 // AccessToken as an HTTP Basic credential.
 type httpApplicationAdapter struct {
-	baseURL       string
-	accessToken   string
-	username      string
-	password      string
-	client        *http.Client
-	logger        *slog.Logger
-	maxAttempts   int
-	retryInterval time.Duration
+	baseURL         string
+	playbackBaseURL string
+	accessToken     string
+	username        string
+	password        string
+	client          *http.Client
+	logger          *slog.Logger
+	maxAttempts     int
+	retryInterval   time.Duration
 }
 
 // httpTranscoderAdapter is an HTTP implementation of transcoderAdapter that
@@ -143,6 +158,7 @@ type srsChannelRequest struct {
 type srsChannelResponse struct {
 	PrimaryIngest string `json:"primaryIngest"`
 	BackupIngest  string `json:"backupIngest"`
+	OriginIngest  string `json:"originIngest"`
 }
 
 // omeApplicationRequest is the JSON payload sent to the OME API when
@@ -236,17 +252,18 @@ func newHTTPChannelAdapter(baseURL, token string, client *http.Client, logger *s
 // newHTTPApplicationAdapter constructs an HTTP-based applicationAdapter.
 // See newHTTPChannelAdapter for behavior of the logger, attempts, interval,
 // and client parameters.
-func newHTTPApplicationAdapter(baseURL, accessToken, username, password string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpApplicationAdapter {
+func newHTTPApplicationAdapter(baseURL, playbackBaseURL, accessToken, username, password string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpApplicationAdapter {
 	cfg := normalizeAdapterConfig(logger, attempts, interval)
 	return &httpApplicationAdapter{
-		baseURL:       strings.TrimRight(baseURL, "/"),
-		accessToken:   accessToken,
-		username:      username,
-		password:      password,
-		client:        client,
-		logger:        cfg.logger,
-		maxAttempts:   cfg.attempts,
-		retryInterval: cfg.interval,
+		baseURL:         strings.TrimRight(baseURL, "/"),
+		playbackBaseURL: strings.TrimRight(playbackBaseURL, "/"),
+		accessToken:     accessToken,
+		username:        username,
+		password:        password,
+		client:          client,
+		logger:          cfg.logger,
+		maxAttempts:     cfg.attempts,
+		retryInterval:   cfg.interval,
 	}
 }
 
@@ -271,7 +288,7 @@ func newHTTPTranscoderAdapter(baseURL, token string, client *http.Client, logger
 // The method will retry transient failures (network errors and 5xx/429
 // responses) up to maxAttempts. Callers are encouraged to pass a context
 // with a deadline to bound the overall operation duration.
-func (a *httpChannelAdapter) CreateChannel(ctx context.Context, channelID, streamKey string) (string, string, error) {
+func (a *httpChannelAdapter) CreateChannel(ctx context.Context, channelID, streamKey string) (string, string, string, error) {
 	ctx, span := tracing.Default().StartSpan(ctx, "ingest.srs.create_channel",
 		tracing.StringAttr("channel.id", channelID),
 	)
@@ -286,9 +303,12 @@ func (a *httpChannelAdapter) CreateChannel(ctx context.Context, channelID, strea
 		if span != nil {
 			span.RecordError(err)
 		}
-		return "", "", err
+		return "", "", "", err
 	}
-	return response.PrimaryIngest, response.BackupIngest, nil
+	if strings.TrimSpace(response.PrimaryIngest) == "" || strings.TrimSpace(response.OriginIngest) == "" {
+		return "", "", "", fmt.Errorf("SRS controller returned incomplete ingest endpoints")
+	}
+	return response.PrimaryIngest, response.BackupIngest, response.OriginIngest, nil
 }
 
 // DeleteChannel tears down the channel identified by channelID by calling
@@ -309,25 +329,25 @@ func (a *httpChannelAdapter) DeleteChannel(ctx context.Context, channelID string
 	return err
 }
 
-// CreateApplication provisions a new application on the origin server (OME)
-// for the given channel and renditions.
-//
-// The renditions slice is defensively copied to avoid accidental mutation by
-// callers after the request is initiated.
-func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelID string, renditions []string) (string, string, error) {
-	ctx, span := tracing.Default().StartSpan(ctx, "ingest.ome.create_application",
+// CreateApplication validates the immutable default/live application declared
+// in Server.xml and derives the public LL-HLS URL for the forwarded stream.
+func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelID, originURL string, renditions []string) (string, string, error) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.ome.validate_application",
 		tracing.StringAttr("channel.id", channelID),
 		tracing.StringAttr("renditions", strings.Join(renditions, ",")),
 	)
 	if span != nil {
 		defer span.End()
 	}
-	payload := omeApplicationRequest{
-		ChannelID:  channelID,
-		Renditions: append([]string{}, renditions...),
+	channelID = strings.TrimSpace(channelID)
+	originURL = strings.TrimSpace(originURL)
+	if channelID == "" || originURL == "" {
+		return "", "", fmt.Errorf("channel ID and origin URL are required")
 	}
-	var response omeApplicationResponse
-	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/applications", a.baseURL), payload, &response, func(req *http.Request) {
+	if strings.TrimSpace(a.playbackBaseURL) == "" {
+		return "", "", fmt.Errorf("OME public LL-HLS base URL is required")
+	}
+	if err := getRequest(ctx, a.client, fmt.Sprintf("%s/v1/vhosts/default/apps/live", a.baseURL), func(req *http.Request) {
 		setOMEAuth(req, a.accessToken, a.username, a.password)
 	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
 		if span != nil {
@@ -335,25 +355,21 @@ func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelI
 		}
 		return "", "", err
 	}
-	return response.OriginURL, response.PlaybackURL, nil
+	playbackURL := fmt.Sprintf("%s/%s/llhls.m3u8", a.playbackBaseURL, url.PathEscape(channelID))
+	return originURL, playbackURL, nil
 }
 
-// DeleteApplication removes the application associated with channelID from
-// the origin server (OME).
+// DeleteApplication intentionally leaves default/live intact because OME does
+// not allow API mutation of applications declared in Server.xml. Streams are
+// removed automatically when their SRS forward closes.
 func (a *httpApplicationAdapter) DeleteApplication(ctx context.Context, channelID string) error {
-	ctx, span := tracing.Default().StartSpan(ctx, "ingest.ome.delete_application",
+	_, span := tracing.Default().StartSpan(ctx, "ingest.ome.release_stream",
 		tracing.StringAttr("channel.id", channelID),
 	)
 	if span != nil {
 		defer span.End()
 	}
-	err := deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/applications/%s", a.baseURL, channelID), func(req *http.Request) {
-		setOMEAuth(req, a.accessToken, a.username, a.password)
-	}, a.logger, a.maxAttempts, a.retryInterval)
-	if err != nil && span != nil {
-		span.RecordError(err)
-	}
-	return err
+	return ctx.Err()
 }
 
 // StartJobs starts one or more live transcoding jobs for the given channel,
@@ -387,9 +403,18 @@ func (a *httpTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessio
 		return nil, nil, err
 	}
 
-	jobIDs := append([]string{}, response.JobIDs...)
-	if response.JobID != "" {
-		jobIDs = append(jobIDs, response.JobID)
+	jobIDs := make([]string, 0, len(response.JobIDs)+1)
+	seenJobIDs := make(map[string]struct{}, len(response.JobIDs)+1)
+	for _, jobID := range append(append([]string{}, response.JobIDs...), response.JobID) {
+		jobID = strings.TrimSpace(jobID)
+		if jobID == "" {
+			continue
+		}
+		if _, seen := seenJobIDs[jobID]; seen {
+			continue
+		}
+		seenJobIDs[jobID] = struct{}{}
+		jobIDs = append(jobIDs, jobID)
 	}
 	renditions := CloneRenditions(response.Renditions)
 	return jobIDs, renditions, nil
@@ -406,6 +431,10 @@ func (a *httpTranscoderAdapter) StopJob(ctx context.Context, jobID string) error
 	err := deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/jobs/%s", a.baseURL, jobID), func(req *http.Request) {
 		setBearer(req, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval)
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
+		return nil
+	}
 	if err != nil && span != nil {
 		span.RecordError(err)
 	}
@@ -486,6 +515,13 @@ func deleteRequest(ctx context.Context, client *http.Client, url string, mutate 
 		client = defaultHTTPClient
 	}
 	return doWithRetry(ctx, client, http.MethodDelete, url, nil, mutate, nil, logger, attempts, interval)
+}
+
+func getRequest(ctx context.Context, client *http.Client, url string, mutate func(*http.Request), logger *slog.Logger, attempts int, interval time.Duration) error {
+	if client == nil {
+		client = defaultHTTPClient
+	}
+	return doWithRetry(ctx, client, http.MethodGet, url, nil, mutate, nil, logger, attempts, interval)
 }
 
 // doWithRetry executes an HTTP request with basic retry semantics.
@@ -584,7 +620,7 @@ func doWithRetry(
 
 				// Read response body for diagnostics.
 				data, _ := io.ReadAll(resp.Body)
-				errMsg := fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(data)))
+				errMsg := &httpStatusError{statusCode: statusCode, status: resp.Status, body: strings.TrimSpace(string(data))}
 
 				// Determine if this status code is retryable.
 				if isRetryableStatus(statusCode) {

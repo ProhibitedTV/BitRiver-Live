@@ -9,7 +9,7 @@
 - Document the XOA/XCP-ng VM and Nginx Proxy Manager topology, including public HTTP(S), WebSocket forwarding, trusted proxies, media/firewall ports, and internal-only control services.
 
 ## Main reconciliation scope (2026-07-24)
-- Rebase the installer foundation onto current `main`, including merged PR #1326 and its proven SRS callback, public RTMP/LL-HLS, same-origin `/live/`, OME application, transcoder, Windows evaluation, and README contracts.
+- Reconcile the installer foundation with current `main`, including merged PR #1326 and its proven SRS callback, public RTMP/LL-HLS, same-origin `/live/`, OME application, transcoder, Windows evaluation, and README contracts.
 - Resolve workflow and release-asset conflicts by composing both requirements: the Ubuntu artifacts must include every new required media URL, and image scans/quickstart fixtures must continue to render the canonical contract.
 - Keep the public documentation truthful before the first tag: installer/package code may be release-ready while GitHub Releases, `.deb`, `.rpm`, and launcher downloads remain unavailable.
 - Re-run the installer lifecycle, release bundle/package checks, canonical Compose render, full repository verification, and remote PR gates on the reconciled head before marking #1325 ready.
@@ -42,6 +42,11 @@
 - Compose classifies `ome-health-token-check` as non-buildable even though it shares the locally built `ome-config` image. A blanket `compose pull --ignore-buildable --policy missing` can still make a denied registry request for that sibling service. Enumerate rendered image references, retain any image already inspectable in the local daemon, and pull only genuinely absent runtime images.
 - The installer branch and PR #1326 both changed release workflows, deployment variables, quickstart smoke, and operator documentation. A mechanical conflict choice could silently discard either the published OME helper or the verified media-routing contract; reconcile each overlapping file by rendered/runtime behavior, not by branch preference.
 - Current `main` correctly says no tagged downloads exist. Do not replace that statement with live download commands until the release workflow has actually published a tag and assets.
+- The quickstart smoke may reuse an operator's existing root `.env`, including files created before public RTMP/LL-HLS variables became required. Because the smoke already forces an isolated development/build posture and host ports, it must also supply non-secret smoke defaults for every required public media URL without rewriting the operator file.
+- Current `main` merged three incompatible major development-tool bumps: TypeScript 7 is outside the latest `ts-jest` range (`typescript >=4.3 <7`), ESLint 10 is outside the Next.js-bundled lint plugins' declared ranges, and Node 26 types exceed the enforced Node 24 runtime. Restore the proven TypeScript 6.0.3, ESLint 9.39.5, and `@types/node` 24.13.3 pins until the complete toolchain supports the newer majors; do not bypass peer resolution with `--force` or `--legacy-peer-deps`.
+- The official npm audit reports three high-severity runtime findings against Next 16.2.10 and its PostCSS/Sharp dependency chain. Upgrade `next` and `eslint-config-next` together to the non-major fixed 16.2.11 release and require the blocking production audit to report no high/critical findings.
+- Next 16.2.11 fixes its direct advisories but still hard-pins vulnerable PostCSS 8.4.31 and allows only vulnerable Sharp 0.34.x; no newer stable Next release exists. Temporarily override those transitive packages to fixed PostCSS 8.5.22 and Sharp 0.35.3, lock the exception in the runtime-baseline test, and exercise the production image. The viewer already sets `images.unoptimized: true`, so it does not depend on Next's image optimizer; remove the override once an aligned stable Next release ships.
+- The root Docker build context currently includes `deploy/transcoder-data/`; this checkout's local media made the context roughly 200 MB and could leak runtime artifacts to a builder/cache. Exclude that runtime directory explicitly and lock the boundary in a static regression.
 
 ## Test Plan
 - Shell syntax, installer unit tests, and focused Go tests for installed-root discovery, image preflight, Compose invocation, and OME helper image selection.
@@ -54,8 +59,13 @@
 - Run ShellCheck on the corrected release-bundle assertion and rerun its focused test before pushing the CI repair.
 - Add a workflow regression guard for Compose-derived OME scan selection, parse both workflow files, and reproduce the image-selection logic against the rendered CI Compose image list before republishing.
 - Add a quickstart regression guard against blanket non-buildable pulls, run shell syntax plus the full quickstart smoke locally, and require the unified Ubuntu gate to pass on the same corrected path.
-- After rebasing, run focused Go workflow/contract tests, `bash -n` on changed shell scripts, the release bundle and Compose-host lifecycle tests, `docker compose ... config --quiet` with a generated production-shaped env, `scripts/test-quickstart.sh`, and `./scripts/verify.sh`.
+- After merging current `main`, run focused Go workflow/contract tests, `bash -n` on changed shell scripts, the release bundle and Compose-host lifecycle tests, `docker compose ... config --quiet` with a generated production-shaped env, `scripts/test-quickstart.sh`, and `./scripts/verify.sh`.
 - Inspect the staged reconciliation for root `.env`, generated OME/SRS output, runtime data, secrets, and the user's unrelated untracked deployment helpers before publication.
+- Run the quickstart smoke with a pre-existing env that omits the public RTMP/LL-HLS variables and require Compose interpolation to proceed through the runtime gate.
+- Run a clean `npm ci`, viewer lint/test/build, and the viewer Docker build after restoring the supported Node 24 / TypeScript 6 / ESLint 9 development baseline; require the clean install to avoid peer-override warnings.
+- Run `npm audit --omit=dev --audit-level=high` after the Next.js patch and record any remaining high/critical production finding as release-blocking.
+- Start the clean production viewer image after the security overrides and require its public route to return successfully; do not accept a zero-count audit if the resulting image cannot boot.
+- Rebuild the root OME/helper context after updating `.dockerignore` and confirm local transcoder output is neither transferred nor packaged.
 
 ## Boundaries
 - The user explicitly authorized installer, deployment-contract, and roadmap work for the Ubuntu/XOA/Nginx Proxy Manager target, including the necessary release workflow changes.

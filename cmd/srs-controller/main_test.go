@@ -91,6 +91,54 @@ func TestProxyRequestRejectsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestHandleChannelsReturnsCreatorAndInternalIngestEndpoints(t *testing.T) {
+	publicBase, err := url.Parse("rtmp://ingest.example.com:1935/live")
+	if err != nil {
+		t.Fatalf("parse public base: %v", err)
+	}
+	internalBase, err := url.Parse("rtmp://srs:1935/live")
+	if err != nil {
+		t.Fatalf("parse internal base: %v", err)
+	}
+	ctrl := &controller{token: "secret", publicRTMPBase: publicBase, internalRTMPBase: internalBase}
+	req := httptest.NewRequest(http.MethodPost, "/v1/channels", strings.NewReader(`{"channelId":"channel-1","streamKey":"private-key"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+
+	ctrl.handleChannels(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.PrimaryIngest != "rtmp://ingest.example.com:1935/live/private-key" {
+		t.Fatalf("unexpected public ingest endpoint: %q", response.PrimaryIngest)
+	}
+	if response.OriginIngest != "rtmp://srs:1935/live/private-key" {
+		t.Fatalf("unexpected internal ingest endpoint: %q", response.OriginIngest)
+	}
+}
+
+func TestHandleChannelsRejectsMissingBearerAndAcceptsDelete(t *testing.T) {
+	ctrl := &controller{token: "secret"}
+	unauthorized := httptest.NewRecorder()
+	ctrl.handleChannels(unauthorized, httptest.NewRequest(http.MethodPost, "/v1/channels", strings.NewReader(`{}`)))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", unauthorized.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/channels/channel-1", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	deleted := httptest.NewRecorder()
+	ctrl.handleChannels(deleted, req)
+	if deleted.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", deleted.Code)
+	}
+}
+
 func TestAuthorizedChecksBearerPrefix(t *testing.T) {
 	ctrl := &controller{token: "secret"}
 	cases := []struct {

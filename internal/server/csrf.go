@@ -23,6 +23,7 @@ const (
 // that are protected by independent shared-secret signatures/tokens.
 var csrfExemptPaths = []string{
 	"/api/ingest/srs-hook",
+	"/api/ingest/srs/",
 	"/api/payments/webhooks/",
 }
 

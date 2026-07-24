@@ -37,7 +37,13 @@ function Ensure-Go {
     if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
         Write-Error "Go 1.26 or newer is required to run the BitRiver Live CLI. Install it from https://go.dev/dl/ and ensure it is in your PATH."
     }
-    $version = (& go env GOVERSION).Trim()
+    $previousToolchain = [System.Environment]::GetEnvironmentVariable('GOTOOLCHAIN', 'Process')
+    try {
+        [System.Environment]::SetEnvironmentVariable('GOTOOLCHAIN', 'local', 'Process')
+        $version = (& go env GOVERSION).Trim()
+    } finally {
+        [System.Environment]::SetEnvironmentVariable('GOTOOLCHAIN', $previousToolchain, 'Process')
+    }
     if ($version -notmatch 'go(?<major>\d+)\.(?<minor>\d+)') {
         Write-Error "Unable to determine Go version from: $version"
     }
@@ -58,50 +64,56 @@ function Invoke-Cli {
         [switch]$AllowHelpExitCode
     )
     Push-Location $CodeRoot | Out-Null
+    $processGOTOOLCHAIN = [System.Environment]::GetEnvironmentVariable('GOTOOLCHAIN', 'Process')
+    $processGOPROXY = [System.Environment]::GetEnvironmentVariable('GOPROXY', 'Process')
+    $processGOSUMDB = [System.Environment]::GetEnvironmentVariable('GOSUMDB', 'Process')
+    $processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')
+    $tempBinary = Join-Path ([System.IO.Path]::GetTempPath()) "bitriver-live-quickstart-$([guid]::NewGuid().ToString('N')).exe"
     try {
-        $env:GOTOOLCHAIN = 'local'
-        $env:GOPROXY = 'off'
-        $env:GOSUMDB = 'off'
-        $stdoutPath = [System.IO.Path]::GetTempFileName()
-        $stderrPath = [System.IO.Path]::GetTempFileName()
         $goPath = (Get-Command go -ErrorAction Stop).Source
-        $processPath = [System.Environment]::GetEnvironmentVariable('Path', 'Process')
-        $processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')
-        $processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')
         $goCacheRoot = if (-not [string]::IsNullOrWhiteSpace($processGOCACHE)) {
             $processGOCACHE
         } else {
             Join-Path ([System.IO.Path]::GetTempPath()) 'bitriver-live-go-build-cache'
         }
-        $normalizedPath = if (-not [string]::IsNullOrEmpty($processPath)) { $processPath } else { $processPATH }
+
+        New-Item -ItemType Directory -Force -Path $goCacheRoot | Out-Null
+        [System.Environment]::SetEnvironmentVariable('GOTOOLCHAIN', 'local', 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOPROXY', 'off', 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOSUMDB', 'off', 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')
+
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
         try {
-            New-Item -ItemType Directory -Force -Path $goCacheRoot | Out-Null
-            if ($null -ne $normalizedPath) {
-                [System.Environment]::SetEnvironmentVariable('Path', $normalizedPath, 'Process')
-            }
-            if ($null -ne $processPATH) {
-                [System.Environment]::SetEnvironmentVariable('PATH', $null, 'Process')
-            }
-            [System.Environment]::SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')
-            $goArgs = @('run', './cmd/bitriver') + $CliArgs
-            $process = Start-Process -FilePath $goPath `
-                -ArgumentList $goArgs `
-                -WorkingDirectory $CodeRoot `
-                -NoNewWindow `
-                -PassThru `
-                -Wait `
-                -RedirectStandardOutput $stdoutPath `
-                -RedirectStandardError $stderrPath
-            $stdoutLines = if ((Get-Item $stdoutPath).Length -gt 0) { Get-Content $stdoutPath } else { @() }
-            $stderrLines = if ((Get-Item $stderrPath).Length -gt 0) { Get-Content $stderrPath } else { @() }
+            $buildArgs = @('build', '-o', $tempBinary, './cmd/bitriver')
+            $buildOutput = @(& $goPath @buildArgs 2>&1)
+            $buildExitCode = $LASTEXITCODE
         } finally {
-            [System.Environment]::SetEnvironmentVariable('Path', $processPath, 'Process')
-            [System.Environment]::SetEnvironmentVariable('PATH', $processPATH, 'Process')
-            [System.Environment]::SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')
-            Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+            $ErrorActionPreference = $previousErrorActionPreference
         }
-        $exitCode = $process.ExitCode
-        $cliOutput = @($stdoutLines) + @($stderrLines)
+
+        if ($buildOutput.Count -gt 0) {
+            $buildOutput | ForEach-Object { Write-Host $_ }
+        }
+        if ($buildExitCode -ne 0) {
+            return $buildExitCode
+        }
+
+        [System.Environment]::SetEnvironmentVariable('GOTOOLCHAIN', $processGOTOOLCHAIN, 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOPROXY', $processGOPROXY, 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOSUMDB', $processGOSUMDB, 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')
+
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $cliOutput = @(& $tempBinary @CliArgs 2>&1)
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+
         if ($cliOutput.Count -gt 0) {
             $cliOutput | ForEach-Object { Write-Host $_ }
         }
@@ -115,10 +127,12 @@ function Invoke-Cli {
         }
         return 0
     } finally {
+        [System.Environment]::SetEnvironmentVariable('GOTOOLCHAIN', $processGOTOOLCHAIN, 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOPROXY', $processGOPROXY, 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOSUMDB', $processGOSUMDB, 'Process')
+        [System.Environment]::SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')
+        Remove-Item -LiteralPath $tempBinary -Force -ErrorAction SilentlyContinue
         Pop-Location | Out-Null
-        Remove-Item Env:GOTOOLCHAIN -ErrorAction SilentlyContinue
-        Remove-Item Env:GOPROXY -ErrorAction SilentlyContinue
-        Remove-Item Env:GOSUMDB -ErrorAction SilentlyContinue
     }
 }
 

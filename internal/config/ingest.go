@@ -26,39 +26,41 @@ type Rendition struct {
 
 // IngestConfig stores parsed ingest integration settings.
 type IngestConfig struct {
-	SRSBaseURL        string
-	SRSToken          string
-	OMEBaseURL        string
-	OMEAccessToken    string
-	OMEUsername       string
-	OMEPassword       string
-	JobBaseURL        string
-	JobToken          string
-	LadderProfiles    []Rendition
-	HealthEndpoint    string
-	HealthTimeout     time.Duration
-	MaxBootAttempts   int
-	RetryInterval     time.Duration
-	HTTPMaxAttempts   int
-	HTTPRetryInterval time.Duration
+	SRSBaseURL         string
+	SRSToken           string
+	OMEBaseURL         string
+	OMEPlaybackBaseURL string
+	OMEAccessToken     string
+	OMEUsername        string
+	OMEPassword        string
+	JobBaseURL         string
+	JobToken           string
+	LadderProfiles     []Rendition
+	HealthEndpoint     string
+	HealthTimeout      time.Duration
+	MaxBootAttempts    int
+	RetryInterval      time.Duration
+	HTTPMaxAttempts    int
+	HTTPRetryInterval  time.Duration
 }
 
 func LoadIngestFromEnv(env Environment) (IngestConfig, error) {
 	cfg := IngestConfig{
-		SRSBaseURL:        strings.TrimSpace(env.Get("BITRIVER_SRS_API")),
-		SRSToken:          strings.TrimSpace(env.Get("BITRIVER_SRS_TOKEN")),
-		OMEBaseURL:        strings.TrimSpace(env.Get("BITRIVER_OME_API")),
-		OMEAccessToken:    firstNonEmpty(strings.TrimSpace(env.Get("BITRIVER_OME_HEALTHCHECK_TOKEN")), strings.TrimSpace(env.Get("BITRIVER_OME_API_TOKEN"))),
-		OMEUsername:       strings.TrimSpace(env.Get("BITRIVER_OME_USERNAME")),
-		OMEPassword:       strings.TrimSpace(env.Get("BITRIVER_OME_PASSWORD")),
-		JobBaseURL:        strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_API")),
-		JobToken:          strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_TOKEN")),
-		HealthEndpoint:    strings.TrimSpace(env.Get("BITRIVER_INGEST_HEALTH")),
-		HealthTimeout:     2 * time.Second,
-		MaxBootAttempts:   3,
-		RetryInterval:     500 * time.Millisecond,
-		HTTPMaxAttempts:   30,
-		HTTPRetryInterval: 2 * time.Second,
+		SRSBaseURL:         strings.TrimSpace(env.Get("BITRIVER_SRS_API")),
+		SRSToken:           strings.TrimSpace(env.Get("BITRIVER_SRS_TOKEN")),
+		OMEBaseURL:         strings.TrimSpace(env.Get("BITRIVER_OME_API")),
+		OMEPlaybackBaseURL: strings.TrimRight(strings.TrimSpace(env.Get("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL")), "/"),
+		OMEAccessToken:     firstNonEmpty(strings.TrimSpace(env.Get("BITRIVER_OME_HEALTHCHECK_TOKEN")), strings.TrimSpace(env.Get("BITRIVER_OME_API_TOKEN"))),
+		OMEUsername:        strings.TrimSpace(env.Get("BITRIVER_OME_USERNAME")),
+		OMEPassword:        strings.TrimSpace(env.Get("BITRIVER_OME_PASSWORD")),
+		JobBaseURL:         strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_API")),
+		JobToken:           strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_TOKEN")),
+		HealthEndpoint:     strings.TrimSpace(env.Get("BITRIVER_INGEST_HEALTH")),
+		HealthTimeout:      2 * time.Second,
+		MaxBootAttempts:    3,
+		RetryInterval:      500 * time.Millisecond,
+		HTTPMaxAttempts:    30,
+		HTTPRetryInterval:  2 * time.Second,
 	}
 	parsePositiveInt := func(key string, target *int) error {
 		if raw := strings.TrimSpace(env.Get(key)); raw != "" {
@@ -151,7 +153,7 @@ func (c IngestConfig) Validate() error {
 
 func (c IngestConfig) hasAnyConfig() bool {
 	return c.SRSBaseURL != "" || c.SRSToken != "" ||
-		c.OMEBaseURL != "" || c.OMEAccessToken != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
+		c.OMEBaseURL != "" || c.OMEPlaybackBaseURL != "" || c.OMEAccessToken != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
 		c.JobBaseURL != "" || c.JobToken != ""
 }
 
@@ -165,6 +167,9 @@ func (c IngestConfig) missingRequiredFields() []string {
 	}
 	if c.OMEBaseURL == "" {
 		missing = append(missing, "BITRIVER_OME_API")
+	}
+	if c.OMEPlaybackBaseURL == "" {
+		missing = append(missing, "BITRIVER_OME_PUBLIC_LLHLS_BASE_URL")
 	}
 	if c.OMEAccessToken == "" && (c.OMEUsername == "" || c.OMEPassword == "") {
 		missing = append(missing, "BITRIVER_OME_API_TOKEN")

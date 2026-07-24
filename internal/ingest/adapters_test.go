@@ -28,7 +28,7 @@ func TestHTTPAdapterConstructorsNormalizeDefaults(t *testing.T) {
 
 	baseURL := "http://example.com/"
 	channel := newHTTPChannelAdapter(baseURL, "token", nil, nil, 0, 0)
-	application := newHTTPApplicationAdapter(baseURL, "access-token", "user", "pass", nil, nil, 0, 0)
+	application := newHTTPApplicationAdapter(baseURL, "https://stream.example/live", "access-token", "user", "pass", nil, nil, 0, 0)
 	transcoder := newHTTPTranscoderAdapter(baseURL, "token", nil, nil, 0, 0)
 
 	adapters := map[string]struct {
@@ -79,6 +79,7 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 			if err := json.NewEncoder(w).Encode(srsChannelResponse{
 				PrimaryIngest: "rtmp://primary",
 				BackupIngest:  "rtmp://backup",
+				OriginIngest:  "rtmp://srs/live/stream-key",
 			}); err != nil {
 				t.Fatalf("encode response: %v", err)
 			}
@@ -96,12 +97,12 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 
 	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 3, time.Nanosecond)
 
-	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	primary, backup, origin, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
 	}
-	if primary != "rtmp://primary" || backup != "rtmp://backup" {
-		t.Fatalf("unexpected ingest endpoints: %q, %q", primary, backup)
+	if primary != "rtmp://primary" || backup != "rtmp://backup" || origin != "rtmp://srs/live/stream-key" {
+		t.Fatalf("unexpected ingest endpoints: %q, %q, %q", primary, backup, origin)
 	}
 	if !created {
 		t.Fatal("expected create endpoint to be invoked")
@@ -132,6 +133,7 @@ func TestHTTPChannelAdapterRetries(t *testing.T) {
 		}
 		if err := json.NewEncoder(w).Encode(srsChannelResponse{
 			PrimaryIngest: "rtmp://primary",
+			OriginIngest:  "rtmp://srs/live/stream-key",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -139,12 +141,12 @@ func TestHTTPChannelAdapterRetries(t *testing.T) {
 	defer server.Close()
 
 	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 2, time.Nanosecond)
-	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	primary, backup, origin, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
 	}
-	if primary != "rtmp://primary" || backup != "" {
-		t.Fatalf("unexpected ingest endpoints: %q, %q", primary, backup)
+	if primary != "rtmp://primary" || backup != "" || origin != "rtmp://srs/live/stream-key" {
+		t.Fatalf("unexpected ingest endpoints: %q, %q, %q", primary, backup, origin)
 	}
 	if attempts != 2 {
 		t.Fatalf("expected 2 attempts, got %d", attempts)
@@ -168,7 +170,7 @@ func TestHTTPChannelAdapterDoesNotRetryOn4xx(t *testing.T) {
 	defer server.Close()
 
 	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 3, time.Nanosecond)
-	_, _, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	_, _, _, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err == nil {
 		t.Fatal("expected error for 4xx response, got nil")
 	}
@@ -198,6 +200,7 @@ func TestHTTPChannelAdapterRetriesOn429(t *testing.T) {
 		if err := json.NewEncoder(w).Encode(srsChannelResponse{
 			PrimaryIngest: "rtmp://primary",
 			BackupIngest:  "rtmp://backup",
+			OriginIngest:  "rtmp://srs/live/stream-key",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -205,75 +208,52 @@ func TestHTTPChannelAdapterRetriesOn429(t *testing.T) {
 	defer server.Close()
 
 	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 5, time.Nanosecond)
-	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	primary, backup, origin, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
 	}
 	if attempts != 3 {
 		t.Fatalf("expected 3 attempts (2x 429 + 1x success), got %d", attempts)
 	}
-	if primary != "rtmp://primary" || backup != "rtmp://backup" {
-		t.Fatalf("unexpected ingest endpoints: %q, %q", primary, backup)
+	if primary != "rtmp://primary" || backup != "rtmp://backup" || origin != "rtmp://srs/live/stream-key" {
+		t.Fatalf("unexpected ingest endpoints: %q, %q, %q", primary, backup, origin)
 	}
 }
 
 // TestHTTPApplicationAdapterLifecycle verifies that the application adapter
-// uses OME raw-token Basic auth and round-trips the origin and playback URLs.
+// validates the immutable OME application and derives the LL-HLS URL.
 func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	t.Helper()
-	var created bool
-	var deleted bool
+	var validated bool
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/applications":
-			created = true
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/vhosts/default/apps/live" {
+			validated = true
 			wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("ome-token"))
 			if got := r.Header.Get("Authorization"); got != wantAuth {
 				t.Fatalf("expected OME raw-token Basic auth, got %q", got)
 			}
-			var payload omeApplicationRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode request: %v", err)
-			}
-			if payload.ChannelID != "channel-123" {
-				t.Fatalf("unexpected channel id %q", payload.ChannelID)
-			}
-			if err := json.NewEncoder(w).Encode(omeApplicationResponse{
-				OriginURL:   "http://origin",
-				PlaybackURL: "https://playback",
-			}); err != nil {
-				t.Fatalf("encode response: %v", err)
-			}
-		case r.Method == http.MethodDelete && r.URL.Path == "/v1/applications/channel-123":
-			deleted = true
-			wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("ome-token"))
-			if got := r.Header.Get("Authorization"); got != wantAuth {
-				t.Fatalf("expected OME raw-token Basic auth on delete, got %q", got)
-			}
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"statusCode":200,"message":"OK","response":{"name":"live"}}`))
+			return
 		}
+		t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 	}))
 	defer server.Close()
 
-	adapter := newHTTPApplicationAdapter(server.URL, "ome-token", "admin", "password", server.Client(), nil, 3, time.Nanosecond)
-	origin, playback, err := adapter.CreateApplication(context.Background(), "channel-123", []string{"1080p"})
+	adapter := newHTTPApplicationAdapter(server.URL, "https://stream.example/live", "ome-token", "admin", "password", server.Client(), nil, 3, time.Nanosecond)
+	origin, playback, err := adapter.CreateApplication(context.Background(), "channel-123", "rtmp://srs/live/key", []string{"1080p"})
 	if err != nil {
 		t.Fatalf("CreateApplication: %v", err)
 	}
-	if origin != "http://origin" || playback != "https://playback" {
+	if origin != "rtmp://srs/live/key" || playback != "https://stream.example/live/channel-123/llhls.m3u8" {
 		t.Fatalf("unexpected playback URLs: %q %q", origin, playback)
 	}
-	if !created {
-		t.Fatal("expected application creation to be invoked")
+	if !validated {
+		t.Fatal("expected static application validation to be invoked")
 	}
 	if err := adapter.DeleteApplication(context.Background(), "channel-123"); err != nil {
 		t.Fatalf("DeleteApplication: %v", err)
-	}
-	if !deleted {
-		t.Fatal("expected application deletion to be invoked")
 	}
 }
 
@@ -283,15 +263,12 @@ func TestHTTPApplicationAdapterFallsBackToBasicWithoutAccessToken(t *testing.T) 
 		if !ok || user != "admin" || pass != "password" {
 			t.Fatalf("expected fallback basic auth credentials, got %q/%q", user, pass)
 		}
-		_ = json.NewEncoder(w).Encode(omeApplicationResponse{
-			OriginURL:   "http://origin",
-			PlaybackURL: "https://playback",
-		})
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
-	adapter := newHTTPApplicationAdapter(server.URL, "", "admin", "password", server.Client(), nil, 3, time.Nanosecond)
-	if _, _, err := adapter.CreateApplication(context.Background(), "channel-123", []string{"1080p"}); err != nil {
+	adapter := newHTTPApplicationAdapter(server.URL, "https://stream.example/live", "", "admin", "password", server.Client(), nil, 3, time.Nanosecond)
+	if _, _, err := adapter.CreateApplication(context.Background(), "channel-123", "rtmp://srs/live/key", []string{"1080p"}); err != nil {
 		t.Fatalf("CreateApplication: %v", err)
 	}
 }
@@ -320,7 +297,7 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 			}
 			if err := json.NewEncoder(w).Encode(ffmpegJobResponse{
 				JobID:  "job-primary",
-				JobIDs: []string{"job-a", "job-b"},
+				JobIDs: []string{"job-a", "job-primary"},
 				Renditions: []Rendition{{
 					Name:        "1080p",
 					ManifestURL: "https://cdn/1080p.m3u8",
@@ -335,6 +312,8 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 				t.Fatalf("expected bearer token on delete, got %q", got)
 			}
 			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/jobs/already-gone":
+			http.Error(w, "job not found", http.StatusNotFound)
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
@@ -347,8 +326,8 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartJobs: %v", err)
 	}
-	if len(jobIDs) != 3 {
-		t.Fatalf("expected three job IDs (including legacy field), got %d", len(jobIDs))
+	if len(jobIDs) != 2 || jobIDs[0] != "job-a" || jobIDs[1] != "job-primary" {
+		t.Fatalf("expected deduplicated modern and legacy job IDs, got %v", jobIDs)
 	}
 	if len(renditions) != 1 || renditions[0].ManifestURL != "https://cdn/1080p.m3u8" {
 		t.Fatalf("unexpected renditions: %+v", renditions)
@@ -366,6 +345,9 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 	}
 	if !stopped {
 		t.Fatal("expected stop endpoint to be invoked")
+	}
+	if err := adapter.StopJob(context.Background(), "already-gone"); err != nil {
+		t.Fatalf("expected missing job cleanup to be idempotent, got %v", err)
 	}
 }
 

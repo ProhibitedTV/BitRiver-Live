@@ -11,6 +11,7 @@ func TestConfigDisabledWhenEmpty(t *testing.T) {
 	t.Setenv("BITRIVER_SRS_API", "")
 	t.Setenv("BITRIVER_SRS_TOKEN", "")
 	t.Setenv("BITRIVER_OME_API", "")
+	t.Setenv("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "")
 	t.Setenv("BITRIVER_OME_API_TOKEN", "")
 	t.Setenv("BITRIVER_OME_HEALTHCHECK_TOKEN", "")
 	t.Setenv("BITRIVER_OME_USERNAME", "")
@@ -34,6 +35,7 @@ func TestConfigPartialFailsValidation(t *testing.T) {
 	t.Setenv("BITRIVER_SRS_API", "http://srs:1985")
 	t.Setenv("BITRIVER_SRS_TOKEN", "")
 	t.Setenv("BITRIVER_OME_API", "")
+	t.Setenv("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "")
 	t.Setenv("BITRIVER_OME_API_TOKEN", "")
 	t.Setenv("BITRIVER_OME_HEALTHCHECK_TOKEN", "")
 	t.Setenv("BITRIVER_OME_USERNAME", "")
@@ -46,7 +48,7 @@ func TestConfigPartialFailsValidation(t *testing.T) {
 	if err == nil || !errors.As(err, &missing) {
 		t.Fatalf("expected missing config error, got %v", err)
 	}
-	if got, want := missing.Missing, []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_API_TOKEN", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}; !slices.Equal(got, want) {
+	if got, want := missing.Missing, []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "BITRIVER_OME_API_TOKEN", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}; !slices.Equal(got, want) {
 		t.Fatalf("unexpected missing fields: %v", got)
 	}
 	if cfg.Enabled() {
@@ -58,6 +60,7 @@ func TestConfigEnabledWithCompleteSettings(t *testing.T) {
 	t.Setenv("BITRIVER_SRS_API", "http://srs:1985")
 	t.Setenv("BITRIVER_SRS_TOKEN", "secret")
 	t.Setenv("BITRIVER_OME_API", "http://ome:8081")
+	t.Setenv("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "https://stream.example.test/live")
 	t.Setenv("BITRIVER_OME_API_TOKEN", "ome-access-token")
 	t.Setenv("BITRIVER_TRANSCODER_API", "http://transcoder:9000")
 	t.Setenv("BITRIVER_TRANSCODER_TOKEN", "job-secret")
@@ -88,6 +91,7 @@ func TestConfigHTTPRetryOverrides(t *testing.T) {
 	t.Setenv("BITRIVER_SRS_API", "http://srs:1985")
 	t.Setenv("BITRIVER_SRS_TOKEN", "secret")
 	t.Setenv("BITRIVER_OME_API", "http://ome:8081")
+	t.Setenv("BITRIVER_OME_PUBLIC_LLHLS_BASE_URL", "https://stream.example.test/live")
 	t.Setenv("BITRIVER_OME_API_TOKEN", "ome-access-token")
 	t.Setenv("BITRIVER_TRANSCODER_API", "http://transcoder:9000")
 	t.Setenv("BITRIVER_TRANSCODER_TOKEN", "job-secret")

@@ -118,7 +118,7 @@ func tempTLSFiles(t *testing.T) (string, string) {
 	return cert, key
 }
 
-func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
+func TestValidateEnvAllowsWildcardOMEListenersInProduction(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
 		"BITRIVER_POSTGRES_PASSWORD":              "secret",
@@ -140,6 +140,8 @@ func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
 		"BITRIVER_TRANSCODER_TOKEN":               "transcodertoken",
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
 		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "https://cdn.stream.local/hls",
+		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL":      "https://stream.stream.local/live",
+		"BITRIVER_SRS_PUBLIC_RTMP_BASE_URL":       "rtmp://ingest.stream.local:1935/live",
 		"NEXT_PUBLIC_VIEWER_URL":                  "https://viewer.stream.local",
 		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
 		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
@@ -154,8 +156,8 @@ func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
 
 	res := validateEnv(values)
 	joinedErrors := strings.Join(res.Errors, " ")
-	if !strings.Contains(joinedErrors, "BITRIVER_OME_BIND") || !strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
-		t.Fatalf("expected loopback bind/ip errors in production, got %v", res.Errors)
+	if strings.Contains(joinedErrors, "BITRIVER_OME_BIND") || strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		t.Fatalf("OME wildcard listener values must remain valid inside a production container, got %v", res.Errors)
 	}
 }
 
@@ -201,6 +203,26 @@ func TestValidateEnvRejectsDevelopmentMode(t *testing.T) {
 	}
 }
 
+func TestValidateEnvRuntimeDevelopmentOverrideKeepsSavedProductionMode(t *testing.T) {
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_MODE"] = "production"
+	values["BITRIVER_OME_BIND"] = "0.0.0.0"
+	values["BITRIVER_OME_IP"] = "0.0.0.0"
+	values["NEXT_PUBLIC_VIEWER_URL"] = "http://localhost:8080/viewer"
+	values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = "http://localhost:9080/hls"
+
+	result := validateEnvWithRuntimeMode(values, "development")
+	for _, err := range result.Errors {
+		if strings.Contains(err, "BITRIVER_OME_BIND") || strings.Contains(err, "BITRIVER_OME_IP") || strings.Contains(err, "BITRIVER_LIVE_MODE") {
+			t.Fatalf("inline development override should keep saved production mode and wildcard OME listeners valid, got %q", err)
+		}
+	}
+	joinedWarnings := strings.Join(result.Warnings, " ")
+	if strings.Contains(joinedWarnings, "BITRIVER_OME_BIND") || strings.Contains(joinedWarnings, "BITRIVER_OME_IP") {
+		t.Fatalf("did not expect warnings for valid OME wildcard listeners, got %v", result.Warnings)
+	}
+}
+
 func TestValidateEnvRejectsUnreadableTLSCert(t *testing.T) {
 	cert, key := tempTLSFiles(t)
 	values := baseEnvValues(cert, key)
@@ -237,7 +259,7 @@ func TestValidateEnvRejectsDeprecatedOMEHealthcheckAuthMode(t *testing.T) {
 	}
 }
 
-func TestValidateEnvRejectsLoopbackOMEWhenComposeAPIInProduction(t *testing.T) {
+func TestValidateEnvAllowsWildcardOMEWithComposeAPIInProduction(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
 		"BITRIVER_POSTGRES_PASSWORD":              "secret",
@@ -273,8 +295,8 @@ func TestValidateEnvRejectsLoopbackOMEWhenComposeAPIInProduction(t *testing.T) {
 
 	res := validateEnv(values)
 	joinedErrors := strings.Join(res.Errors, " ")
-	if !strings.Contains(joinedErrors, "BITRIVER_OME_BIND") || !strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
-		t.Fatalf("expected loopback bind/ip errors for compose OME API in production, got %v", res.Errors)
+	if strings.Contains(joinedErrors, "BITRIVER_OME_BIND") || strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		t.Fatalf("OME wildcard listener values must be allowed with the Compose API hostname, got %v", res.Errors)
 	}
 }
 
@@ -345,9 +367,7 @@ func TestValidateEnvRejectsLoopbackQuickstartDefaultsInProduction(t *testing.T) 
 	res := validateEnv(values)
 	joinedErrors := strings.Join(res.Errors, " ")
 	if !strings.Contains(joinedErrors, "BITRIVER_TRANSCODER_PUBLIC_BASE_URL") ||
-		!strings.Contains(joinedErrors, "NEXT_PUBLIC_VIEWER_URL") ||
-		!strings.Contains(joinedErrors, "BITRIVER_OME_BIND") ||
-		!strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		!strings.Contains(joinedErrors, "NEXT_PUBLIC_VIEWER_URL") {
 		t.Fatalf("expected production errors for loopback quickstart defaults, got errors=%v warnings=%v", res.Errors, res.Warnings)
 	}
 	if strings.Contains(strings.Join(res.Warnings, " "), "first-run Docker Desktop quickstart demos") {

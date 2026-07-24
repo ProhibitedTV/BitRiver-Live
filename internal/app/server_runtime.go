@@ -56,6 +56,7 @@ type ServerRuntimeInput struct {
 	MetricsAccess            server.MetricsAccessConfig
 	RequireMetricsProtection bool
 	ViewerOrigin             *url.URL
+	ViewerMediaProxyOrigin   *url.URL
 	OAuth                    oauth.Service
 	SessionCookieSecureMode  api.SessionCookieSecureMode
 	SessionCookieCrossSite   bool
@@ -310,7 +311,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 
 	rateCfg := server.RateLimitConfig{GlobalRPS: in.GlobalRPS, GlobalBurst: in.GlobalBurst, LoginLimit: in.LoginLimit, LoginWindow: in.LoginWindow, RequireLoginProtection: in.RequireLoginProtection, TrustForwardedHeaders: in.TrustForwardedHeaders, TrustedProxies: in.TrustedProxies, RedisAddr: in.RateRedisAddr, RedisAddrs: in.RateRedisAddrs, RedisUsername: in.RateRedisUsername, RedisPassword: in.RateRedisPassword, RedisMasterName: in.RateRedisMasterName, RedisTimeout: in.RateRedisTimeout, RedisPoolSize: in.RateRedisPoolSize, RedisTLS: in.RateRedisTLS}
 	handler.TrustedProxies = rateCfg.TrustedProxies
-	srv, err := NewHTTPServer(handler, server.Config{Addr: in.ListenAddr, TLS: in.TLS, RateLimit: rateCfg, CORS: in.CORS, Security: in.Security, Logger: in.Logger, AuditLogger: in.AuditLogger, Metrics: in.MetricsRecorder, Tracer: in.TracingProvider.Tracer(), MetricsAccess: in.MetricsAccess, RequireMetricsProtection: in.RequireMetricsProtection, ViewerOrigin: in.ViewerOrigin, OAuth: in.OAuth, AllowSelfSignup: &in.AllowSelfSignup, SessionCookieSecureMode: in.SessionCookieSecureMode, SessionCookieCrossSite: in.SessionCookieCrossSite, SRSHookToken: in.IngestConfig.SRSToken, UploadMaxBytes: in.UploadMaxBytes})
+	srv, err := NewHTTPServer(handler, server.Config{Addr: in.ListenAddr, TLS: in.TLS, RateLimit: rateCfg, CORS: in.CORS, Security: in.Security, ViewerMediaOrigins: viewerMediaOrigins(in.IngestConfig.OMEPlaybackBaseURL, in.UploadMediaBaseURL), ViewerMediaProxyOrigin: in.ViewerMediaProxyOrigin, Logger: in.Logger, AuditLogger: in.AuditLogger, Metrics: in.MetricsRecorder, Tracer: in.TracingProvider.Tracer(), MetricsAccess: in.MetricsAccess, RequireMetricsProtection: in.RequireMetricsProtection, ViewerOrigin: in.ViewerOrigin, OAuth: in.OAuth, AllowSelfSignup: &in.AllowSelfSignup, SessionCookieSecureMode: in.SessionCookieSecureMode, SessionCookieCrossSite: in.SessionCookieCrossSite, SRSHookToken: in.IngestConfig.SRSToken, UploadMaxBytes: in.UploadMaxBytes})
 	if err != nil {
 		return nil, fmt.Errorf("initialise http server: %w", err)
 	}
@@ -329,6 +330,24 @@ func ladderProfileNames(profiles []ingest.Rendition) []string {
 		names = append(names, profile.Name)
 	}
 	return names
+}
+
+func viewerMediaOrigins(values ...string) []string {
+	origins := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		parsed, err := url.Parse(strings.TrimSpace(value))
+		if err != nil || parsed.User != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			continue
+		}
+		origin := strings.ToLower(parsed.Scheme) + "://" + parsed.Host
+		if _, ok := seen[origin]; ok {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+	return origins
 }
 
 func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.Logger) (chat.Queue, error) {
@@ -357,20 +376,21 @@ func ResolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 func LoadIngestConfig(logger *slog.Logger) (ingest.Config, error) {
 	parsed, err := config.LoadIngestFromEnv(config.LoadEnvironment())
 	cfg := ingest.Config{
-		SRSBaseURL:        parsed.SRSBaseURL,
-		SRSToken:          parsed.SRSToken,
-		OMEBaseURL:        parsed.OMEBaseURL,
-		OMEAccessToken:    parsed.OMEAccessToken,
-		OMEUsername:       parsed.OMEUsername,
-		OMEPassword:       parsed.OMEPassword,
-		JobBaseURL:        parsed.JobBaseURL,
-		JobToken:          parsed.JobToken,
-		HealthEndpoint:    parsed.HealthEndpoint,
-		HealthTimeout:     parsed.HealthTimeout,
-		MaxBootAttempts:   parsed.MaxBootAttempts,
-		RetryInterval:     parsed.RetryInterval,
-		HTTPMaxAttempts:   parsed.HTTPMaxAttempts,
-		HTTPRetryInterval: parsed.HTTPRetryInterval,
+		SRSBaseURL:         parsed.SRSBaseURL,
+		SRSToken:           parsed.SRSToken,
+		OMEBaseURL:         parsed.OMEBaseURL,
+		OMEPlaybackBaseURL: parsed.OMEPlaybackBaseURL,
+		OMEAccessToken:     parsed.OMEAccessToken,
+		OMEUsername:        parsed.OMEUsername,
+		OMEPassword:        parsed.OMEPassword,
+		JobBaseURL:         parsed.JobBaseURL,
+		JobToken:           parsed.JobToken,
+		HealthEndpoint:     parsed.HealthEndpoint,
+		HealthTimeout:      parsed.HealthTimeout,
+		MaxBootAttempts:    parsed.MaxBootAttempts,
+		RetryInterval:      parsed.RetryInterval,
+		HTTPMaxAttempts:    parsed.HTTPMaxAttempts,
+		HTTPRetryInterval:  parsed.HTTPRetryInterval,
 	}
 	for _, profile := range parsed.LadderProfiles {
 		cfg.LadderProfiles = append(cfg.LadderProfiles, ingest.Rendition{Name: profile.Name, Bitrate: profile.Bitrate})

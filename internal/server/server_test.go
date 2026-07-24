@@ -204,6 +204,36 @@ func TestNewRegistersKeyRoutes(t *testing.T) {
 	}
 }
 
+func TestNewRegistersCanonicalSRSHookRoutes(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{SRSHookToken: "hook-token"})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	for _, event := range []string{"connect", "publish", "unpublish", "play", "stop", "forward"} {
+		t.Run(event, func(t *testing.T) {
+			body := fmt.Sprintf(`{"action":"on_%s"}`, event)
+			req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs/"+event+"?token=hook-token", strings.NewReader(body))
+			rec := httptest.NewRecorder()
+
+			srv.httpServer.Handler.ServeHTTP(rec, req)
+
+			if event == "connect" {
+				if rec.Code != http.StatusOK {
+					t.Fatalf("expected connect status 200, got %d: %s", rec.Code, rec.Body.String())
+				}
+				return
+			}
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("expected routed lifecycle hook to reject missing stream with 404, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestRootFallsBackToControlCenterWithoutViewerOrigin(t *testing.T) {
 	t.Parallel()
 
@@ -574,6 +604,31 @@ func TestAuthMiddlewareRejectsMissingSession(t *testing.T) {
 	resp := decodeAPIError(t, rec.Body.Bytes())
 	if resp.Error.Message == "" {
 		t.Fatal("expected error message in response")
+	}
+}
+
+func TestCanonicalSRSHookRoutesBypassBrowserSession(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	for _, event := range []string{"connect", "publish", "unpublish", "play", "stop", "forward"} {
+		t.Run(event, func(t *testing.T) {
+			nextCalled := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			})
+			req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs/"+event, nil)
+			rec := httptest.NewRecorder()
+
+			authMiddleware(handler, next).ServeHTTP(rec, req)
+
+			if !nextCalled {
+				t.Fatal("expected SRS hook request to bypass browser session authentication")
+			}
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("expected status 202, got %d", rec.Code)
+			}
+		})
 	}
 }
 
@@ -1032,7 +1087,7 @@ func TestCSRFMiddlewareAllowsWebhookAndSRSPaths(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	for _, path := range []string{"/api/ingest/srs-hook", "/api/payments/webhooks/stripe"} {
+	for _, path := range []string{"/api/ingest/srs-hook", "/api/ingest/srs/publish", "/api/ingest/srs/forward", "/api/payments/webhooks/stripe"} {
 		t.Run(path, func(t *testing.T) {
 			nextCalled = false
 			req := httptest.NewRequest(http.MethodPost, path, nil)

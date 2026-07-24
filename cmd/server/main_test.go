@@ -119,3 +119,35 @@ func TestResolveUploadMediaBaseURL(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveOMEPlaybackOrigin(t *testing.T) {
+	t.Run("flag wins", func(t *testing.T) {
+		got, err := resolveOMEPlaybackOrigin("http://ome:8080", "http://ignored:8080")
+		if err != nil {
+			t.Fatalf("resolveOMEPlaybackOrigin: %v", err)
+		}
+		if got.String() != "http://ome:8080" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("empty disables proxy", func(t *testing.T) {
+		got, err := resolveOMEPlaybackOrigin("", "")
+		if err != nil || got != nil {
+			t.Fatalf("got %v, %v", got, err)
+		}
+	})
+
+	for _, invalid := range []string{
+		"ftp://ome:8080",
+		"http://user:secret@ome:8080",
+		"http://ome:8080/live",
+		"http://ome:8080?debug=true",
+	} {
+		t.Run(invalid, func(t *testing.T) {
+			if _, err := resolveOMEPlaybackOrigin(invalid, ""); err == nil {
+				t.Fatalf("expected %q to be rejected", invalid)
+			}
+		})
+	}
+}

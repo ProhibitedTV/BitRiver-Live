@@ -13,13 +13,12 @@ import (
 
 // Options describes how the fake control plane should behave.
 type Options struct {
-	// PrimaryIngest and BackupIngest are returned from the channel create endpoint.
+	// PrimaryIngest, BackupIngest, and OriginURL are returned from the channel create endpoint.
 	PrimaryIngest string
 	BackupIngest  string
 
-	// OriginURL and PlaybackURL are returned from the application create endpoint.
-	OriginURL   string
-	PlaybackURL string
+	// OriginURL is the internal source URL consumed by the transcoder.
+	OriginURL string
 
 	// LiveJobIDs are returned from the job start endpoint.
 	LiveJobIDs []string
@@ -103,10 +102,8 @@ func (c *ControlPlane) handle(w http.ResponseWriter, r *http.Request) {
 		c.handleCreateChannel(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/channels/"):
 		c.handleDeleteChannel(w, r)
-	case r.Method == http.MethodPost && r.URL.Path == "/v1/applications":
-		c.handleCreateApplication(w, r)
-	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/applications/"):
-		c.handleDeleteApplication(w, r)
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/vhosts/default/apps/live":
+		c.handleValidateApplication(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/jobs":
 		c.handleStartJobs(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/jobs/"):
@@ -128,6 +125,7 @@ func (c *ControlPlane) handleCreateChannel(w http.ResponseWriter, r *http.Reques
 	type channelResponse struct {
 		PrimaryIngest string `json:"primaryIngest"`
 		BackupIngest  string `json:"backupIngest"`
+		OriginIngest  string `json:"originIngest"`
 	}
 
 	var req channelRequest
@@ -159,9 +157,12 @@ func (c *ControlPlane) handleCreateChannel(w http.ResponseWriter, r *http.Reques
 
 	c.record(op)
 
-	resp := channelResponse{PrimaryIngest: c.opts.PrimaryIngest, BackupIngest: c.opts.BackupIngest}
+	resp := channelResponse{PrimaryIngest: c.opts.PrimaryIngest, BackupIngest: c.opts.BackupIngest, OriginIngest: c.opts.OriginURL}
 	if resp.PrimaryIngest == "" {
 		resp.PrimaryIngest = "rtmp://primary"
+	}
+	if resp.OriginIngest == "" {
+		resp.OriginIngest = "rtmp://srs/live/stream-key"
 	}
 	_ = json.NewEncoder(w).Encode(resp)
 }
@@ -175,49 +176,16 @@ func (c *ControlPlane) handleDeleteChannel(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (c *ControlPlane) handleCreateApplication(w http.ResponseWriter, r *http.Request) {
+func (c *ControlPlane) handleValidateApplication(w http.ResponseWriter, r *http.Request) {
 	if !c.expectOMEAuth(w, r) {
 		return
 	}
-	type appRequest struct {
-		ChannelID  string   `json:"channelId"`
-		Renditions []string `json:"renditions"`
-	}
-	type appResponse struct {
-		OriginURL   string `json:"originUrl"`
-		PlaybackURL string `json:"playbackUrl"`
-	}
-
-	var req appRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-
 	c.record(Operation{
-		Kind:       "application-create",
-		ChannelID:  req.ChannelID,
-		Renditions: append([]string{}, req.Renditions...),
-		Status:     http.StatusOK,
+		Kind:   "application-validate",
+		Status: http.StatusOK,
 	})
-
-	resp := appResponse{OriginURL: c.opts.OriginURL, PlaybackURL: c.opts.PlaybackURL}
-	if resp.OriginURL == "" {
-		resp.OriginURL = "http://origin"
-	}
-	if resp.PlaybackURL == "" {
-		resp.PlaybackURL = "https://playback"
-	}
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func (c *ControlPlane) handleDeleteApplication(w http.ResponseWriter, r *http.Request) {
-	if !c.expectOMEAuth(w, r) {
-		return
-	}
-	channelID := strings.TrimPrefix(r.URL.Path, "/v1/applications/")
-	c.record(Operation{Kind: "application-delete", ChannelID: channelID, Status: http.StatusNoContent})
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"statusCode":200,"message":"OK","response":{"name":"live"}}`))
 }
 
 func (c *ControlPlane) handleStartJobs(w http.ResponseWriter, r *http.Request) {

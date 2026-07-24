@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -52,6 +52,8 @@ jobs:
           BITRIVER_TRANSCODER_TOKEN: ${{ secrets.BITRIVER_TRANSCODER_TOKEN }}
           BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${{ secrets.BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD }}
           BITRIVER_TRANSCODER_PUBLIC_BASE_URL: ${{ secrets.BITRIVER_TRANSCODER_PUBLIC_BASE_URL }}
+          BITRIVER_SRS_PUBLIC_RTMP_BASE_URL: ${{ secrets.BITRIVER_SRS_PUBLIC_RTMP_BASE_URL }}
+          BITRIVER_OME_PUBLIC_LLHLS_BASE_URL: ${{ secrets.BITRIVER_OME_PUBLIC_LLHLS_BASE_URL }}
           BITRIVER_LIVE_IMAGE_TAG: ${{ secrets.BITRIVER_LIVE_IMAGE_TAG }}
           BITRIVER_VIEWER_IMAGE_TAG: ${{ secrets.BITRIVER_VIEWER_IMAGE_TAG }}
           BITRIVER_SRS_CONTROLLER_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_CONTROLLER_IMAGE_TAG }}
@@ -106,6 +108,8 @@ jobs:
             BITRIVER_TRANSCODER_TOKEN
             BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
             BITRIVER_TRANSCODER_PUBLIC_BASE_URL
+            BITRIVER_SRS_PUBLIC_RTMP_BASE_URL
+            BITRIVER_OME_PUBLIC_LLHLS_BASE_URL
             BITRIVER_LIVE_IMAGE_TAG
             BITRIVER_VIEWER_IMAGE_TAG
             BITRIVER_SRS_CONTROLLER_IMAGE_TAG
@@ -235,7 +239,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -283,7 +287,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -349,7 +353,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -488,7 +492,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -577,7 +581,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -687,7 +691,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -955,7 +959,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '.go-version'
           cache: true
@@ -1091,7 +1095,7 @@ jobs:
             core.setOutput('body', result.data.body);
 
       - name: Publish release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ github.ref_name }}
           body: ${{ steps.notes.outputs.body }}

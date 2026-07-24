@@ -2,6 +2,8 @@
 
 This is the artifact-only installation path for an operator-managed Ubuntu VM. It installs the canonical Docker Compose stack; it does not build application images or require a source checkout.
 
+> **Availability:** the repository contains this installer and package pipeline, but no tagged GitHub Release or downloadable Ubuntu artifact exists yet. Use the source-checkout quickstart for evaluation. Use the commands below only with assets and images published together by an actual release tag.
+
 ## Support and evidence boundary
 
 - Production target: Ubuntu Server 24.04 LTS on amd64.
@@ -110,11 +112,14 @@ BITRIVER_LIVE_VIEWER_CORS_ORIGINS=https://stream.example.com
 BITRIVER_PUBLIC_DOMAIN=stream.example.com
 BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
 BITRIVER_OME_BIND=0.0.0.0
-BITRIVER_OME_IP=203.0.113.20
-BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://media.example.com
+BITRIVER_OME_IP=0.0.0.0
+BITRIVER_OME_LLHLS_ORIGIN=http://ome:8080
+BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://stream.example.com/live
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://stream.example.com/hls
+BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://ingest.example.com:1935/live
 ```
 
-Use the NPM host's exact LAN IP/CIDR for `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`; do not trust an entire LAN unless every machine on it may set forwarded client-IP headers. `BITRIVER_OME_IP` must be the address viewers can actually reach through your chosen NAT/playback design, not `0.0.0.0` or a loopback address.
+Use the NPM host's exact LAN IP/CIDR for `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`; do not trust an entire LAN unless every machine on it may set forwarded client-IP headers. OME's local listener remains wildcard inside Docker. Public LL-HLS is advertised through BitRiver's same-origin `/live` proxy, while the RTMP URL must name the TCP endpoint creators can reach.
 
 Before activation, review the secret file without copying it into tickets or logs:
 
@@ -136,7 +141,7 @@ Create an NPM Proxy Host for `stream.example.com`:
 - Websockets Support: enabled
 - TLS certificate: enabled, with Force SSL
 
-The default API entrypoint serves `/`, `/api`, `/admin`, and reverse-proxies `/viewer`, so keep those paths on the same upstream. Create a second proxy host such as `media.example.com` to the VM's port `9080` for transcoder manifests and segments. This avoids fragile path rewriting; set `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` to that exact HTTPS origin.
+The default API entrypoint serves `/`, `/api`, `/admin`, and reverse-proxies `/viewer` and `/live`, so keep those paths on the same upstream. Add an NPM custom location for `/hls/` that forwards to the same VM on port `9080` and preserves the prefix. The example above therefore advertises `https://stream.example.com/hls`. A separate media hostname is also valid when it forwards to `9080` and the public base URL matches it exactly.
 
 Restrict host-published management ports to trusted networks. The default exposure plan is:
 
@@ -145,7 +150,7 @@ Restrict host-published management ports to trusted networks. The default exposu
 | `8080` | TCP/HTTP | NPM to BitRiver app; do not publish directly when NPM fronts it |
 | `9080` | TCP/HTTP | NPM to transcoder media host |
 | `1935` | TCP/RTMP | Direct/NAT only when remote encoders ingest |
-| `8083` | TCP/HTTP | OME LL-HLS; proxy only if the selected playback path uses it |
+| `8083` | TCP/HTTP | Private OME LL-HLS diagnostic mapping; the supported viewer path is `/live/` through port `8080` |
 | `9000` or `9443` | TCP/WebSocket | OME signalling; requires a validated public WSS route |
 | `3478` | TCP and UDP | OME relay when WebRTC uses it |
 | `10000-10009` | UDP | OME ICE media range when WebRTC uses it |
@@ -184,8 +189,9 @@ Do not paste the environment or generated OME XML into public logs. A green cont
 
 1. Authenticated OME manager/control success using the deployment token.
 2. Real RTMP publish from an encoder.
-3. Playback from an external viewer through the public URL.
-4. Stop/start and failure recovery without stale OME applications.
+3. `https://stream.example.com/live/<channel-id>/llhls.m3u8` returns through NPM and several seconds of audio/video decode.
+4. Every advertised transcoder rendition under `/hls/` returns successfully.
+5. Stop/start and failure recovery without stale OME applications or jobs.
 
 ## 7. Reboot acceptance on XOA
 

@@ -54,9 +54,11 @@ func LoadTranscoderFromEnv(env Environment) (TranscoderConfig, error) {
 }
 
 type SRSControllerConfig struct {
-	Bind     string
-	Upstream *url.URL
-	Token    string
+	Bind                string
+	Upstream            *url.URL
+	Token               string
+	PublicRTMPBaseURL   *url.URL
+	InternalRTMPBaseURL *url.URL
 }
 
 type ServerDatastoreConfig struct {
@@ -98,7 +100,29 @@ func LoadSRSControllerFromEnv(env Environment) (SRSControllerConfig, error) {
 	if token == "" {
 		return SRSControllerConfig{}, fmt.Errorf("BITRIVER_SRS_TOKEN must be set")
 	}
-	return SRSControllerConfig{Bind: bind, Upstream: upstream, Token: token}, nil
+	publicRTMPBaseURL, err := parseRTMPBaseURL("SRS_CONTROLLER_PUBLIC_RTMP_BASE_URL", firstNonEmpty(strings.TrimSpace(env.Get("SRS_CONTROLLER_PUBLIC_RTMP_BASE_URL")), "rtmp://localhost:1935/live"))
+	if err != nil {
+		return SRSControllerConfig{}, err
+	}
+	internalRTMPBaseURL, err := parseRTMPBaseURL("SRS_CONTROLLER_INTERNAL_RTMP_BASE_URL", firstNonEmpty(strings.TrimSpace(env.Get("SRS_CONTROLLER_INTERNAL_RTMP_BASE_URL")), "rtmp://srs:1935/live"))
+	if err != nil {
+		return SRSControllerConfig{}, err
+	}
+	return SRSControllerConfig{Bind: bind, Upstream: upstream, Token: token, PublicRTMPBaseURL: publicRTMPBaseURL, InternalRTMPBaseURL: internalRTMPBaseURL}, nil
+}
+
+func parseRTMPBaseURL(key, raw string) (*url.URL, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", key, err)
+	}
+	if parsed.Scheme != "rtmp" || parsed.Host == "" {
+		return nil, fmt.Errorf("%s must be an rtmp URL with a host", key)
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed, nil
 }
 
 func parseDurationEnv(env Environment, key string) (time.Duration, error) {

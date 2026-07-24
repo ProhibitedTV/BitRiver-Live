@@ -31,7 +31,8 @@ OME owns:
 BitRiver Live owns around OME:
 - Rendering and mounting `deploy/ome/Server.generated.xml` before OME startup.
 - Failing fast on known health-token/config mismatches via `ome-health-token-check`.
-- Creating/deleting per-channel applications via ingest orchestration.
+- Validating the static `default/live` application through the authenticated manager API and deriving per-channel LL-HLS URLs.
+- Serving OME LL-HLS through the same-origin `/live/` edge.
 - Polling OME health and surfacing degraded status.
 
 ### Transcoder (ffmpeg job service)
@@ -47,9 +48,9 @@ BitRiver Live owns around the transcoder:
 
 ### Control plane (BitRiver Live API + ingest orchestrator)
 Control plane owns:
-- Sequencing `BootStream` (SRS channel -> OME app -> transcoder jobs).
+- Sequencing `BootStream` (SRS channel mapping -> OME application validation -> transcoder jobs).
 - Best-effort rollback during boot failures (delete already-created upstream resources).
-- Best-effort shutdown (`StopJob`, `DeleteApplication`, `DeleteChannel`) with aggregated errors.
+- Best-effort shutdown (`StopJob`, OME stream-state release, `DeleteChannel`) with aggregated errors. The static OME application remains configured.
 - Exposure of readiness/health/status for operators and automation.
 
 Control plane does **not** own:
@@ -65,8 +66,8 @@ Automatic recovery in the current contract is limited to these cases:
    - If a service process exits and the host is healthy, Docker will attempt restart.
 
 2. **Boot-time rollback when pipeline creation fails**
-   - If OME app creation fails after SRS channel creation, control plane attempts `DeleteChannel`.
-   - If transcoder start fails after OME/SRS success, control plane attempts `DeleteApplication` and `DeleteChannel`.
+   - If OME application validation fails after SRS channel creation, control plane attempts `DeleteChannel`.
+   - If transcoder start fails after OME/SRS success, control plane releases per-stream OME adapter state and attempts `DeleteChannel`.
    - This is best-effort cleanup, not transactional rollback.
 
 3. **Bounded retry for ingest HTTP adapters**
@@ -89,7 +90,7 @@ You should expect manual action for:
    - Symptoms: container restart loops, connection refused/timeouts, upstream probe failures.
 
 3. **Failed best-effort cleanup**
-   - If shutdown or rollback cannot reach an upstream API, orphaned channels/apps/jobs may remain until manually removed.
+   - If shutdown or rollback cannot reach an upstream API, orphaned channel mappings or jobs may remain until manually removed. The declared OME application is not an orphan and must remain configured.
 
 4. **Dependency outages outside ingest**
    - Postgres/Redis failures drive `/readyz` to `503`; ingestion APIs may be indirectly impacted.

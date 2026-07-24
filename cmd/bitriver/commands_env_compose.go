@@ -289,7 +289,7 @@ func runEnvValidate(args []string) error {
 		return err
 	}
 
-	result := validateEnv(values)
+	result := validateEnvWithRuntimeMode(values, os.Getenv("BITRIVER_LIVE_MODE"))
 	for _, w := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
@@ -501,6 +501,8 @@ func validateComposeEffectiveEnvironment(envFile string) error {
 		}
 		effectiveValues[key] = value
 	}
+	runtimeMode := effectiveValues["BITRIVER_LIVE_MODE"]
+	effectiveValues["BITRIVER_LIVE_MODE"] = fileValues["BITRIVER_LIVE_MODE"]
 
 	for _, key := range criticalDeployEnvironmentKeys() {
 		if _, ok := overrides[key]; ok {
@@ -508,7 +510,7 @@ func validateComposeEffectiveEnvironment(envFile string) error {
 		}
 	}
 
-	result := validateEnv(effectiveValues)
+	result := validateEnvWithRuntimeMode(effectiveValues, runtimeMode)
 	if len(result.Errors) > 0 || len(result.Missing) > 0 || len(result.Blocked) > 0 {
 		for _, key := range criticalDeployEnvironmentKeys() {
 			if _, ok := overrides[key]; ok {
@@ -1095,7 +1097,11 @@ func runBuildImagePreflight(envFile string) error {
 }
 
 func validateProductionDeploymentContract(envFile string, values map[string]string, imageSourceMode string) error {
-	if !strings.EqualFold(strings.TrimSpace(values["BITRIVER_LIVE_MODE"]), "production") {
+	effectiveMode := strings.TrimSpace(values["BITRIVER_LIVE_MODE"])
+	if override, ok := os.LookupEnv("BITRIVER_LIVE_MODE"); ok && strings.TrimSpace(override) != "" {
+		effectiveMode = strings.TrimSpace(override)
+	}
+	if !strings.EqualFold(effectiveMode, "production") {
 		return nil
 	}
 
@@ -1163,24 +1169,18 @@ func validateQuickstartProductionRequirements(envFile string, values map[string]
 			strings.HasPrefix(lower, "http://[::1]") ||
 			strings.HasPrefix(lower, "https://[::1]")
 	}
-	loopbackHost := func(value string) bool {
-		trimmed := strings.ToLower(strings.TrimSpace(value))
-		return trimmed == "localhost" || trimmed == "0.0.0.0" || trimmed == "::" || trimmed == "::1" || strings.HasPrefix(trimmed, "127.")
-	}
-
 	if val := strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]); val == "" || loopbackURL(val) {
 		issues = append(issues, fmt.Sprintf("- BITRIVER_TRANSCODER_PUBLIC_BASE_URL=%q must be a public/routable URL (example: https://cdn.example.com/hls)", valueOrDefault(val, "<empty>")))
+	}
+	if val := strings.TrimSpace(values["BITRIVER_OME_PUBLIC_LLHLS_BASE_URL"]); val == "" || loopbackURL(val) {
+		issues = append(issues, fmt.Sprintf("- BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=%q must be the public HTTPS LL-HLS base (example: https://stream.example.com/live)", valueOrDefault(val, "<empty>")))
+	}
+	if val := strings.ToLower(strings.TrimSpace(values["BITRIVER_SRS_PUBLIC_RTMP_BASE_URL"])); val == "" || strings.HasPrefix(val, "rtmp://localhost") || strings.HasPrefix(val, "rtmp://127.") || strings.HasPrefix(val, "rtmp://0.0.0.0") || strings.HasPrefix(val, "rtmp://[::1]") {
+		issues = append(issues, fmt.Sprintf("- BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=%q must be the routable RTMP base creators use (example: rtmp://stream.example.com:1935/live)", valueOrDefault(val, "<empty>")))
 	}
 	if val := strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"]); val == "" || loopbackURL(val) {
 		issues = append(issues, fmt.Sprintf("- NEXT_PUBLIC_VIEWER_URL=%q must be a public/routable viewer URL (example: https://viewer.example.com)", valueOrDefault(val, "<empty>")))
 	}
-	if val := strings.TrimSpace(values["BITRIVER_OME_BIND"]); val == "" || loopbackHost(val) {
-		issues = append(issues, fmt.Sprintf("- BITRIVER_OME_BIND=%q must be a routable bind/interface value for production", valueOrDefault(val, "<empty>")))
-	}
-	if val := strings.TrimSpace(values["BITRIVER_OME_IP"]); val == "" || loopbackHost(val) {
-		issues = append(issues, fmt.Sprintf("- BITRIVER_OME_IP=%q must be the public/routable OME host or IP", valueOrDefault(val, "<empty>")))
-	}
-
 	if len(issues) == 0 {
 		return nil
 	}

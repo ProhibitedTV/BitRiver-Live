@@ -1,114 +1,144 @@
-# Cloudflare → Nginx Proxy Manager → BitRiver Live
+# Cloudflare + Nginx Proxy Manager + BitRiver Live
 
-Use this guide when BitRiver Live runs behind **Cloudflare** and **Nginx Proxy Manager (NPM)** instead of the bundled Caddy TLS proxy. It covers required environment values, recommended DNS/TLS posture, NPM forwarding rules, and a post-deploy validation checklist.
+Use this topology when BitRiver Live runs on an Ubuntu VM and Nginx Proxy
+Manager (NPM) owns the public HTTPS edge. The supported HTTP shape is one
+viewer origin; creator RTMP is a separate TCP path.
 
-## 1) Required `.env` values for external domain deployments
-
-When users access BitRiver through an external domain, these values must match that public URL so CORS, redirects, and playback URLs stay coherent.
-
-```dotenv
-# Public viewer URL shown in links and consumed by the Next.js app.
-NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer
-
-# Public origin that should be allowed to render the viewer.
-BITRIVER_VIEWER_ORIGIN=https://stream.example.com
-
-# Admin/control-centre browser origin allowlist (comma-separated when multiple).
-BITRIVER_LIVE_ADMIN_CORS_ORIGINS=https://stream.example.com
-
-# Viewer/API browser origin allowlist (comma-separated when multiple).
-BITRIVER_LIVE_VIEWER_CORS_ORIGINS=https://stream.example.com
-
-# Trust only the NPM host to supply forwarded client addresses.
-BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
-
-# Public HTTP(S) origin for transcoder output manifests/segments.
-BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://media.example.com
+```text
+viewer -> Cloudflare HTTPS -> NPM proxy host -> BitRiver :8080
+                                             -> /hls/ -> transcoder-public :9080
+creator -> DNS-only ingest host or NPM Stream -> SRS :1935/TCP
 ```
 
-Notes:
+Keep Postgres, Redis, the OME manager API, the SRS raw/controller APIs, and the
+transcoder controller private.
 
-- Keep schemes explicit (`https://...`) for all origin allowlists.
-- Replace `10.0.10.5/32` with NPM's exact LAN address; do not trust a broad LAN by default.
-- If admin and viewer run on different hostnames, include both exact origins in the corresponding CORS variables.
-- After updating `.env`, re-apply with `docker compose up -d`.
+## 1. Public environment values
 
-## 2) Recommended DNS + TLS settings
+Set these values in the root `.env` before rendering Compose. Replace both
+example hostnames with records you control.
 
-For Cloudflare-managed domains:
+```dotenv
+NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer
+BITRIVER_VIEWER_ORIGIN=https://stream.example.com
+BITRIVER_LIVE_ADMIN_CORS_ORIGINS=https://stream.example.com
+BITRIVER_LIVE_VIEWER_CORS_ORIGINS=https://stream.example.com
 
-1. Create DNS records for your BitRiver hostname (for example `stream.example.com`) pointing at the NPM host.
-2. Keep records proxied (**orange cloud**) so Cloudflare edge shielding/WAF applies.
-3. Set SSL/TLS encryption mode to **Full (strict)**.
-4. Install a **Cloudflare Origin Certificate** (or another trusted cert valid for your origin hostname) on NPM so Cloudflare can verify the origin certificate chain.
-5. Keep “Always Use HTTPS” enabled at Cloudflare (or enforce redirects in NPM).
+# Same-origin OME LL-HLS: BitRiver proxies /live/ to the private OME origin.
+BITRIVER_OME_LLHLS_ORIGIN=http://ome:8080
+BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://stream.example.com/live
 
-Why this matters:
+# Public HLS renditions served by the transcoder-public sidecar.
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://stream.example.com/hls
 
-- `Full (strict)` prevents downgrade/invalid-cert MITM between Cloudflare and your origin.
-- Origin certificates avoid exposing a publicly trusted private key on the application host.
+# Creator-facing TCP endpoint. This is not an HTTP URL.
+BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://ingest.example.com:1935/live
+```
 
-## 3) NPM host configuration (paths + websocket support)
+Do not put the Compose-only names `ome`, `srs`, or `transcoder-public` in a
+viewer-facing URL. Re-apply the stack after editing `.env`:
 
-Create one **Proxy Host** in Nginx Proxy Manager:
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml config
+docker compose --env-file .env -f deploy/docker-compose.yml up -d
+```
 
-- **Domain Names:** `stream.example.com`
-- **Scheme / Forward Hostname / Port:** `http` → your BitRiver host/IP → `8080` (or whatever API entry port you expose)
-- **Websockets Support:** enabled
-- **Block Common Exploits:** enabled
-- **Access List:** optional (typically public viewer; restrict admin paths via network controls as needed)
+## 2. DNS and TLS
 
-Then configure path forwarding so BitRiver routing stays intact:
+Create two records:
 
-### Base route (`/`)
+- `stream.example.com`: point it at NPM and enable Cloudflare proxying when you
+  want Cloudflare in the HTTP path.
+- `ingest.example.com`: use a DNS-only record for direct RTMP, or point it at a
+  TCP proxy you operate. A normal Cloudflare orange-cloud record does not proxy
+  arbitrary RTMP traffic.
 
-- Forward to BitRiver API service (same upstream as above).
-- This serves control-centre/API root behaviour expected by the stack.
+For the HTTP hostname, use Cloudflare **Full (strict)** and install a valid
+origin certificate in NPM. Enable HTTPS redirect and HTTP/2. Websocket support
+must remain enabled for live chat and realtime control-plane routes.
 
-### API route (`/api`)
+## 3. NPM proxy host
 
-- Add custom location `/api` forwarding to the same BitRiver API upstream.
-- Preserve host and forwarding headers (NPM defaults are usually sufficient).
+Create a Proxy Host for `stream.example.com`:
 
-### Viewer route (`/viewer`)
+- Scheme: `http`
+- Forward host/IP: the Ubuntu VM address reachable from NPM
+- Forward port: `8080`
+- Websockets Support: enabled
+- Block Common Exploits: enabled
+- SSL: the origin certificate selected, Force SSL enabled
 
-- Add custom location `/viewer` forwarding to the same BitRiver API upstream.
-- The BitRiver API reverse-proxies viewer assets under `/viewer` in the default deployment.
+The default location carries `/`, `/viewer`, `/admin`, `/api`, and `/live` to
+BitRiver on port `8080`. Do not create a separate `/live` location; the Go edge
+preserves that path and streams OME's private response.
 
-### Websocket routes
+Add one custom location for transcoder renditions:
 
-BitRiver uses websocket upgrades for live chat and related realtime flows. With NPM websocket support enabled, upgrades should pass through automatically for `/api` and `/viewer` traffic. If you use advanced custom Nginx snippets, ensure they do **not** strip:
+- Location: `/hls/`
+- Scheme: `http`
+- Forward host/IP: the same Ubuntu VM
+- Forward port: `9080`
 
-- `Upgrade`
-- `Connection`
-- `Sec-WebSocket-*`
+Preserve the `/hls/` prefix. The shipped nginx sidecar maps it to the read-only
+transcoder public directory.
 
-Create a second Proxy Host for `media.example.com` forwarding to the BitRiver VM on port `9080`. Use a separate hostname instead of a `/live` custom location so NPM does not need to rewrite transcoder file paths.
+If NPM reaches the VM over an untrusted network, firewall ports `8080` and
+`9080` so only the NPM host can connect. Do not expose OME port `8081`, SRS API
+ports, Postgres, or Redis publicly.
 
-NPM and Cloudflare's normal HTTP proxy do not carry RTMP, TURN, or arbitrary UDP. If the deployment uses those paths, configure and validate direct firewall/NAT exposure for RTMP `1935/tcp`, OME relay `3478/tcp+udp`, and the OME ICE range `10000-10009/udp`. Keep OME manager ports `8081`/`8082`, the transcoder controller `9001`, SRS management, Postgres, and Redis private. See [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md) for the complete port table and XOA reboot gate.
+## 4. RTMP ingest
 
-## 4) Validation checklist
+Expose TCP `1935` using one of these patterns:
 
-After DNS and proxy changes, validate end-to-end behaviour from a browser session:
+1. Forward `ingest.example.com:1935` directly to the Ubuntu VM's SRS port and
+   restrict source networks where practical.
+2. Create an NPM **Stream** entry for TCP `1935` that forwards to the VM's SRS
+   port.
+3. Keep ingest private over a LAN or VPN and set
+   `BITRIVER_SRS_PUBLIC_RTMP_BASE_URL` to that reachable address.
 
-1. **Login + session**
-   - Open `https://stream.example.com/`.
-   - Sign in as admin.
-   - Confirm authenticated navigation works after a hard refresh.
-2. **Viewer loading + playback**
-   - Open a channel under `/viewer/...`.
-   - Start/publish a stream and verify playback starts.
-   - Confirm segment/manifests load from `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` without mixed-content warnings.
-3. **Chat websocket behaviour**
-   - Open chat on viewer and admin surfaces.
-   - Post messages from one client and confirm near-realtime delivery on another.
-   - In browser devtools/network, verify websocket connections complete with `101 Switching Protocols`.
-4. **CORS sanity**
-   - Ensure browser console has no CORS errors for admin or viewer requests.
-   - If errors appear, re-check `BITRIVER_LIVE_ADMIN_CORS_ORIGINS` and `BITRIVER_LIVE_VIEWER_CORS_ORIGINS`.
+The NPM Proxy Hosts screen is HTTP-only and cannot carry RTMP. Never publish
+the SRS controller/raw API alongside the ingest port.
 
-## 5) Related docs
+## 5. Forwarded-client trust
 
-- Quickstart baseline: [`docs/quickstart.md`](quickstart.md)
-- Additional production options: [`docs/advanced-deployments.md`](advanced-deployments.md)
-- Compose/env source of truth: [`deploy/docker-compose.yml`](../deploy/docker-compose.yml)
+Only enable forwarded-IP trust when every proxy hop is known and pinned:
+
+```dotenv
+BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
+BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
+```
+
+Add the actual NPM address/CIDR and, when Cloudflare connects directly to NPM,
+the current Cloudflare proxy ranges according to your network policy. Leaving
+trust disabled is safer than accepting spoofable forwarding headers.
+
+## 6. Acceptance checklist
+
+Validate from outside the home network, not only from the VM:
+
+1. `https://stream.example.com/healthz`, `/readyz`, `/viewer`, and `/admin`
+   return successfully.
+2. Admin login survives a hard refresh and no browser console shows mixed
+   content or CORS failures.
+3. A test encoder publishes to `rtmp://ingest.example.com:1935/live` with its
+   stream key in the separate key field.
+4. The channel transitions live and
+   `https://stream.example.com/live/<channel-id>/llhls.m3u8` returns through the
+   main NPM proxy host.
+5. Several seconds of video and audio decode from that public LL-HLS URL.
+6. Every advertised rendition under `/hls/` returns successfully.
+7. Chat upgrades to websocket (`101`) and messages arrive in a second session.
+8. Stopping the encoder returns the channel offline without stale jobs.
+
+OME process health by itself is not playback proof. If the `/live/` check
+fails, inspect BitRiver and OME logs together and verify that the authenticated
+OME manager route can read `default/live` before changing proxy rules.
+
+## Related docs
+
+- [Ubuntu/XOA artifact installation target](installing-on-ubuntu.md)
+- [Single-host production baseline](production-single-host.md)
+- [Deployment contract](contract.md)
+- [Security](security.md)
+- [Operations](operations.md)
