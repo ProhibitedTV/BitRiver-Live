@@ -74,6 +74,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Full clean-checkout `./scripts/verify.sh --viewer` passed in 208.3 seconds: all Go packages, architecture/dependency/contract checks, release bundle, Postgres migrations, Compose validation, quickstart smoke, viewer lint, and 25 viewer suites (215 tests, four snapshots).
     - The operator-local root `.env` was moved outside the checkout only for the clean-checkout verification and restored in a guaranteed `finally` block; no backup/leftover file or runtime container/volume remained.
     - PR #1328 first remote run passed secret, docs, workflow, shell, and image-scan jobs. Ubuntu then reproduced `mkdir /work/live: permission denied`: the Linux smoke override forced host UID 1001 onto the named volume initialized for the transcoder image UID 10001. The fix will retain the image user for that volume and replace raw `docker inspect` failure output with a state-only diagnostic.
+    - The second remote run confirmed Linux quickstart passes and progressed to the tagged Postgres tier, which found `postgres_ingest_e2e_test.go` still using removed `ingeststub.Options.PlaybackURL` and legacy OME application lifecycle expectations. The tagged scenario must be aligned and proven against real Postgres before another push.
+    - The tagged scenario now derives playback through `OMEPlaybackBaseURL`, expects current authenticated application validation, and passed `go test -count=1 -timeout=120s -tags postgres ./internal/storage/...` against a migrated disposable Postgres 15 container.
     - Remote rerun, merge, and issue publication evidence remain pending.
 
 ## Scoped change: clean-host Ubuntu Compose installer foundation (#1297)
