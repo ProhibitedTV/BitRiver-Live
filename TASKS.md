@@ -60,7 +60,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Check:
     - README keeps the no-release notice while explaining the first immutable RC, official `ghcr.io/prohibitedtv` namespace, pull-only gate, and exact clean-host/stable boundary.
     - Ubuntu, release, gate, testing, viewer, systemd, and draft release-note guidance now agree on RC semantics, stable-only `latest`, anonymous manifest checks, job-local workflow credentials, actual image digests, and clean Ubuntu/XOA/NPM/OME/browser/reboot follow-up evidence.
-    - All current operator-doc references to the nonexistent `ghcr.io/bitriver-live` namespace were removed; its only remaining tracked occurrence is an intentional forbidden-string workflow regression assertion.
+    - All current operator-doc and executable references to the nonexistent `ghcr.io/bitriver-live` namespace were removed; the literal remains only in historical planning/evidence text and an intentional forbidden-string workflow regression assertion.
     - `./scripts/check-doc-installer-language.sh`, `./scripts/generate-contract-doc.sh --check`, and `git diff --check` passed.
 
 - [-] Task 6 - Verify, merge, publish, and inspect the first candidate
@@ -73,6 +73,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The private root `.env` was moved outside the checkout only for that run, restored in `finally`, and retained the exact SHA-256 hash. The canonical smoke left no BitRiver containers.
     - Eleven Python release-helper tests, focused Go CLI/workflow tests, YAML/WiX parsing, shell syntax, generated contract checks, doc consistency checks, and `git diff --check` passed.
     - First PR run `30132326373` exposed ShellCheck SC1007 on the intentionally empty stable nFPM prerelease assignment. Changed it to the explicit `NFPM_PRERELEASE=''` form; no package behavior changed.
+    - Replacement run `30132400350` then exposed two escaped OME-helper selectors in the CI/standalone image-scan workflows that still matched the retired namespace even though the images built under the new namespace. Updated both selectors and their shared regression test; the failure occurred before Trivy evaluated any CVE, so it was workflow drift rather than a vulnerability finding.
     - PR, remote CI, merge, immutable RC tag, published assets/images, anonymous pull, and tag-workflow product evidence remain pending.
 
 ## Scoped change: full-stack production golden-path E2E (#1300)

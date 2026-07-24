@@ -68,7 +68,7 @@ func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
 		for _, required := range []string{
 			"BITRIVER_OME_CONFIG_IMAGE_TAG=ci",
 			"mapfile -t ome_config_images",
-			"grep -E '^ghcr\\.io/bitriver-live/bitriver-ome-config:' /tmp/compose-images.txt",
+			"grep -E '^ghcr\\.io/prohibitedtv/bitriver-ome-config:' /tmp/compose-images.txt",
 			"((${#ome_config_images[@]} != 1))",
 			`"${ome_config_images[0]}"`,
 		} {
