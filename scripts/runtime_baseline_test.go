@@ -68,7 +68,7 @@ func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
 		for _, required := range []string{
 			"BITRIVER_OME_CONFIG_IMAGE_TAG=ci",
 			"mapfile -t ome_config_images",
-			"grep -E '^ghcr\\.io/bitriver-live/bitriver-ome-config:' /tmp/compose-images.txt",
+			"grep -E '^ghcr\\.io/prohibitedtv/bitriver-ome-config:' /tmp/compose-images.txt",
 			"((${#ome_config_images[@]} != 1))",
 			`"${ome_config_images[0]}"`,
 		} {
@@ -76,6 +76,16 @@ func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
 				t.Errorf("%s missing Compose-derived OME scan invariant %q", path, required)
 			}
 		}
+	}
+}
+
+func TestViewerImageStagesLocalDependencyBeforeCleanInstall(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	dockerfile := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "Dockerfile"))
+	vendorCopy := strings.Index(dockerfile, "COPY vendor ./vendor")
+	cleanInstall := strings.Index(dockerfile, "RUN npm ci")
+	if vendorCopy == -1 || cleanInstall == -1 || vendorCopy > cleanInstall {
+		t.Fatal("viewer image must stage local dependency adapters before npm ci")
 	}
 }
 

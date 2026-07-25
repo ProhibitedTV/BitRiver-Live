@@ -15,6 +15,14 @@ jobs:
   verify-env:
     name: Verify production environment configuration
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release-metadata.outputs.version }}
+      prerelease: ${{ steps.release-metadata.outputs.prerelease }}
+      is_prerelease: ${{ steps.release-metadata.outputs.is_prerelease }}
+      publish_latest: ${{ steps.release-metadata.outputs.publish_latest }}
+      msi_version: ${{ steps.release-metadata.outputs.msi_version }}
+      nfpm_version: ${{ steps.release-metadata.outputs.nfpm_version }}
+      nfpm_prerelease: ${{ steps.release-metadata.outputs.nfpm_prerelease }}
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -25,52 +33,21 @@ jobs:
           go-version-file: '.go-version'
           cache: true
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Derive and validate release metadata
+        id: release-metadata
+        run: |
+          set -euo pipefail
+          metadata="$RUNNER_TEMP/release-metadata"
+          python3 ./scripts/prepare_release_candidate.py metadata \
+            --tag "$GITHUB_REF_NAME" \
+            --output "$metadata"
+          cat "$metadata" >>"$GITHUB_OUTPUT"
+          rm -f "$metadata"
+
       - name: Prepare job-local production validation input
-        env:
-          BITRIVER_LIVE_MODE: production
-          BITRIVER_DEPLOY_IMAGE_SOURCE: pull
-          BITRIVER_POSTGRES_USER: ${{ secrets.BITRIVER_POSTGRES_USER }}
-          BITRIVER_POSTGRES_PASSWORD: ${{ secrets.BITRIVER_POSTGRES_PASSWORD }}
-          BITRIVER_REDIS_PASSWORD: ${{ secrets.BITRIVER_REDIS_PASSWORD }}
-          BITRIVER_OME_API: ${{ secrets.BITRIVER_OME_API }}
-          BITRIVER_LIVE_ADMIN_EMAIL: ${{ secrets.BITRIVER_LIVE_ADMIN_EMAIL }}
-          BITRIVER_LIVE_ADMIN_PASSWORD: ${{ secrets.BITRIVER_LIVE_ADMIN_PASSWORD }}
-          BITRIVER_LIVE_SESSION_TTL: ${{ secrets.BITRIVER_LIVE_SESSION_TTL }}
-          BITRIVER_LIVE_ALLOW_SELF_SIGNUP: ${{ secrets.BITRIVER_LIVE_ALLOW_SELF_SIGNUP }}
-          BITRIVER_LIVE_METRICS_TOKEN: ${{ secrets.BITRIVER_LIVE_METRICS_TOKEN }}
-          BITRIVER_LIVE_RATE_LOGIN_LIMIT: ${{ secrets.BITRIVER_LIVE_RATE_LOGIN_LIMIT }}
-          BITRIVER_LIVE_RATE_LOGIN_WINDOW: ${{ secrets.BITRIVER_LIVE_RATE_LOGIN_WINDOW }}
-          BITRIVER_SRS_TOKEN: ${{ secrets.BITRIVER_SRS_TOKEN }}
-          BITRIVER_OME_USERNAME: ${{ secrets.BITRIVER_OME_USERNAME }}
-          BITRIVER_OME_PASSWORD: ${{ secrets.BITRIVER_OME_PASSWORD }}
-          BITRIVER_OME_API_TOKEN: ${{ secrets.BITRIVER_OME_API_TOKEN }}
-          BITRIVER_OME_ACCESS_TOKEN: ${{ secrets.BITRIVER_OME_ACCESS_TOKEN }}
-          BITRIVER_OME_BIND: ${{ secrets.BITRIVER_OME_BIND }}
-          BITRIVER_OME_IP: ${{ secrets.BITRIVER_OME_IP }}
-          BITRIVER_OME_SERVER_PORT: ${{ secrets.BITRIVER_OME_SERVER_PORT }}
-          BITRIVER_OME_SERVER_TLS_PORT: ${{ secrets.BITRIVER_OME_SERVER_TLS_PORT }}
-          BITRIVER_TRANSCODER_TOKEN: ${{ secrets.BITRIVER_TRANSCODER_TOKEN }}
-          BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${{ secrets.BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD }}
-          BITRIVER_TRANSCODER_PUBLIC_BASE_URL: ${{ secrets.BITRIVER_TRANSCODER_PUBLIC_BASE_URL }}
-          BITRIVER_SRS_PUBLIC_RTMP_BASE_URL: ${{ secrets.BITRIVER_SRS_PUBLIC_RTMP_BASE_URL }}
-          BITRIVER_OME_PUBLIC_LLHLS_BASE_URL: ${{ secrets.BITRIVER_OME_PUBLIC_LLHLS_BASE_URL }}
-          BITRIVER_LIVE_IMAGE_TAG: ${{ secrets.BITRIVER_LIVE_IMAGE_TAG }}
-          BITRIVER_VIEWER_IMAGE_TAG: ${{ secrets.BITRIVER_VIEWER_IMAGE_TAG }}
-          BITRIVER_SRS_CONTROLLER_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_CONTROLLER_IMAGE_TAG }}
-          BITRIVER_TRANSCODER_IMAGE_TAG: ${{ secrets.BITRIVER_TRANSCODER_IMAGE_TAG }}
-          BITRIVER_OME_CONFIG_IMAGE_TAG: ${{ github.ref_name }}
-          BITRIVER_SRS_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_IMAGE_TAG }}
-          BITRIVER_OME_IMAGE_TAG: ${{ secrets.BITRIVER_OME_IMAGE_TAG }}
-          BITRIVER_REDIS_IMAGE_DIGEST: ${{ secrets.BITRIVER_REDIS_IMAGE_DIGEST }}
-          BITRIVER_POSTGRES_IMAGE_DIGEST: ${{ secrets.BITRIVER_POSTGRES_IMAGE_DIGEST }}
-          BITRIVER_SRS_IMAGE_DIGEST: ${{ secrets.BITRIVER_SRS_IMAGE_DIGEST }}
-          BITRIVER_OME_IMAGE_DIGEST: ${{ secrets.BITRIVER_OME_IMAGE_DIGEST }}
-          BITRIVER_NGINX_IMAGE_DIGEST: ${{ secrets.BITRIVER_NGINX_IMAGE_DIGEST }}
-          BITRIVER_ALPINE_3_IMAGE_DIGEST: ${{ secrets.BITRIVER_ALPINE_3_IMAGE_DIGEST }}
-          BITRIVER_ALPINE_3_19_IMAGE_DIGEST: ${{ secrets.BITRIVER_ALPINE_3_19_IMAGE_DIGEST }}
-          BITRIVER_DEBIAN_IMAGE_DIGEST: ${{ secrets.BITRIVER_DEBIAN_IMAGE_DIGEST }}
-          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
-          NEXT_PUBLIC_VIEWER_URL: ${{ secrets.NEXT_PUBLIC_VIEWER_URL }}
         run: |
           set -euo pipefail
           env_file="$RUNNER_TEMP/release-validation-input"
@@ -79,83 +56,22 @@ jobs:
           evidence_dir="$RUNNER_TEMP/release-contract-evidence"
           rm -rf "$validation_dir" "$evidence_dir"
           mkdir -p "$validation_dir" "$evidence_dir"
-          : >"$env_file"
-          : >"$sentinel_file"
-          chmod 600 "$env_file" "$sentinel_file"
-          vars=(
-            BITRIVER_LIVE_MODE
-            BITRIVER_DEPLOY_IMAGE_SOURCE
-            BITRIVER_POSTGRES_USER
-            BITRIVER_POSTGRES_PASSWORD
-            BITRIVER_REDIS_PASSWORD
-            BITRIVER_OME_API
-            BITRIVER_LIVE_ADMIN_EMAIL
-            BITRIVER_LIVE_ADMIN_PASSWORD
-            BITRIVER_LIVE_SESSION_TTL
-            BITRIVER_LIVE_ALLOW_SELF_SIGNUP
-            BITRIVER_LIVE_METRICS_TOKEN
-            BITRIVER_LIVE_RATE_LOGIN_LIMIT
-            BITRIVER_LIVE_RATE_LOGIN_WINDOW
-            BITRIVER_SRS_TOKEN
-            BITRIVER_OME_USERNAME
-            BITRIVER_OME_PASSWORD
-            BITRIVER_OME_API_TOKEN
-            BITRIVER_OME_ACCESS_TOKEN
-            BITRIVER_OME_BIND
-            BITRIVER_OME_IP
-            BITRIVER_OME_SERVER_PORT
-            BITRIVER_OME_SERVER_TLS_PORT
-            BITRIVER_TRANSCODER_TOKEN
-            BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
-            BITRIVER_TRANSCODER_PUBLIC_BASE_URL
-            BITRIVER_SRS_PUBLIC_RTMP_BASE_URL
-            BITRIVER_OME_PUBLIC_LLHLS_BASE_URL
-            BITRIVER_LIVE_IMAGE_TAG
-            BITRIVER_VIEWER_IMAGE_TAG
-            BITRIVER_SRS_CONTROLLER_IMAGE_TAG
-            BITRIVER_TRANSCODER_IMAGE_TAG
-            BITRIVER_OME_CONFIG_IMAGE_TAG
-            BITRIVER_SRS_IMAGE_TAG
-            BITRIVER_OME_IMAGE_TAG
-            BITRIVER_REDIS_IMAGE_DIGEST
-            BITRIVER_POSTGRES_IMAGE_DIGEST
-            BITRIVER_SRS_IMAGE_DIGEST
-            BITRIVER_OME_IMAGE_DIGEST
-            BITRIVER_NGINX_IMAGE_DIGEST
-            BITRIVER_ALPINE_3_IMAGE_DIGEST
-            BITRIVER_ALPINE_3_19_IMAGE_DIGEST
-            BITRIVER_DEBIAN_IMAGE_DIGEST
-            NEXT_PUBLIC_API_BASE_URL
-            NEXT_PUBLIC_VIEWER_URL
-          )
-          secret_vars=(
-            BITRIVER_POSTGRES_PASSWORD
-            BITRIVER_REDIS_PASSWORD
-            BITRIVER_LIVE_ADMIN_PASSWORD
-            BITRIVER_LIVE_METRICS_TOKEN
-            BITRIVER_SRS_TOKEN
-            BITRIVER_OME_PASSWORD
-            BITRIVER_OME_API_TOKEN
-            BITRIVER_OME_ACCESS_TOKEN
-            BITRIVER_TRANSCODER_TOKEN
-            BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
-          )
-          for var in "${vars[@]}"; do
-            value="${!var-}"
-            printf '%s=%q\n' "$var" "$value" >>"$env_file"
-          done
-          for var in "${secret_vars[@]}"; do
-            value="${!var-}"
-            if [[ -n "$value" ]]; then
-              printf '%s\n' "$value" >>"$sentinel_file"
-            fi
-          done
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          python3 ./scripts/prepare_release_candidate.py env \
+            --tag "$GITHUB_REF_NAME" \
+            --namespace "$image_namespace" \
+            --template deploy/.env.example \
+            --output "$env_file" \
+            --sentinel-output "$sentinel_file" \
+            --unpublished-first-party-digests \
+            --resolve-digests
           printf 'BITRIVER_RELEASE_SENTINEL_%s_%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >>"$sentinel_file"
           {
             echo "BITRIVER_RELEASE_ENV_FILE=$env_file"
             echo "BITRIVER_RELEASE_SENTINEL_FILE=$sentinel_file"
             echo "BITRIVER_RELEASE_VALIDATION_DIR=$validation_dir"
             echo "BITRIVER_RELEASE_EVIDENCE_DIR=$evidence_dir"
+            echo "BITRIVER_RELEASE_IMAGE_NAMESPACE=$image_namespace"
           } >>"$GITHUB_ENV"
 
       - name: Validate production inputs and create redacted evidence
@@ -188,7 +104,9 @@ jobs:
             "commit": "$GITHUB_SHA",
             "environmentValidation": "$env_result",
             "imageDigestValidation": "$digest_result",
+            "firstPartyDigestValidation": "prepublication-format-only",
             "credentialFlow": "job-local-ephemeral",
+            "imageNamespace": "$BITRIVER_RELEASE_IMAGE_NAMESPACE",
             "retainedValues": "none"
           }
           EOF
@@ -600,6 +518,8 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           RELEASE_TAG: ${{ github.ref_name }}
+          NFPM_VERSION: ${{ needs.verify-env.outputs.nfpm_version }}
+          NFPM_PRERELEASE: ${{ needs.verify-env.outputs.nfpm_prerelease }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -650,9 +570,9 @@ jobs:
             launcher_root_abs="$(cd "$launcher_root" && pwd -P)"
             (
               cd "$launcher_root_abs"
-              NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root_abs" \
+              NFPM_ARCH="$GOARCH" NFPM_VERSION="$NFPM_VERSION" NFPM_PRERELEASE="$NFPM_PRERELEASE" LAUNCHER_ROOT="$launcher_root_abs" \
                 GOMAXPROCS=2 nfpm pkg --packager deb --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.deb"
-              NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root_abs" \
+              NFPM_ARCH="$GOARCH" NFPM_VERSION="$NFPM_VERSION" NFPM_PRERELEASE="$NFPM_PRERELEASE" LAUNCHER_ROOT="$launcher_root_abs" \
                 GOMAXPROCS=2 nfpm pkg --packager rpm --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.rpm"
             )
           fi
@@ -856,11 +776,14 @@ jobs:
             image_name: bitriver-ome-config
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAMESPACE: ghcr.io/bitriver-live
       RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Select repository-owner image namespace
+        id: image-namespace
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >>"$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
@@ -884,14 +807,18 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ env.RELEASE_TAG }}
-            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}:latest
+            ${{ steps.image-namespace.outputs.value }}/${{ matrix.image_name }}:${{ env.RELEASE_TAG }}
+            ${{ needs.verify-env.outputs.publish_latest == 'true' && format('{0}/{1}:latest', steps.image-namespace.outputs.value, matrix.image_name) || '' }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
 
       - name: Generate SBOM for ${{ matrix.component }} image
         id: sbom
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          image: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}@${{ steps.build.outputs.digest }}
+          image: ${{ steps.image-namespace.outputs.value }}/${{ matrix.image_name }}@${{ steps.build.outputs.digest }}
           output-file: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
 
       - name: Upload SBOM artifact
@@ -901,6 +828,86 @@ jobs:
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
           if-no-files-found: error
           retention-days: 7
+
+  pull-only-product-gate:
+    name: Pull-only tagged product gate
+    needs:
+      - verify-env
+      - publish-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Prepare anonymous image and production environment evidence
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/release-product-evidence"
+          env_file="$RUNNER_TEMP/release-product.env"
+          sentinel_file="$RUNNER_TEMP/release-product.sentinels"
+          image_evidence="$evidence_dir/release-images.json"
+          image_namespace="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          rm -rf "$evidence_dir"
+          mkdir -p "$evidence_dir"
+
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          python3 ./scripts/prepare_release_candidate.py images \
+            --tag "$GITHUB_REF_NAME" \
+            --namespace "$image_namespace" \
+            --output "$image_evidence" \
+            --digest-attempts 12 \
+            --digest-delay-seconds 10
+          python3 ./scripts/prepare_release_candidate.py env \
+            --tag "$GITHUB_REF_NAME" \
+            --namespace "$image_namespace" \
+            --template deploy/.env.example \
+            --output "$env_file" \
+            --sentinel-output "$sentinel_file" \
+            --first-party-evidence "$image_evidence" \
+            --product-loopback \
+            --resolve-digests
+          {
+            echo "BITRIVER_RELEASE_PRODUCT_EVIDENCE=$evidence_dir"
+            echo "BITRIVER_RELEASE_PRODUCT_ENV=$env_file"
+            echo "BITRIVER_RELEASE_PRODUCT_SENTINELS=$sentinel_file"
+          } >>"$GITHUB_ENV"
+
+      - name: Run tagged production golden path
+        env:
+          BITRIVER_SMOKE_ENV_FILE: ${{ env.BITRIVER_RELEASE_PRODUCT_ENV }}
+          BITRIVER_SMOKE_IMAGE_SOURCE: pull
+          BITRIVER_SMOKE_LIVE_MODE: production
+        run: |
+          set -euo pipefail
+          ./scripts/test-production-golden-path.sh \
+            --stack quickstart \
+            --client docker \
+            --artifact-dir "$BITRIVER_RELEASE_PRODUCT_EVIDENCE"
+          ./scripts/scan-release-evidence.sh \
+            --root "$BITRIVER_RELEASE_PRODUCT_EVIDENCE" \
+            --sentinel-file "$BITRIVER_RELEASE_PRODUCT_SENTINELS"
+
+      - name: Remove job-local product inputs
+        if: always()
+        run: |
+          rm -f \
+            "${BITRIVER_RELEASE_PRODUCT_ENV:-}" \
+            "${BITRIVER_RELEASE_PRODUCT_SENTINELS:-}"
+
+      - name: Upload pull-only product evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-product-evidence
+          path: |
+            ${{ env.BITRIVER_RELEASE_PRODUCT_EVIDENCE }}/release-images.json
+            ${{ env.BITRIVER_RELEASE_PRODUCT_EVIDENCE }}/production-golden-path.json
+          if-no-files-found: warn
+          retention-days: 14
 
   brew-formula:
     name: Generate Homebrew formula
@@ -970,33 +977,45 @@ jobs:
           go run ./cmd/tools/production-module --output $env:PRODUCTION_MODFILE
           go mod download -modfile=$env:PRODUCTION_MODFILE all
 
+      - name: Stage canonical Windows release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          launcher_root="$(cygpath -u "$RUNNER_TEMP")/bitriver-launcher-windows-amd64"
+          rm -rf "$launcher_root"
+          mkdir -p "$launcher_root/bin"
+          bash ./scripts/stage-release-assets.sh \
+            --output "$launcher_root/share/bitriver-live"
+          echo "BITRIVER_WINDOWS_LAUNCHER_ROOT=$(cygpath -w "$launcher_root")" >>"$GITHUB_ENV"
+
       - name: Build MSI
         shell: pwsh
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+          MSI_VERSION: ${{ needs.verify-env.outputs.msi_version }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
           $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
           $buildDate = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-          $launcherRoot = Join-Path $env:RUNNER_TEMP "bitriver-launcher-windows-amd64"
-          if (Test-Path $launcherRoot) { Remove-Item -Recurse -Force $launcherRoot }
-          New-Item -ItemType Directory -Path (Join-Path $launcherRoot "bin") | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $launcherRoot "share\deploy") | Out-Null
+          $launcherRoot = $env:BITRIVER_WINDOWS_LAUNCHER_ROOT
+          $releaseAssetsRoot = Join-Path $launcherRoot "share\bitriver-live"
 
           $ldflags = "-X main.version=$env:RELEASE_TAG -X main.commit=$env:COMMIT_SHA -X main.date=$buildDate"
           $binaryPath = Join-Path $launcherRoot "bin/bitriver.exe"
           go build -modfile=$env:PRODUCTION_MODFILE -trimpath -ldflags $ldflags -o $binaryPath ./cmd/bitriver
           go run ./cmd/tools/verify-production-binary $binaryPath
           Copy-Item scripts/bitriver-live-wrapper.ps1 (Join-Path $launcherRoot "bin/bitriver-live.ps1")
-          Copy-Item deploy/docker-compose.yml (Join-Path $launcherRoot "share/deploy/docker-compose.yml")
-          Copy-Item deploy/.env.example (Join-Path $launcherRoot "share/deploy/.env.example")
 
           $distDir = Join-Path (Get-Location) "dist"
           if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir | Out-Null }
+          $heat = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\heat.exe"
           $candle = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\candle.exe"
           $light = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\light.exe"
-          & $candle -dProductVersion=$env:RELEASE_TAG -dSourceDir=$launcherRoot deploy/installers/bitriver-live.wxs
-          & $light -ext WixUIExtension bitriver-live.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
+          $harvest = Join-Path $env:RUNNER_TEMP "bitriver-release-assets.wxs"
+          & $heat dir $releaseAssetsRoot -nologo -cg ReleaseAssets -dr RELEASEASSETSDIR -srd -sreg -ag -var var.ReleaseAssetsDir -out $harvest
+          & $candle -nologo -dProductVersion=$env:MSI_VERSION -dSourceDir=$launcherRoot -dReleaseAssetsDir=$releaseAssetsRoot deploy/installers/bitriver-live.wxs $harvest
+          & $light -nologo -ext WixUIExtension bitriver-live.wixobj bitriver-release-assets.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1018,6 +1037,7 @@ jobs:
       - package-acceptance
       - build-viewer
       - publish-images
+      - pull-only-product-gate
       - brew-formula
       - windows-msi
     runs-on: ubuntu-latest
@@ -1099,6 +1119,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           body: ${{ steps.notes.outputs.body }}
+          prerelease: ${{ needs.verify-env.outputs.is_prerelease == 'true' }}
           files: |
             dist/*.tar.gz
             dist/*.zip

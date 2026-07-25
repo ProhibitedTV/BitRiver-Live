@@ -8,6 +8,14 @@ The supported baseline is one operator-managed Linux host—or Docker Desktop us
 
 The repository includes the candidate Ubuntu package, archive, and systemd lifecycle implementation so it can be exercised before the first tag. Those paths become downloadable only after a release publishes matching images, checksums, and assets.
 
+The first publication will be an immutable release candidate such as
+`v1.2.3-rc.1`, not a stable-production declaration. Its five matching images
+will use `ghcr.io/prohibitedtv`, and the tag workflow must prove anonymous
+image access plus the full pull-only media/API golden path before it creates a
+GitHub prerelease. Stable promotion additionally requires the clean Ubuntu
+24.04/XOA, Nginx Proxy Manager, authenticated OME, browser, and reboot evidence
+described in [`docs/installing-on-ubuntu.md`](docs/installing-on-ubuntu.md).
+
 ![BitRiver Live viewer home showing one live channel](docs/assets/screenshots/viewer-home.png)
 
 _The shipped Next.js viewer, captured from the canonical Compose stack on Docker Desktop for Windows. The account and channel are local demo data; no mockup or concept art is used._

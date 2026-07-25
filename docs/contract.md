@@ -253,6 +253,7 @@ _This section is generated from `deploy/.env.example` by `scripts/generate-contr
 | Variable | Default |
 | --- | --- |
 | `BITRIVER_DEPLOY_IMAGE_SOURCE` | `pull` |
+| `BITRIVER_IMAGE_NAMESPACE` | `ghcr.io/prohibitedtv` |
 | `BITRIVER_LIVE_IMAGE_TAG` | `v1.2.3` |
 | `BITRIVER_RELEASE_COMMIT` | `unknown` |
 | `BITRIVER_VIEWER_IMAGE_TAG` | `v1.2.3` |

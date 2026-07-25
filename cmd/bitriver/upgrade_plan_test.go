@@ -34,8 +34,8 @@ func TestDetectRunningComposeImageTagsParsesTags(t *testing.T) {
 	origRunner := upgradePlanComposePSRunner
 	upgradePlanComposePSRunner = func(_, _ string) ([]byte, error) {
 		return []byte(`[
-			{"Service":"bitriver-live","Image":"ghcr.io/bitriver-live/bitriver-live:v1.2.3"},
-			{"Service":"viewer","Image":"ghcr.io/bitriver-live/bitriver-viewer:v1.2.3"}
+			{"Service":"bitriver-live","Image":"ghcr.io/prohibitedtv/bitriver-live:v1.2.3"},
+			{"Service":"viewer","Image":"ghcr.io/prohibitedtv/bitriver-viewer:v1.2.3"}
 		]`), nil
 	}
 	t.Cleanup(func() { upgradePlanComposePSRunner = origRunner })

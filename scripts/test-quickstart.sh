@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/polling.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$REPO_ROOT/.env"
+ENV_FILE="${BITRIVER_SMOKE_ENV_FILE:-$REPO_ROOT/.env}"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 COMPOSE_SMOKE_OVERRIDE=""
@@ -28,15 +28,27 @@ CREATED_TRANSCODER_DATA_DIR=false
 PYTHON_RUNNER=()
 COMPOSE_RUNTIME_ARGS=("-f" "$COMPOSE_FILE")
 
-SMOKE_IMAGE_SOURCE=build
-SMOKE_LIVE_MODE=development
+SMOKE_IMAGE_SOURCE="${BITRIVER_SMOKE_IMAGE_SOURCE:-build}"
+SMOKE_LIVE_MODE="${BITRIVER_SMOKE_LIVE_MODE:-development}"
+
+case "$SMOKE_IMAGE_SOURCE" in
+  build|pull)
+    ;;
+  *)
+    echo "error: BITRIVER_SMOKE_IMAGE_SOURCE must be build or pull" >&2
+    exit 2
+    ;;
+esac
 
 export BITRIVER_DEPLOY_IMAGE_SOURCE="$SMOKE_IMAGE_SOURCE"
 export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"
-export BITRIVER_LIVE_IMAGE_DIGEST=""
-export BITRIVER_VIEWER_IMAGE_DIGEST=""
-export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
-export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
+if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
+  export BITRIVER_LIVE_IMAGE_DIGEST=""
+  export BITRIVER_VIEWER_IMAGE_DIGEST=""
+  export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
+  export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
+  export BITRIVER_OME_CONFIG_IMAGE_DIGEST=""
+fi
 export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-rtmp://localhost:1935/live}"
 export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"
 export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"
@@ -129,6 +141,11 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+if [ ! -f "$ENV_FILE" ] && [[ "$SMOKE_IMAGE_SOURCE" == "pull" ]]; then
+  echo "error: pull-mode quickstart smoke requires BITRIVER_SMOKE_ENV_FILE to name an existing release environment" >&2
+  exit 2
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
   CREATED_ENV_FILE=true
   cat >"$ENV_FILE" <<'ENV'
@@ -189,6 +206,16 @@ BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
 fi
 
+if [[ "$SMOKE_IMAGE_SOURCE" == "pull" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+  export BITRIVER_DEPLOY_IMAGE_SOURCE="$SMOKE_IMAGE_SOURCE"
+  export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"
+  "$SCRIPT_DIR/require-image-digests.sh" --env-file "$ENV_FILE"
+fi
+
 if [ ! -d "$BITRIVER_DATA_DIR" ]; then
   CREATED_BITRIVER_DATA_DIR=true
 fi
@@ -213,8 +240,13 @@ else
   exit 1
 fi
 
-echo "Building the canonical OME config helper image..."
-docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build ome-config
+if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
+  echo "Building the canonical OME config helper image..."
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build ome-config
+else
+  echo "Using the published OME config helper image from the release environment."
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull ome-config
+fi
 
 OME_CONFIG_BACKUP="$(mktemp)"
 if [[ -f "$OME_CONFIG" ]]; then
@@ -385,8 +417,12 @@ if healthcheck_token and legacy_token and healthcheck_token != legacy_token:
 print("OME config validation passed.")
 PY
 
-echo "Building local docker compose images..."
-docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
+if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
+  echo "Building local docker compose images..."
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
+else
+  echo "Pull-only smoke selected; no Compose image builds are permitted."
+fi
 
 echo "Pulling missing runtime images..."
 mapfile -t runtime_images < <(
@@ -440,7 +476,7 @@ if [[ "${BITRIVER_TEST_GOLDEN_PATH:-}" == "1" ]]; then
   # The production product exercise needs public account creation and media URLs
   # that are reachable from the same host that runs ffmpeg/ffprobe. These
   # release-gate overrides never rewrite the operator-owned .env file.
-  export BITRIVER_LIVE_MODE=development
+  export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"
   export BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true
   export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="rtmp://localhost:${BITRIVER_SRS_RTMP_PORT:-1935}/live"
   export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="http://localhost:${BITRIVER_LIVE_PORT:-8080}/live"

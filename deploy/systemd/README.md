@@ -7,7 +7,7 @@ Complete the basic setup in the root [README](../../README.md) first so you have
 ## Prerequisites
 
 - **BitRiver Live binary** – Download the release tarball that matches your deployment (for example `bitriver-live-linux-amd64.tar.gz`) and copy the `bitriver-live` binary into place, or build from source when testing local changes.
-- **Viewer bundle** – Extract the `bitriver-viewer-<tag>.tar.gz` archive from the same release into `/opt/bitriver-viewer` (or another staging directory). It produces `.next/standalone/`, `.next/static/`, and `public/` assets ready to serve. You can also pull `ghcr.io/bitriver-live/bitriver-viewer:<tag>` and mount the directory into the container.
+- **Viewer bundle** – Extract the `bitriver-viewer-<tag>.tar.gz` archive from the same release into `/opt/bitriver-viewer` (or another staging directory). It produces `.next/standalone/`, `.next/static/`, and `public/` assets ready to serve. You can also pull `ghcr.io/prohibitedtv/bitriver-viewer:<tag>` and mount the directory into the container.
 - **Sudo access** – You'll run a few `sudo` commands to create directories and register the units. The first command prompts for your password if you haven't used sudo recently.
 
 ## Install the services
@@ -60,7 +60,7 @@ EOF
    # deploy/srs/conf/srs.conf before each start using /opt/bitriver-live/.env.
 
    sudo tee /opt/bitriver-srs-controller/.env >/dev/null <<'EOF'
-SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z
+SRS_CONTROLLER_IMAGE=ghcr.io/prohibitedtv/bitriver-srs-controller:vX.Y.Z
 SRS_CONTROLLER_CONTAINER_NAME=bitriver-srs-controller
 SRS_CONTROLLER_HOST_PORT=1986
 SRS_CONTROLLER_BIND=:1985
@@ -83,7 +83,7 @@ EOF
     sudo ENV_FILE=/opt/bitriver-live/.env /opt/bitriver-live/scripts/render-ome-config.sh --force
 
    sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
-TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z
+TRANSCODER_IMAGE=ghcr.io/prohibitedtv/bitriver-transcoder:vX.Y.Z
 TRANSCODER_CONTAINER_NAME=bitriver-transcoder
 TRANSCODER_HOST_PORT=9001
 TRANSCODER_BIND=:9000

@@ -1,5 +1,56 @@
 # PLAN
 
+## Current scope - first public release-candidate publication gate (#1297, 2026-07-24)
+
+- Make the tag-triggered release workflow runnable from this public repository without preloading deployment credentials. Generate strong job-local validation credentials, retain only sentinel-scanned status evidence, and keep real operator secrets entirely outside GitHub Actions.
+- Publish first-party images to the repository owner's real GHCR namespace, exposed through one deployment-contract variable so official installs default to `ghcr.io/prohibitedtv` while forks and mirrors can override it.
+- Validate release tags as SemVer, normalize package/MSI versions separately from the human tag, mark hyphenated tags as GitHub prereleases, and prevent prerelease tags from moving `latest`.
+- After all five tagged images publish, run the canonical Compose stack in production/pull mode and execute the same 1080p media/API golden path. The GitHub Release job must depend on this scanner-approved pull-only evidence.
+- Repair the Windows MSI staging/version seam so the release matrix cannot be blocked by paths that disagree with the canonical release asset manifest.
+- Only after the workflow change is merged and its PR gates pass, create the first immutable `v1.2.3-rc.1` tag. Treat it as a public candidate for clean Ubuntu/XOA acceptance, not as the stable v1.2.3 announcement.
+
+### Release-candidate design
+
+- Add a deterministic release-env preparation helper that copies `deploy/.env.example`, replaces sample credentials with cryptographically random job-local values, applies the exact release tag/official namespace, resolves current third-party registry digests, and writes a separate temporary sentinel file. It must never print values.
+- Extend the quickstart smoke through explicit `BITRIVER_SMOKE_*` controls. Existing local/CI callers keep build/development defaults; the release job supplies an external env file and selects pull/production without rewriting a checkout-owned `.env`.
+- In pull mode, skip every Compose build, pull all rendered image references, enforce production dependency digests, render OME with the tagged helper image, run the existing service checks, then run `test-production-golden-path.sh --stack running`.
+- Upload only `production-golden-path.json` after the existing evidence scan. Raw Compose logs, generated OME/SRS files, env files, cookies, stream keys, and registry credentials remain runner-local and are removed on every exit path.
+- Derive `release_version` and `prerelease` once from the tag. Use the normalized numeric core for MSI, SemVer components for Linux packaging, the original tag for filenames/image tags, and the prerelease flag for GitHub Release metadata.
+- Stage the Windows launcher from `deploy/install/release-assets.txt`, and make WiX source paths match the staged `share/bitriver-live` layout rather than maintaining a second incomplete asset list.
+
+### Release-candidate risks
+
+- `ghcr.io/bitriver-live` is not an owned GitHub account namespace, while the repository owner is `ProhibitedTV`; the current workflow cannot publish the references Compose names. Changing the official default is a deployment-contract change and must update Compose, env, CLI preflight, Helm/docs, and generated contract evidence together.
+- GHCR packages may require a one-time public-visibility action after their first push. The workflow must prove anonymous manifest access before creating a GitHub Release; if visibility cannot be changed with the repository token, stop with the exact external action rather than publishing unusable assets.
+- Tag workflows publish immutable external state. A failed `v1.2.3-rc.1` is never force-moved or overwritten; corrections use `rc.2`.
+- Multi-architecture image publication is slower than registry index propagation. Use bounded manifest retries before the pull-only gate, not unbounded sleeps.
+- Production mode currently requires third-party digest pins but not first-party pins. Resolve and record first-party manifest digests in candidate evidence/release notes; do not claim digest-pinned clean-host proof from tag-only pulls.
+- The existing Windows workflow passes `v...` directly to WiX and stages files under paths WiX does not read. Static checks are insufficient; the remote Windows MSI job remains required before candidate publication.
+- The Jul 24 GitHub Advisory Database update for
+  `GHSA-mh99-v99m-4gvg` marks every `brace-expansion` release through 5.0.7
+  vulnerable to attacker-controlled memory exhaustion and names 5.0.8 as the
+  patched release. Viewer CI installs older transitive majors through
+  ESLint/Jest tooling, and ordinary `npm audit fix` cannot update those parent
+  ranges without a breaking ESLint major. Use one explicit npm override to
+  5.0.8 only if clean `npm ci`, lint, unit, browser, build, and audit all pass;
+  do not accept `--force` or suppress the advisory.
+- GitHub-hosted pull-only proof still is not a clean Ubuntu/XOA install, Nginx Proxy Manager/browser test, or host reboot. Those remain explicit #1297/#1304 promotion gates.
+
+### Release-candidate test plan
+
+- Unit-test tag parsing, prerelease/latest behavior, env replacement, secret uniqueness, sentinel separation, digest formatting, no-value output, and failure on malformed tags or unresolved images.
+- Add workflow-contract tests requiring job-local credentials, the official/overridable GHCR namespace, the post-publish pull-only product job, scanner-approved artifact upload, stable-only `latest`, prerelease metadata, and release-job dependency ordering.
+- Add quickstart regression tests proving build/development remains the default and pull/production performs no build while enforcing the supplied external env/digest contract.
+- Run shell syntax/ShellCheck, generated contract checks, focused Go/Python tests, Compose rendering in both build and pull shapes, release-bundle/package tests, and `git diff --check`.
+- Run `./scripts/verify.sh --viewer` and the full PR matrix. After merge, tag the RC, monitor every release job, inspect/download the published assets/checksums, verify anonymous GHCR access and image digests, and run a Docker Desktop pull-only golden path before handing the candidate to the clean Ubuntu/XOA gate.
+- For `GHSA-mh99-v99m-4gvg`, require the lock graph to contain only
+  `brace-expansion@5.0.8`, `npm audit --audit-level=high` to report zero
+  vulnerabilities, and the complete viewer lint/unit/Playwright/build sequence
+  to pass after a clean install. Build the real viewer container too, because
+  its dependency stage must copy the local compatibility hook before `npm ci`.
+  Keep the override registry-backed so nested consumers receive ordinary
+  package copies and `npm ls` reports a valid dependency graph.
+
 ## Current scope - production golden-path E2E (#1300, 2026-07-24)
 
 - Replace the misleading ingest "E2E" boundary, which currently runs only a storage package test, with one reusable acceptance harness against the real canonical Compose stack: Postgres, Redis, SRS, controller, transcoder, OvenMediaEngine, API, and viewer.

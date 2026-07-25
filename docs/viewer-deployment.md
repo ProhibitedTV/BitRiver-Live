@@ -4,7 +4,7 @@ The release workflow now publishes a pre-built Next.js viewer bundle alongside t
 server binaries. Each GitHub Release exposes an artifact named
 `bitriver-viewer-<tag>.tar.gz` that contains the output of `npm run build` from
 `web/viewer`. A matching container image is also published at
-`ghcr.io/bitriver-live/bitriver-viewer:<tag>` for teams that prefer Docker.
+`ghcr.io/prohibitedtv/bitriver-viewer:<tag>` for teams that prefer Docker.
 
 The archive includes:
 
@@ -99,7 +99,7 @@ docker run -d --name bitriver-viewer \
   --restart unless-stopped \
   -p 3000:3000 \
   --env-file /opt/bitriver-viewer/.env \
-  ghcr.io/bitriver-live/bitriver-viewer:v1.2.3
+  ghcr.io/prohibitedtv/bitriver-viewer:v1.2.3
 ```
 
 Use Docker Compose or Kubernetes manifests when you need to manage replicas, but

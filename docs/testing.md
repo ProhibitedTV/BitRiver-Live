@@ -297,7 +297,7 @@ module, scan label, and platform:
 Container image CVE scanning is enforced by
 [`.github/workflows/image-scan.yml`](../.github/workflows/image-scan.yml). The
 workflow keeps **CRITICAL** gating enabled for first-party images
-(`ghcr.io/bitriver-live/*` and local `bitriver-live/*` builds) and runs a
+(`ghcr.io/prohibitedtv/*` and local `bitriver-live/*` builds) and runs a
 separate informational scan for pinned third-party images.
 
 When a third-party base image ships an unavoidable finding (for example, a

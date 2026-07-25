@@ -13,7 +13,7 @@ services:
   # Compose keeps both image + build directives; cmd/bitriver selects pull-only
   # or build mode via BITRIVER_DEPLOY_IMAGE_SOURCE (or --image-source).
   bitriver-live:
-    image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:?set via .env}${BITRIVER_LIVE_IMAGE_DIGEST:-}
+    image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:?set via .env}${BITRIVER_LIVE_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: Dockerfile
@@ -100,7 +100,7 @@ services:
       - internal
 
   viewer:
-    image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}${BITRIVER_VIEWER_IMAGE_DIGEST:-}
+    image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}${BITRIVER_VIEWER_IMAGE_DIGEST:-}
     build:
       context: ../web/viewer
     container_name: bitriver-viewer
@@ -234,7 +234,7 @@ services:
       - "${BITRIVER_POSTGRES_HOST_PORT:-5432}:5432"
 
   srs-controller:
-    image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}${BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST:-}
+    image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}${BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: cmd/srs-controller/Dockerfile
@@ -344,7 +344,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-direct}
         GOSUMDB: ${GOSUMDB:-off}
-    image: ghcr.io/bitriver-live/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
+    image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     working_dir: /workspace
     command: ["ome", "render", "--env-file", "/workspace/.env", "--force"]
     volumes:
@@ -360,7 +360,7 @@ services:
       - internal
 
   ome-health-token-check:
-    image: ghcr.io/bitriver-live/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
+    image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     container_name: bitriver-ome-health-token-check
     working_dir: /workspace
     command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/workspace/deploy/ome/Server.generated.xml"]
@@ -480,7 +480,7 @@ services:
         condition: service_completed_successfully
 
   transcoder:
-    image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:?set via .env}${BITRIVER_TRANSCODER_IMAGE_DIGEST:-}
+    image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:?set via .env}${BITRIVER_TRANSCODER_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: cmd/transcoder/Dockerfile

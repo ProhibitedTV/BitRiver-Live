@@ -10,9 +10,10 @@
           <Component Id="LauncherFiles" Guid="6C1C2F0C-594B-4D3B-91B5-6CFA3CF4C5E2">
             <File Id="BitriverExe" Source="$(var.SourceDir)\bin\bitriver.exe" KeyPath="yes" />
             <File Id="WrapperScript" Source="$(var.SourceDir)\bin\bitriver-live.ps1" />
-            <File Id="ComposeFile" Source="$(var.SourceDir)\share\docker-compose.yml" />
-            <File Id="EnvExample" Source="$(var.SourceDir)\share\.env.example" />
           </Component>
+          <Directory Id="SHAREDIR" Name="share">
+            <Directory Id="RELEASEASSETSDIR" Name="bitriver-live" />
+          </Directory>
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
@@ -34,6 +35,7 @@
 
     <Feature Id="Complete" Title="BitRiver Live" Level="1">
       <ComponentRef Id="LauncherFiles" />
+      <ComponentGroupRef Id="ReleaseAssets" />
       <ComponentRef Id="ProgramMenuShortcuts" />
       <ComponentRef Id="DesktopShortcutComponent" />
     </Feature>

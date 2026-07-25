@@ -2,6 +2,7 @@ name: bitriver-live
 arch: ${NFPM_ARCH}
 platform: linux
 version: ${NFPM_VERSION}
+prerelease: ${NFPM_PRERELEASE}
 section: misc
 priority: optional
 maintainer: BitRiver Live Team <dev@bitriver.live>

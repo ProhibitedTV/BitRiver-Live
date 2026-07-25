@@ -7,10 +7,10 @@ imagePullPolicy: IfNotPresent
 releaseCommit: unknown
 
 images:
-  api: ghcr.io/bitriver-live/bitriver-live
-  viewer: ghcr.io/bitriver-live/bitriver-viewer
-  srsController: ghcr.io/bitriver-live/bitriver-srs-controller
-  transcoder: ghcr.io/bitriver-live/bitriver-transcoder
+  api: ghcr.io/prohibitedtv/bitriver-live
+  viewer: ghcr.io/prohibitedtv/bitriver-viewer
+  srsController: ghcr.io/prohibitedtv/bitriver-srs-controller
+  transcoder: ghcr.io/prohibitedtv/bitriver-transcoder
   srs: ossrs/srs
   ome: airensoft/ovenmediaengine
   redis: redis

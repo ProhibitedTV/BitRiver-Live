@@ -1,5 +1,114 @@
 # TASKS
 
+## Scoped change: first public release-candidate publication gate (#1297)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the actual tag-to-publication path
+  - Acceptance criteria:
+    - `PLAN.md` records the publication scope, assumptions, evidence boundary, risks, and test plan before implementation.
+    - Remote release/tag/package inventory, Actions secret-name readiness, GHCR ownership, tag metadata, image publication, product-gate ordering, and installer inputs are inspected read-only.
+    - The planned candidate does not overclaim clean-host Ubuntu/XOA, browser, reboot, or stable-release evidence.
+  - Check:
+    - GitHub currently has no Releases or remote tags, and the repository has zero configured Actions secret names; the existing `verify-env` job therefore cannot succeed.
+    - The workflow labels credentials `job-local-ephemeral` while reading every value from repository secrets, never runs the production golden path after images publish, treats every `v*` tag as a normal release, and moves `latest` for prereleases.
+    - Compose and release automation target `ghcr.io/bitriver-live`, but no such GitHub account is available and this repository is owned by the `ProhibitedTV` user. The repository token can publish only to its owner namespace.
+    - The Windows MSI passes the `v...` tag directly to WiX and stages Compose/env below `share/deploy` while WiX reads different `share/*` paths; the tag workflow would fail even after credentials were supplied.
+    - PR #1328 merged as `bbd9a1df`, #1300 closed, and full local/remote source-build product proof exists. Pull-only tagged artifacts and the clean Ubuntu/XOA/reboot/browser gates remain unproved.
+
+- [x] Task 2 - Generate secret-safe release metadata and validation input
+  - Acceptance criteria:
+    - A reusable helper validates SemVer tags, derives stable/prerelease/package/MSI metadata, rotates every sample credential, applies the candidate tag/namespace, and resolves required third-party image digests.
+    - Env and sentinel files are mode-restricted, never printed, and deleted on every workflow exit path.
+    - Focused tests reject malformed tags, missing keys, sample-value reuse, invalid digests, and evidence containing generated credentials.
+  - Check:
+    - Added `scripts/prepare_release_candidate.py`, a standard-library helper with strict SemVer parsing, separate stable/prerelease/latest/MSI/nFPM metadata, atomic mode-0600 output, strong job-local credentials, sample-value rejection, sentinel separation, release tag/namespace application, and bounded Docker registry digest resolution.
+    - The helper never prints credentials, keeps the Redis/chat credential consistent, applies production/pull and loopback media acceptance values, and writes only non-secret release metadata when requested.
+    - `python -B scripts/prepare_release_candidate_test.py` passed eleven tests in Python 3.13, covering stable/RC metadata, malformed tags, rotated samples, digest rendering/failure, missing template keys, lowercase namespace enforcement, private file output, and no secret leakage to stdout/stderr.
+    - The real registry command `docker buildx imagetools inspect alpine:3 --format '{{.Manifest.Digest}}'` returned a valid SHA-256 manifest digest; complete dependency resolution remains part of the pull-mode runtime gate.
+
+- [x] Task 3 - Make the canonical stack publishable and pull-testable
+  - Acceptance criteria:
+    - Compose, env, CLI preflight, Helm, tests, and operator docs share an overridable image namespace whose official default is `ghcr.io/prohibitedtv`.
+    - Quickstart keeps build/development defaults but supports an external env plus pull/production mode with no first-party build.
+    - Contract render, OME helper render, digest enforcement, source-build quickstart, and focused pull-mode controls pass.
+  - Check:
+    - Added `BITRIVER_IMAGE_NAMESPACE` with official default `ghcr.io/prohibitedtv`; Compose, env, Helm, CLI manifest preflight, image scans, release-bundle assertions, and focused tests now use the owned namespace while accepting a lowercase mirror override.
+    - `test-quickstart.sh` retains build/development defaults but accepts an external `BITRIVER_SMOKE_ENV_FILE` plus explicit build/pull and development/production controls. Pull mode requires the env, preserves its image digests, enforces production third-party pins, pulls the tagged OME helper, and skips all Compose builds.
+    - Pinned Go 1.26.5 `go test ./cmd/bitriver ./scripts -count=1 -timeout=120s` passed; shell syntax, generated contract freshness, and both default/overridden namespace assertions passed.
+    - Canonical Compose rendered all five first-party images under `ghcr.io/prohibitedtv`. The default Docker Desktop source-build quickstart passed in 109.4 seconds through OME render, dependencies, migrations, API, and viewer, then left no BitRiver container or smoke media volume.
+
+- [x] Task 4 - Block candidate publication on pulled-image product evidence
+  - Acceptance criteria:
+    - The release workflow publishes tagged images, waits boundedly for registry availability, runs the canonical production/pull stack plus full golden path, and uploads only scanner-approved JSON.
+    - GitHub Release creation depends on that job; prereleases do not move `latest` and are marked prerelease.
+    - Linux package and MSI versions are normalized, and Windows staging uses the canonical release asset manifest.
+  - Check:
+    - `release.yml` now derives strict SemVer metadata once, prepares scanner-separated ephemeral credentials without repository secrets, validates non-loopback production contract input, and labels prepublication first-party digest values honestly as format-only.
+    - Five multi-architecture images publish under the lowercase repository-owner namespace with OCI source/revision/version labels. RC tags publish only their immutable tag; `latest` is conditional on a stable tag.
+    - The new 30-minute `pull-only-product-gate` proves anonymous access to all tagged manifests with bounded retries, pins their real digests plus resolved third-party digests, runs production/pull Compose and the full 1080p golden path, scans against candidate credentials, and uploads only the two JSON evidence files. GitHub Release creation depends on this job.
+    - GitHub Release metadata marks hyphenated tags as prereleases. Linux packages use normalized version/prerelease fields, and the Windows job normalizes WiX ProductVersion, stages `release-assets.txt`, harvests the full `share/bitriver-live` tree, and no longer points WiX at nonexistent two-file paths.
+    - The real production env and digest validators passed against a disposable prepublication profile; the source-free release bundle passed from a path containing spaces.
+    - Pinned nFPM v2.47.0 built amd64/arm64 `.deb`/`.rpm` plus `v1.2.3-rc.1` prerelease packages and retained `rc.1` in Debian metadata. Ten/then eleven helper tests, focused Go workflow/CLI suites, release/nFPM YAML parsing, WiX XML parsing, shell syntax, generated contract freshness, and diff checks passed.
+    - Actual Windows WiX compilation, anonymous GHCR visibility, registry propagation, and pulled-image runtime execution necessarily remain Task 6 tag-workflow evidence.
+
+- [x] Task 5 - Update public release and installation guidance
+  - Acceptance criteria:
+    - README and release/install docs explain the real official namespace, RC semantics, anonymous package/image checks, and exact candidate versus stable boundary.
+    - The no-release notice remains until an actual candidate publishes, then changes only in a post-publication evidence update.
+    - Contract and release notes remain aligned with Compose/env/workflow behavior.
+  - Check:
+    - README keeps the no-release notice while explaining the first immutable RC, official `ghcr.io/prohibitedtv` namespace, pull-only gate, and exact clean-host/stable boundary.
+    - Ubuntu, release, gate, testing, viewer, systemd, and draft release-note guidance now agree on RC semantics, stable-only `latest`, anonymous manifest checks, job-local workflow credentials, actual image digests, and clean Ubuntu/XOA/NPM/OME/browser/reboot follow-up evidence.
+    - All current operator-doc and executable references to the nonexistent `ghcr.io/bitriver-live` namespace were removed; the literal remains only in historical planning/evidence text and an intentional forbidden-string workflow regression assertion.
+    - `./scripts/check-doc-installer-language.sh`, `./scripts/generate-contract-doc.sh --check`, and `git diff --check` passed.
+
+- [-] Task 6 - Verify, merge, publish, and inspect the first candidate
+  - Acceptance criteria:
+    - Required local verification and full remote PR CI pass with unrelated user files and private `.env` excluded.
+    - The merged commit receives one immutable RC tag; the release workflow, packages, checksums, public image access, and pulled-image golden path pass.
+    - Failure never force-moves a tag; the next attempt increments the RC. Remaining clean Ubuntu/XOA/NPM/browser/reboot work is stated exactly.
+  - Check:
+    - Local `./scripts/verify.sh --viewer` passed in 196.1 seconds with pinned Go 1.26.5: all Go packages, architecture/contract/schema checks, release-bundle validation, Postgres migration lifecycle, Compose config, Docker Desktop source quickstart, viewer lint, and 25 suites/215 tests passed.
+    - The private root `.env` was moved outside the checkout only for that run, restored in `finally`, and retained the exact SHA-256 hash. The canonical smoke left no BitRiver containers.
+    - Eleven Python release-helper tests, focused Go CLI/workflow tests, YAML/WiX parsing, shell syntax, generated contract checks, doc consistency checks, and `git diff --check` passed.
+    - First PR run `30132326373` exposed ShellCheck SC1007 on the intentionally empty stable nFPM prerelease assignment. Changed it to the explicit `NFPM_PRERELEASE=''` form; no package behavior changed.
+    - Replacement run `30132400350` then exposed two escaped OME-helper selectors in the CI/standalone image-scan workflows that still matched the retired namespace even though the images built under the new namespace. Updated both selectors and their shared regression test; the failure occurred before Trivy evaluated any CVE, so it was workflow drift rather than a vulnerability finding.
+    - Current-head run `30132686142` passed Ubuntu full-stack, image CVE,
+      cross-platform Go/entrypoint, lint, unit, browser, and viewer build work,
+      then `npm audit` blocked on newly published
+      `GHSA-mh99-v99m-4gvg` (`brace-expansion<=5.0.7`). The advisory names
+      5.0.8 as the only patched release; ordinary non-breaking `npm audit fix`
+      could update only the existing v5 copy and still reported 27 vulnerable
+      transitive paths. A tested 5.0.8 override is therefore the next release
+      gate; force-upgrading ESLint or suppressing the advisory is not accepted.
+    - A direct all-majors override cleared audit but broke legacy minimatch's
+      callable CommonJS contract, so it was rejected. The final install hook
+      keeps the exact upstream `brace-expansion@5.0.8` package and implementation
+      and changes only its CommonJS export shape so legacy callable and current
+      named-export consumers both work; no vulnerable expansion implementation
+      is copied or retained. Focused unit coverage protects both export shapes
+      and the patched maximum-length behavior.
+    - The viewer image dependency stage now copies `vendor/` before `npm ci`;
+      a Go workflow regression test enforces that ordering so the local
+      compatibility hook cannot pass host CI while failing the published
+      container build.
+    - A folder-based first draft installed and executed correctly but left npm
+      reporting nested local links as invalid. Keep the override registry-backed
+      and apply the reviewed legacy CommonJS export hook during `postinstall`;
+      require clean `npm ci`, `npm ls`, audit, tests, and the real container
+      build before publication.
+    - Final proof passed: clean `npm ci`; a valid, fully deduplicated
+      `npm ls brace-expansion --all` graph containing only 5.0.8; live
+      `npm audit --audit-level=high` with zero vulnerabilities; viewer lint;
+      26 suites/217 tests; all 36 Playwright tests; Next.js production builds;
+      and a clean viewer Docker build (`sha256:5c8e3407...`). The complete
+      `./scripts/verify.sh --viewer` gate then passed in 194 seconds with Go
+      1.26.5, all Go/contract/Postgres checks, Docker Compose full-stack
+      quickstart, OME health, API/viewer probes, and matching private `.env`
+      restoration hash.
+    - PR, remote CI, merge, immutable RC tag, published assets/images, anonymous pull, and tag-workflow product evidence remain pending.
+
 ## Scoped change: full-stack production golden-path E2E (#1300)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
