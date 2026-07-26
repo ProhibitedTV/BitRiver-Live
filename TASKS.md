@@ -159,7 +159,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Viewer lint plus 26 Jest suites/217 tests/four snapshots passed.
     - The private root `.env` was parked only for verification, restored in
       `finally`, and matched its original SHA-256 hash.
-    - PR and post-merge targeted workflow evidence remain pending.
+    - PR run `30214732829` passed on implementation head `b9837e38`: unified
+      Ubuntu verification, blocking first-party and informational dependency
+      image scans, complete monitoring validation, viewer integration/build/
+      audit, Windows/macOS Go, Ubuntu/macOS/Windows quickstart entrypoints,
+      ShellCheck, docs/workflow policy, wizard, and committed-secret guard.
+    - PR #1331 is mergeable and its implementation matrix is green.
+      Post-merge targeted workflow evidence remains pending.
 
 - [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
   - Acceptance criteria:
