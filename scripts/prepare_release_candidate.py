@@ -243,6 +243,117 @@ def resolve_digest_with_retry(
     )
 
 
+def expected_third_party_images(
+    template_content: str,
+) -> list[tuple[str, str]]:
+    _, template_values = parse_env_template(template_content)
+    required = {"BITRIVER_SRS_IMAGE_TAG", "BITRIVER_OME_IMAGE_TAG"}
+    missing = sorted(required.difference(template_values))
+    if missing:
+        raise CandidateError(
+            "environment template is missing dependency keys: "
+            + ", ".join(missing)
+        )
+    return [
+        (digest_key, image_template.format_map(template_values))
+        for digest_key, image_template in THIRD_PARTY_IMAGES
+    ]
+
+
+def resolve_third_party_images(
+    template_content: str,
+    *,
+    digest_resolver: Callable[[str], str] = default_digest_resolver,
+    digest_attempts: int = 4,
+    digest_delay_seconds: float = 3.0,
+) -> dict[str, object]:
+    if digest_attempts < 1:
+        raise CandidateError("digest attempts must be at least one")
+    images = []
+    for digest_key, reference in expected_third_party_images(template_content):
+        digest = resolve_digest_with_retry(
+            reference,
+            digest_resolver,
+            digest_attempts,
+            digest_delay_seconds,
+        )
+        images.append(
+            {
+                "envKey": digest_key,
+                "reference": reference,
+                "digest": digest,
+            }
+        )
+    return {
+        "schemaVersion": "bitriver.release-dependencies/v1",
+        "registryManifestAccess": True,
+        "images": images,
+    }
+
+
+def read_third_party_evidence(
+    path: Path, template_content: str
+) -> dict[str, str]:
+    try:
+        evidence = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise CandidateError(
+            f"cannot read third-party dependency evidence: {exc}"
+        ) from exc
+    if evidence.get("schemaVersion") != "bitriver.release-dependencies/v1":
+        raise CandidateError(
+            "third-party dependency evidence has an unsupported schema"
+        )
+    if evidence.get("registryManifestAccess") is not True:
+        raise CandidateError(
+            "third-party dependency evidence does not prove registry manifest access"
+        )
+    expected = dict(expected_third_party_images(template_content))
+    images = evidence.get("images")
+    if not isinstance(images, list):
+        raise CandidateError(
+            "third-party dependency evidence is missing its image list"
+        )
+    values: dict[str, str] = {}
+    for image in images:
+        if not isinstance(image, dict):
+            raise CandidateError(
+                "third-party dependency evidence contains an invalid entry"
+            )
+        key = image.get("envKey")
+        reference = image.get("reference")
+        digest = image.get("digest")
+        if not all(isinstance(value, str) for value in (key, reference, digest)):
+            raise CandidateError(
+                "third-party dependency evidence contains an incomplete entry"
+            )
+        if key not in expected:
+            raise CandidateError(
+                f"third-party dependency evidence has unexpected key {key}"
+            )
+        if key in values:
+            raise CandidateError(
+                f"third-party dependency evidence repeats key {key}"
+            )
+        if reference != expected[key]:
+            raise CandidateError(
+                "third-party dependency evidence reference mismatch for "
+                f"{key}: expected {expected[key]}"
+            )
+        if not DIGEST_PATTERN.fullmatch(digest):
+            raise CandidateError(
+                f"third-party dependency evidence has an invalid digest for {key}"
+            )
+        values[key] = digest
+    missing = sorted(set(expected).difference(values))
+    if missing:
+        raise CandidateError(
+            "third-party dependency evidence is missing keys: "
+            + ", ".join(missing)
+        )
+    return values
+
+
 def prepare_environment(
     template_content: str,
     metadata: ReleaseMetadata,
@@ -254,6 +365,7 @@ def prepare_environment(
     digest_delay_seconds: float = 3.0,
     secret_factory: Callable[[str], str] = default_secret_factory,
     first_party_digests: Mapping[str, str] | None = None,
+    third_party_digests: Mapping[str, str] | None = None,
     product_loopback: bool = False,
     unpublished_first_party_digests: bool = False,
 ) -> tuple[str, list[str]]:
@@ -344,6 +456,10 @@ def prepare_environment(
                 )
             updates[digest_key] = f"@{digest}"
 
+    if resolve_digests and third_party_digests is not None:
+        raise CandidateError(
+            "registry digest resolution and third-party evidence are mutually exclusive"
+        )
     if resolve_digests:
         digest_values = dict(template_values)
         digest_values.update(updates)
@@ -355,6 +471,28 @@ def prepare_environment(
                 digest_attempts,
                 digest_delay_seconds,
             )
+            updates[digest_key] = f"@{digest}"
+    elif third_party_digests is not None:
+        expected_keys = {key for key, _ in THIRD_PARTY_IMAGES}
+        unexpected = sorted(set(third_party_digests).difference(expected_keys))
+        missing = sorted(expected_keys.difference(third_party_digests))
+        if unexpected:
+            raise CandidateError(
+                "third-party dependency evidence has unexpected keys: "
+                + ", ".join(unexpected)
+            )
+        if missing:
+            raise CandidateError(
+                "third-party dependency evidence is missing keys: "
+                + ", ".join(missing)
+            )
+        for digest_key, _ in THIRD_PARTY_IMAGES:
+            digest = third_party_digests[digest_key]
+            if not DIGEST_PATTERN.fullmatch(digest):
+                raise CandidateError(
+                    "third-party dependency evidence has an invalid digest for "
+                    f"{digest_key}"
+                )
             updates[digest_key] = f"@{digest}"
 
     sentinel_values = sorted(set(generated.values()))
@@ -431,19 +569,37 @@ def read_first_party_evidence(
     return values
 
 
-def atomic_private_write(path: Path, content: str) -> None:
+def atomic_private_write(
+    path: Path,
+    content: str,
+    *,
+    replace_func: Callable[[Path, Path], None] = os.replace,
+    sleep_func: Callable[[float], None] = time.sleep,
+    replace_attempts: int = 5,
+    replace_delay_seconds: float = 0.1,
+) -> None:
+    if replace_attempts < 1:
+        raise ValueError("replace_attempts must be at least 1")
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", dir=str(path.parent), text=True
     )
     temporary_path = Path(temporary_name)
     try:
-        os.fchmod(descriptor, stat.S_IRUSR | stat.S_IWUSR)
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            if hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), stat.S_IRUSR | stat.S_IWUSR)
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
+        for attempt in range(1, replace_attempts + 1):
+            try:
+                replace_func(temporary_path, path)
+                break
+            except PermissionError:
+                if attempt == replace_attempts:
+                    raise
+                sleep_func(replace_delay_seconds)
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     except BaseException:
         temporary_path.unlink(missing_ok=True)
@@ -480,6 +636,7 @@ def build_parser() -> argparse.ArgumentParser:
     env.add_argument("--output", type=Path, required=True)
     env.add_argument("--sentinel-output", type=Path, required=True)
     env.add_argument("--first-party-evidence", type=Path)
+    env.add_argument("--third-party-evidence", type=Path)
     env.add_argument("--resolve-digests", action="store_true")
     env.add_argument(
         "--product-loopback",
@@ -502,12 +659,37 @@ def build_parser() -> argparse.ArgumentParser:
     images.add_argument("--output", type=Path, required=True)
     images.add_argument("--digest-attempts", type=int, default=8)
     images.add_argument("--digest-delay-seconds", type=float, default=10.0)
+
+    dependencies = subparsers.add_parser(
+        "dependencies",
+        help="resolve third-party tags into reusable immutable evidence",
+    )
+    dependencies.add_argument("--template", type=Path, required=True)
+    dependencies.add_argument("--output", type=Path, required=True)
+    dependencies.add_argument("--digest-attempts", type=int, default=4)
+    dependencies.add_argument("--digest-delay-seconds", type=float, default=3.0)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "dependencies":
+            evidence = resolve_third_party_images(
+                args.template.read_text(encoding="utf-8"),
+                digest_attempts=args.digest_attempts,
+                digest_delay_seconds=args.digest_delay_seconds,
+            )
+            atomic_private_write(
+                args.output.resolve(),
+                json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            )
+            print(
+                "third-party dependency manifests resolved "
+                f"({len(evidence['images'])} images)"
+            )
+            return 0
+
         metadata = parse_tag(args.tag)
         if args.command == "metadata":
             write_metadata(args.output, metadata, args.output_format)
@@ -535,20 +717,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         template = args.template.resolve()
         if output == sentinel_output or output == template or sentinel_output == template:
             raise CandidateError("template, environment, and sentinel paths must differ")
+        for evidence_path in (
+            args.first_party_evidence,
+            args.third_party_evidence,
+        ):
+            if evidence_path is None:
+                continue
+            resolved_evidence = evidence_path.resolve()
+            if resolved_evidence in {output, sentinel_output, template}:
+                raise CandidateError(
+                    "evidence, template, environment, and sentinel paths must differ"
+                )
 
+        template_content = args.template.read_text(encoding="utf-8")
         first_party_digests = None
         if args.first_party_evidence is not None:
             first_party_digests = read_first_party_evidence(
                 args.first_party_evidence.resolve(), metadata, args.namespace
             )
+        third_party_digests = None
+        if args.third_party_evidence is not None:
+            third_party_digests = read_third_party_evidence(
+                args.third_party_evidence.resolve(), template_content
+            )
         rendered, sentinel_values = prepare_environment(
-            args.template.read_text(encoding="utf-8"),
+            template_content,
             metadata,
             args.namespace,
             resolve_digests=args.resolve_digests,
             digest_attempts=args.digest_attempts,
             digest_delay_seconds=args.digest_delay_seconds,
             first_party_digests=first_party_digests,
+            third_party_digests=third_party_digests,
             product_loopback=args.product_loopback,
             unpublished_first_party_digests=args.unpublished_first_party_digests,
         )

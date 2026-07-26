@@ -1,5 +1,150 @@
 # PLAN
 
+## Current scope - repair the `rc.3` release fan-out (2026-07-26)
+
+- Preserve the failed `v1.2.3-rc.3` tag at `c9d5a9f3`. The tag workflow
+  published the five first-party candidate images, but no GitHub Release was
+  created because artifact and pull-only acceptance jobs failed. Corrections
+  use the next immutable tag, `v1.2.3-rc.4`.
+- Keep cross-compilation and host-side binary inspection separate. Target
+  `GOOS`/`GOARCH` remain scoped to `go build`; the Go verifier must compile for
+  the Ubuntu runner so it can inspect Windows, macOS, and arm64 binaries without
+  attempting to execute a foreign verifier.
+- Quote the Windows production modfile as one PowerShell argument. The MSI job
+  currently passes the literal text `$env:PRODUCTION_MODFILE` to Go, which Go
+  rejects because it does not end in `.mod`.
+- Emit the current Cosign v3 bundle format and publish that bundle beside each
+  launcher binary. Cosign 3 ignores the deprecated `--output-signature` flag,
+  leaving an empty bundle path and failing every launcher matrix entry.
+- Package the viewer's built output without assuming an optional `public/`
+  directory exists. Preserve `.next`, remove its cache, and copy `public/` only
+  when present.
+- Bridge an explicitly supplied smoke env to the canonical root `.env` only
+  when the root file is absent, because Compose service-level `env_file:
+  ../.env` resolution is independent from `docker compose --env-file`. Track
+  ownership and remove only the smoke-created bridge during cleanup; never
+  rewrite or remove an operator-owned root `.env`.
+- Keep secret/evidence publication atomic on Windows Docker Desktop as well as
+  Linux runners. Open the temporary descriptor under its closing context before
+  applying POSIX-only `fchmod`, skip that syscall where unavailable, and retry
+  only transient sharing/permission failures from the final same-directory
+  `os.replace`. Retain mode 0600 output where supported and remove the
+  temporary file on terminal failure.
+- Make SRS readiness valid for both source-build and pull-only deployments.
+  Production pull mode intentionally selects the pinned upstream SRS digest,
+  while source mode builds a wrapper that happens to add `curl`. Replace the
+  curl-dependent SRS probe with a bounded Bash `/dev/tcp` HTTP status check
+  against `/api/v1/versions`, and keep the Compose and Helm health contracts
+  aligned.
+- Preserve production-secure session cookies while allowing the Docker product
+  harness to authenticate over its internal HTTP hop. The loopback candidate
+  correctly marks `bitriver_session` as `Secure`, so Python's cookie jar stores
+  it but will not return it to `host.docker.internal`. For same-origin requests
+  only, use the captured session value as the API's supported Bearer token
+  fallback; never attach it to an absolute cross-origin URL.
+- Resolve third-party release dependencies once per tag workflow. The current
+  environment preflight and pull-only product gate independently resolve the
+  same eight mutable tags, wasting registry quota and allowing the two gates to
+  select different manifests. Preflight must publish sanitized, immutable
+  reference/digest evidence; the product gate validates and consumes that exact
+  artifact while keeping first-party post-publication evidence separate.
+
+### `rc.3` failure evidence
+
+- Release run `30217498138` passed release-env validation, migrated Postgres,
+  the Go verification gate, all five multi-architecture image publications,
+  SBOM generation, and Linux amd64 CLI/release-artifact builds.
+- Every non-Linux-amd64 CLI and release-artifact job failed with `exec format
+  error` while `go run ./cmd/tools/verify-production-binary` inherited the
+  target platform. This is one host-versus-target environment defect.
+- The MSI job generated `go.production.mod`, then failed because
+  `-modfile=$env:PRODUCTION_MODFILE` reached Go literally.
+- Four cross-target launcher jobs failed at the same foreign host-verifier
+  execution. Linux amd64 reached signing, then failed when Cosign 3.0.6 ignored
+  `--output-signature` and attempted to create a bundle at an empty path.
+- Viewer lint, unit/integration tests, and production build passed; packaging
+  alone failed at `cp -R public` because the viewer has no `public/` directory.
+- The anonymous pull-only product gate resolved the published images and
+  enforced third-party digests, then failed before startup because the clean
+  runner had no root `.env`. GitHub Release creation was skipped, so `rc.3`
+  must not be presented as a published candidate.
+- The first local Docker Desktop pull-only rehearsal resolved the public
+  `rc.3` image manifests, then exposed that Windows Python has no `os.fchmod`.
+  The exception occurred before `os.fdopen` owned the descriptor, so the leaked
+  handle also made cleanup appear as a sharing violation. No private root env
+  was moved or changed. Close ownership must begin before the POSIX-only mode
+  operation, with the mode operation conditional on platform support.
+- After the Windows helper repair, the local pull-only rehearsal passed the
+  former root-env failure, anonymously pulled every digest-pinned image, and
+  started the stack. It then proved the raw upstream SRS image has neither
+  `curl` nor `wget`; SRS answered `/api/v1/versions`, but its curl-based
+  healthcheck remained unhealthy until the bounded gate failed. The pinned
+  image does provide Bash, and an ephemeral real-image `/dev/tcp` HTTP probe
+  returned status 200.
+- With the curl-free probe applied, the next local pull-only rehearsal made SRS
+  healthy, started every service, and reached the real media harness. Account
+  signup succeeded, but the first authenticated `/api/status` request returned
+  `401 missing session token`: production correctly emitted a Secure session
+  cookie while the trusted Docker client reached the API over plain internal
+  HTTP. The harness needs a same-origin Bearer fallback, not a weaker production
+  cookie policy.
+- After the same-origin session repair passed focused tests, the immediate
+  rehearsal retry was blocked before startup by Docker Hub `429 Too Many
+  Requests` while resolving `ossrs/srs:v5.0.185`. Release preflight already
+  resolves all eight third-party tags, but the downstream product job repeats
+  that work on a fresh runner. Carrying immutable dependency evidence between
+  jobs removes this avoidable quota and time-of-check/time-of-use seam.
+
+### Risks
+
+- A syntactically green workflow does not prove cross-platform binaries,
+  signatures, packages, or MSI output. `rc.4` must complete the entire remote
+  matrix and downstream package acceptance before publication.
+- Copying a release env into the checkout can expose generated credentials if
+  it survives cleanup or becomes an uploaded artifact. The bridge is
+  mode-restricted, ownership-tracked, removed on every exit path, and excluded
+  from evidence.
+- A session fallback must not turn into credential forwarding. Restrict it to
+  the exact configured API origin, preserve explicit Authorization headers, and
+  cover both same-origin and cross-origin requests in a local HTTP regression.
+- Dependency evidence must remain non-secret and candidate-specific. Validate
+  its schema, require every expected env key/reference, reject duplicate or
+  unexpected entries and malformed digests, scan it with the existing sentinel
+  guard, and never allow it to substitute for first-party anonymous GHCR proof.
+- Cosign bundles change the released filename/verification contract from the
+  historical `.sig` assumption. Workflow tests and operator release
+  documentation must agree on the `.sigstore.json` artifact.
+- The `rc.3` images exist even though the release failed. They remain immutable
+  failure evidence and are not retagged as `rc.4` or `latest`.
+
+### Test and publication plan
+
+- Add focused workflow-contract regressions for host-scoped verifier execution,
+  PowerShell modfile quoting, Cosign bundle output, optional viewer assets, and
+  root-env bridge ownership/cleanup.
+- Add a unit regression that injects transient atomic-replace failures and
+  proves eventual success, plus a terminal-failure check that leaves neither
+  final nor temporary secret material behind.
+- Add Compose/Helm contract coverage that rejects curl-dependent SRS probes and
+  requires the same built-in Bash HTTP status check in both deployment shapes.
+- Add a functional Python HTTP test proving a Secure signup cookie authenticates
+  the next same-origin request through Bearer fallback while an absolute
+  cross-origin request receives no session credential.
+- Add release-helper and workflow regressions proving preflight resolves one
+  complete third-party dependency set, uploads sanitized evidence, and the
+  pull-only job downloads and validates it instead of resolving mutable tags
+  again.
+- Run focused Go script tests, release-candidate Python tests, Bash syntax,
+  workflow YAML parsing, CI/workflow policy checks, and `git diff --check`.
+- Run literal `./scripts/verify.sh --viewer`, preserving and hashing the
+  operator's private root `.env`, then require the complete pull-request CI
+  matrix.
+- Merge only green evidence, tag `v1.2.3-rc.4`, and monitor every release job.
+  Accept the candidate only after GitHub Release assets/checksums, anonymous
+  GHCR access, package acceptance, and the pull-only product gate pass. Clean
+  Ubuntu/XOA, Nginx Proxy Manager browser access, reboot, and OME restart/media
+  recovery remain separate promotion evidence.
+
 ## Current scope - branch hygiene and release CI consolidation (2026-07-26)
 
 - Reduce the remote branch inventory without risking active or unincorporated

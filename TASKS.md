@@ -219,15 +219,87 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       artifact-upload gates. Task 5 is complete and `v1.2.3-rc.3` may be tagged
       from the evidence-only mainline successor.
 
-- [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
+- [x] Task 6 - Tag and inspect `v1.2.3-rc.3`
   - Acceptance criteria:
     - The immutable tag points at the verified merged commit.
-    - Release jobs, packages, checksums, anonymous image pulls, and pull-only
-      Docker Desktop product evidence pass.
-    - Remaining clean Ubuntu/XOA/NPM/browser/reboot/OME recovery evidence is
-      stated without overclaiming.
+    - Every failed release job is classified before a successor tag is created.
+    - No GitHub Release is created and no success claim is made when artifact
+      or pull-only product gates fail.
   - Check:
-    - Pending.
+    - Annotated tag `v1.2.3-rc.3` points at verified merged commit `c9d5a9f3`;
+      release run `30217498138` preserved the immutable failure evidence.
+    - Release environment validation, migrated Postgres, Go verification, all
+      five first-party image publications/SBOMs, and Linux amd64 CLI/release
+      artifacts passed.
+    - Cross-target CLI/artifact jobs failed because target `GOOS`/`GOARCH`
+      leaked into `go run` for the host-side binary verifier.
+    - Windows MSI failed because PowerShell passed the literal
+      `$env:PRODUCTION_MODFILE` as the Go `-modfile`; four cross-target
+      launchers hit the foreign verifier, while Linux amd64 reached Cosign 3
+      and failed because the deprecated detached-signature flag was ignored.
+    - Viewer tests/build passed and packaging alone failed on an absent optional
+      `public/` directory. The pull-only product gate reached anonymous image
+      resolution, then failed because Compose's service-level `env_file`
+      expected a clean-runner root `.env`.
+    - GitHub Release creation and downstream package/Homebrew jobs were skipped.
+      `rc.3` is not a published release candidate; corrections move to
+      immutable `v1.2.3-rc.4`.
+
+- [-] Task 7 - Repair release packaging and publish `v1.2.3-rc.4`
+  - Acceptance criteria:
+    - Cross-platform binary verification runs as a host tool without weakening
+      production-module inspection.
+    - MSI production-module setup, Cosign bundles, viewer bundle packaging, and
+      clean-runner pull-only Compose env resolution are covered by regressions.
+    - Release candidate output remains private and atomic across transient
+      Windows file-sharing failures.
+    - Pull-only SRS readiness does not depend on tools added only by the source
+      wrapper image, and Compose/Helm probe contracts remain aligned.
+    - The Docker-internal product harness keeps production Secure cookies and
+      authenticates only same-origin API calls without forwarding the session
+      credential cross-origin.
+    - Third-party image tags are resolved once into sanitized immutable evidence
+      and reused by the product gate without a second registry-resolution pass.
+    - Focused checks, literal full verification, complete PR CI, and exact
+      merged-main evidence pass before tagging.
+    - The `rc.4` workflow publishes a prerelease with complete checksums/assets,
+      anonymous GHCR access, package acceptance, and pull-only product evidence.
+  - Check:
+    - Workflow regressions now keep host-side binary verification on the runner
+      platform, pass the MSI modfile as one PowerShell argument, use Cosign v3
+      bundles, and package the viewer without requiring an optional `public/`
+      directory.
+    - The quickstart smoke creates and owns a mode-restricted root env bridge
+      only when an explicit external release env is supplied and no operator
+      root `.env` exists. Windows atomic output now closes descriptors safely,
+      conditionally applies POSIX mode changes, retries only transient replace
+      failures, and cleans up terminal failures.
+    - The raw pinned `ossrs/srs:v5.0.185` image proved it has Bash but neither
+      curl nor wget. Compose and Helm now use the same `/dev/tcp` HTTP 200 probe;
+      focused Go contracts and a rendered Compose validation passed.
+    - The first repaired pull-only rehearsal made SRS healthy and reached the
+      media harness, then exposed production Secure cookies not returning over
+      the trusted Docker-internal HTTP hop. The client now applies the supported
+      Bearer fallback only to the exact API origin, records the session as a
+      secret sentinel, and a two-server regression proves no cross-origin
+      credential forwarding.
+    - A Docker Hub 429 on the immediate retry exposed duplicate third-party tag
+      resolution in preflight and the product gate. Preflight now resolves one
+      strict, sanitized `release-dependencies.json`; the downstream job
+      downloads, validates, and reuses it. Fifteen release-helper tests and the
+      complete Go scripts suite pass, including schema/completeness/reference
+      binding and single-resolution workflow regressions.
+    - The complete local pull-only Docker Desktop rehearsal then passed with
+      immutable `v1.2.3-rc.3` first-party images plus the corrected local
+      orchestration: all eight product stages passed (surface, accounts/channel,
+      RTMP live state, decodable OME/transcoder media, offline transition,
+      chat/moderation, VOD publish/playback, and final aggregate status). Both
+      evidence scans passed, teardown left no BitRiver containers, temporary
+      secret inputs were removed, and the operator `.env` retained SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - Full repository verification, PR CI, merge, immutable `v1.2.3-rc.4`
+      tagging, and remote release/package/publication inspection remain in
+      progress.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 

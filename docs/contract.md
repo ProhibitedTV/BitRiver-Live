@@ -192,6 +192,12 @@ A deployment is considered successful when all of the following are true in the 
 7. Critical compose services report healthy: `bitriver-live`, `ome`, `srs`, `srs-controller`, `transcoder`, `postgres`, `redis`.
 8. Admin bootstrap completes via `/app/bootstrap-admin` using env credentials.
 
+SRS readiness deliberately uses the pinned upstream image's built-in Bash
+`/dev/tcp` support to request `/api/v1/versions` and require HTTP 200. It must
+not depend on `curl`: source mode's local wrapper installs that tool, but
+production pull mode runs the immutable upstream digest directly. The Compose
+and Helm probes share this curl-free contract.
+
 For the Ubuntu artifact install, `bitriver-host activate` is the systemd entrypoint for the same sequence. The unit is bounded to 15 minutes and remains failed if quickstart or critical health does not pass. Installation paths are different, but the Compose graph and validation contract are not.
 
 These startup checks prove the control plane is ready; they do not prove media delivery. Production acceptance additionally requires a bounded RTMP publish, authenticated validation of OME's declared `default/live` application, a successful public `/live/<channel-id>/llhls.m3u8` fetch and audio/video decode, advertised rendition-manifest checks, and a clean offline transition after the publisher stops.

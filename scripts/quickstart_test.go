@@ -627,6 +627,36 @@ func TestQuickstartSmokeSupportsExplicitPullProductionMode(t *testing.T) {
 	}
 }
 
+func TestQuickstartSmokeBridgesExternalEnvWithoutReplacingOperatorConfig(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "test-quickstart.sh"))
+	if err != nil {
+		t.Fatalf("read test-quickstart: %v", err)
+	}
+	script := string(content)
+	for _, required := range []string{
+		`ROOT_ENV_FILE="$REPO_ROOT/.env"`,
+		"CREATED_ROOT_ENV_BRIDGE=false",
+		`if [[ "$ENV_FILE" != "$ROOT_ENV_FILE" ]]; then`,
+		`if ! cmp -s "$ENV_FILE" "$ROOT_ENV_FILE"; then`,
+		"explicit smoke env cannot replace an existing operator-owned root .env",
+		`cp "$ENV_FILE" "$ROOT_ENV_FILE"`,
+		`chmod 600 "$ROOT_ENV_FILE"`,
+		"CREATED_ROOT_ENV_BRIDGE=true",
+		`if [ "$CREATED_ROOT_ENV_BRIDGE" = true ]; then`,
+		`rm -f "$ROOT_ENV_FILE"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("quickstart external-env bridge missing %q", required)
+		}
+	}
+}
+
 func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -649,6 +679,67 @@ func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	}
 	if strings.Contains(compose, `Authorization: Bearer $$token`) {
 		t.Fatalf("expected OME healthcheck to avoid auth headers when using public liveness endpoint")
+	}
+}
+
+func TestSRSHealthProbesWorkWithThePinnedUpstreamImage(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	compose := strings.ReplaceAll(
+		readRepoFile(t, repoRoot, filepath.Join("deploy", "docker-compose.yml")),
+		"\r\n",
+		"\n",
+	)
+	srsStart := strings.Index(compose, "\n  srs:\n")
+	srsAPIStart := strings.Index(compose, "\n  srs-api:\n")
+	if srsStart == -1 || srsAPIStart == -1 || srsAPIStart <= srsStart {
+		t.Fatal("canonical Compose SRS service boundaries not found")
+	}
+	srsService := compose[srsStart:srsAPIStart]
+	for _, required := range []string{
+		`- "/bin/bash"`,
+		"/dev/tcp/127.0.0.1/1985",
+		"GET /api/v1/versions HTTP/1.0",
+		`test "$$status" = "200"`,
+	} {
+		if !strings.Contains(srsService, required) {
+			t.Fatalf("Compose SRS healthcheck missing upstream-image invariant %q", required)
+		}
+	}
+	if strings.Contains(srsService, "curl") || strings.Contains(srsService, "wget") {
+		t.Fatal("pull-only SRS healthcheck must not require tools absent from the pinned upstream image")
+	}
+
+	helm := strings.ReplaceAll(
+		readRepoFile(t, repoRoot, filepath.Join(
+			"deploy",
+			"helm",
+			"bitriver-live",
+			"templates",
+			"deployment-srs.yaml",
+		)),
+		"\r\n",
+		"\n",
+	)
+	for _, required := range []string{
+		"- /bin/bash",
+		"/dev/tcp/127.0.0.1/1985",
+		"GET /api/v1/versions HTTP/1.0",
+		`test "$status" = "200"`,
+	} {
+		if !strings.Contains(helm, required) {
+			t.Fatalf("Helm SRS healthcheck missing upstream-image invariant %q", required)
+		}
+	}
+	if strings.Count(helm, "/dev/tcp/127.0.0.1/1985") != 2 {
+		t.Fatal("Helm SRS liveness and readiness probes must share the curl-free check")
+	}
+	if strings.Contains(helm, "curl") || strings.Contains(helm, "wget") {
+		t.Fatal("Helm SRS probes must not require tools absent from the pinned upstream image")
 	}
 }
 
