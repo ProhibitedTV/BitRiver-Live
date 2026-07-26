@@ -51,9 +51,15 @@ jobs:
           sentinel_file="$RUNNER_TEMP/release-secret-values"
           validation_dir="$RUNNER_TEMP/release-validation-output"
           evidence_dir="$RUNNER_TEMP/release-contract-evidence"
+          dependency_evidence="$evidence_dir/release-dependencies.json"
           rm -rf "$validation_dir" "$evidence_dir"
           mkdir -p "$validation_dir" "$evidence_dir"
           image_namespace="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          python3 ./scripts/prepare_release_candidate.py dependencies \
+            --template deploy/.env.example \
+            --output "$dependency_evidence" \
+            --digest-attempts 12 \
+            --digest-delay-seconds 10
           python3 ./scripts/prepare_release_candidate.py env \
             --tag "$GITHUB_REF_NAME" \
             --namespace "$image_namespace" \
@@ -61,7 +67,7 @@ jobs:
             --output "$env_file" \
             --sentinel-output "$sentinel_file" \
             --unpublished-first-party-digests \
-            --resolve-digests
+            --third-party-evidence "$dependency_evidence"
           printf 'BITRIVER_RELEASE_SENTINEL_%s_%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >>"$sentinel_file"
           {
             echo "BITRIVER_RELEASE_ENV_FILE=$env_file"
@@ -242,6 +248,8 @@ jobs:
           out_dir="dist/${GOOS}-${GOARCH}"
           rm -rf "$out_dir"
           mkdir -p "$out_dir"
+          host_goos="$(go env GOHOSTOS)"
+          host_goarch="$(go env GOHOSTARCH)"
 
           bin_ext=""
           if [ "$GOOS" = "windows" ]; then
@@ -270,12 +278,14 @@ jobs:
             tags="${build_tags[$target]-}"
             if [[ -n "$tags" ]]; then
               go build -modfile="$PRODUCTION_MODFILE" -tags "$tags" -o "$output_path" "./cmd/$target"
-              go run ./cmd/tools/verify-production-binary \
+              GOOS="$host_goos" GOARCH="$host_goarch" \
+                go run ./cmd/tools/verify-production-binary \
                 --require-module github.com/jackc/pgx/v5 \
                 "$output_path"
             else
               go build -modfile="$PRODUCTION_MODFILE" -o "$output_path" "./cmd/$target"
-              go run ./cmd/tools/verify-production-binary "$output_path"
+              GOOS="$host_goos" GOARCH="$host_goarch" \
+                go run ./cmd/tools/verify-production-binary "$output_path"
             fi
           done
 
@@ -371,6 +381,8 @@ jobs:
           out_dir="dist/bitriver-${GOOS}-${GOARCH}"
           rm -rf "$out_dir"
           mkdir -p "$out_dir"
+          host_goos="$(go env GOHOSTOS)"
+          host_goarch="$(go env GOHOSTARCH)"
 
           bin_ext=""
           archive_ext="tar.gz"
@@ -386,7 +398,8 @@ jobs:
           )
 
           go build -modfile="$PRODUCTION_MODFILE" -trimpath -ldflags "${ldflags[*]}" -o "$out_dir/bitriver${bin_ext}" ./cmd/bitriver
-          go run ./cmd/tools/verify-production-binary "$out_dir/bitriver${bin_ext}"
+          GOOS="$host_goos" GOARCH="$host_goarch" \
+            go run ./cmd/tools/verify-production-binary "$out_dir/bitriver${bin_ext}"
 
           if [ "$archive_ext" = "zip" ]; then
             (cd dist && zip -r "bitriver-${GOOS}-${GOARCH}.zip" "bitriver-${GOOS}-${GOARCH}")
@@ -463,6 +476,8 @@ jobs:
           rm -rf "$launcher_root"
           mkdir -p "$launcher_root/bin" "$launcher_root/share/deploy"
           bash ./scripts/stage-release-assets.sh --output "$launcher_root/share/bitriver-live"
+          host_goos="$(go env GOHOSTOS)"
+          host_goarch="$(go env GOHOSTARCH)"
 
           bin_ext=""
           archive_ext="tar.gz"
@@ -478,7 +493,8 @@ jobs:
           )
 
           go build -modfile="$PRODUCTION_MODFILE" -trimpath -ldflags "${ldflags[*]}" -o "$launcher_root/bin/bitriver${bin_ext}" ./cmd/bitriver
-          go run ./cmd/tools/verify-production-binary "$launcher_root/bin/bitriver${bin_ext}"
+          GOOS="$host_goos" GOARCH="$host_goarch" \
+            go run ./cmd/tools/verify-production-binary "$launcher_root/bin/bitriver${bin_ext}"
           if [ "$GOOS" = "windows" ]; then
             cp scripts/bitriver-live-wrapper.ps1 "$launcher_root/bin/bitriver-live.ps1"
             chmod +x "$launcher_root/bin/bitriver${bin_ext}"
@@ -488,7 +504,9 @@ jobs:
             chmod +x "$launcher_root/install.sh" "$launcher_root/bin/bitriver-live" "$launcher_root/bin/bitriver${bin_ext}"
           fi
 
-          cosign sign-blob --yes --output-signature "$launcher_root/bin/bitriver${bin_ext}.sig" "$launcher_root/bin/bitriver${bin_ext}"
+          cosign sign-blob --yes \
+            --bundle "$launcher_root/bin/bitriver${bin_ext}.sigstore.json" \
+            "$launcher_root/bin/bitriver${bin_ext}"
 
           if [ "$archive_ext" = "zip" ]; then
             (cd dist && zip -r "bitriver-launcher-${GOOS}-${GOARCH}.zip" "bitriver-launcher-${GOOS}-${GOARCH}")
@@ -596,7 +614,9 @@ jobs:
           mkdir -p "$bundle_root"
           cp -R .next "$bundle_root/.next"
           rm -rf "$bundle_root/.next/cache"
-          cp -R public "$bundle_root/public"
+          if [ -d public ]; then
+            cp -R public "$bundle_root/public"
+          fi
           cp package.json package-lock.json next.config.js "$bundle_root/"
           tar -C dist -czf "dist/bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer
           rm -rf "$bundle_root"
@@ -776,6 +796,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
+      - name: Download verified release dependency evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-contract-evidence
+          path: ${{ runner.temp }}/release-contract-evidence
+
       - name: Prepare anonymous image and production environment evidence
         run: |
           set -euo pipefail
@@ -783,6 +809,7 @@ jobs:
           env_file="$RUNNER_TEMP/release-product.env"
           sentinel_file="$RUNNER_TEMP/release-product.sentinels"
           image_evidence="$evidence_dir/release-images.json"
+          dependency_evidence="$RUNNER_TEMP/release-contract-evidence/release-dependencies.json"
           image_namespace="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
           rm -rf "$evidence_dir"
           mkdir -p "$evidence_dir"
@@ -801,8 +828,8 @@ jobs:
             --output "$env_file" \
             --sentinel-output "$sentinel_file" \
             --first-party-evidence "$image_evidence" \
-            --product-loopback \
-            --resolve-digests
+            --third-party-evidence "$dependency_evidence" \
+            --product-loopback
           {
             echo "BITRIVER_RELEASE_PRODUCT_EVIDENCE=$evidence_dir"
             echo "BITRIVER_RELEASE_PRODUCT_ENV=$env_file"
@@ -905,7 +932,8 @@ jobs:
         shell: pwsh
         run: |
           go run ./cmd/tools/production-module --output $env:PRODUCTION_MODFILE
-          go mod download -modfile=$env:PRODUCTION_MODFILE all
+          $modFileArg = "-modfile=$($env:PRODUCTION_MODFILE)"
+          go mod download $modFileArg all
 
       - name: Stage canonical Windows release assets
         shell: bash
@@ -933,7 +961,8 @@ jobs:
 
           $ldflags = "-X main.version=$env:RELEASE_TAG -X main.commit=$env:COMMIT_SHA -X main.date=$buildDate"
           $binaryPath = Join-Path $launcherRoot "bin/bitriver.exe"
-          go build -modfile=$env:PRODUCTION_MODFILE -trimpath -ldflags $ldflags -o $binaryPath ./cmd/bitriver
+          $modFileArg = "-modfile=$($env:PRODUCTION_MODFILE)"
+          go build $modFileArg -trimpath -ldflags $ldflags -o $binaryPath ./cmd/bitriver
           go run ./cmd/tools/verify-production-binary $binaryPath
           Copy-Item scripts/bitriver-live-wrapper.ps1 (Join-Path $launcherRoot "bin/bitriver-live.ps1")
 

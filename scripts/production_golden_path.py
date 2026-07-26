@@ -222,13 +222,57 @@ def bounded_poll(
 class ProductClient:
     """Cookie-aware JSON client for one real viewer account."""
 
-    def __init__(self, base_url: str, timeout: float) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float,
+        on_session_token: Callable[[str], None] | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        jar = http.cookiejar.CookieJar()
+        self.cookies = http.cookiejar.CookieJar()
+        self.on_session_token = on_session_token
+        self.observed_session_tokens: set[str] = set()
         self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(jar)
+            urllib.request.HTTPCookieProcessor(self.cookies)
         )
+
+    @staticmethod
+    def _origin(url: str) -> tuple[str, str, int | None]:
+        parsed = urllib.parse.urlsplit(url)
+        port = parsed.port
+        if port is None:
+            port = {"http": 80, "https": 443}.get(parsed.scheme.lower())
+        return parsed.scheme.lower(), (parsed.hostname or "").lower(), port
+
+    def _secure_session_token_for_internal_http(
+        self, url: str
+    ) -> str | None:
+        if self._origin(url) != self._origin(self.base_url):
+            return None
+        if urllib.parse.urlsplit(url).scheme.lower() != "http":
+            return None
+        for cookie in self.cookies:
+            if (
+                cookie.name == "bitriver_session"
+                and cookie.secure
+                and cookie.value
+            ):
+                return cookie.value
+        return None
+
+    def _record_session_tokens(self) -> None:
+        if self.on_session_token is None:
+            return
+        for cookie in self.cookies:
+            if (
+                cookie.name != "bitriver_session"
+                or not cookie.value
+                or cookie.value in self.observed_session_tokens
+            ):
+                continue
+            self.observed_session_tokens.add(cookie.value)
+            self.on_session_token(cookie.value)
 
     def request(
         self,
@@ -245,6 +289,13 @@ class ProductClient:
         request_headers = {"Accept": "application/json"}
         if headers:
             request_headers.update(headers)
+        has_explicit_authorization = any(
+            name.lower() == "authorization" for name in request_headers
+        )
+        if not has_explicit_authorization:
+            session_token = self._secure_session_token_for_internal_http(url)
+            if session_token is not None:
+                request_headers["Authorization"] = f"Bearer {session_token}"
         if payload is not None:
             body = json.dumps(payload).encode("utf-8")
             request_headers["Content-Type"] = "application/json"
@@ -264,6 +315,7 @@ class ProductClient:
             raise HTTPError(
                 f"{method} {sanitize_url(url)} failed: {exc.reason}"
             ) from exc
+        self._record_session_tokens()
         if status not in expected:
             detail = data.decode("utf-8", errors="replace")[:500]
             raise HTTPError(
@@ -714,8 +766,18 @@ def signup(
 def run_golden_path(args: argparse.Namespace, evidence: Evidence) -> None:
     ffmpeg = command_path(args.ffmpeg, "ffmpeg")
     ffprobe = command_path(args.ffprobe, "ffprobe")
-    creator = ProductClient(args.base_url, args.http_timeout)
-    viewer = ProductClient(args.base_url, args.http_timeout)
+
+    def record_session_token(token: str) -> None:
+        if token not in evidence.sentinels:
+            evidence.sentinels.append(token)
+            write_sentinels(args.sentinel_file, evidence.sentinels)
+
+    creator = ProductClient(
+        args.base_url, args.http_timeout, record_session_token
+    )
+    viewer = ProductClient(
+        args.base_url, args.http_timeout, record_session_token
+    )
     anonymous = ProductClient(args.base_url, args.http_timeout)
     suffix = secrets.token_hex(8)
     creator_email = f"golden-creator-{suffix}@example.invalid"

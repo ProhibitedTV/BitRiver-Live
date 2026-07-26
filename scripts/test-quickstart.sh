@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/polling.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_ENV_FILE="$REPO_ROOT/.env"
 ENV_FILE="${BITRIVER_SMOKE_ENV_FILE:-$REPO_ROOT/.env}"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
@@ -23,6 +24,7 @@ OME_CONFIG_EXISTED=false
 BITRIVER_DATA_DIR="$REPO_ROOT/deploy/data"
 TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
 CREATED_ENV_FILE=false
+CREATED_ROOT_ENV_BRIDGE=false
 CREATED_BITRIVER_DATA_DIR=false
 CREATED_TRANSCODER_DATA_DIR=false
 PYTHON_RUNNER=()
@@ -119,6 +121,10 @@ cleanup() {
     rm -f "$ENV_FILE"
   fi
 
+  if [ "$CREATED_ROOT_ENV_BRIDGE" = true ]; then
+    rm -f "$ROOT_ENV_FILE"
+  fi
+
   if [ "$CREATED_BITRIVER_DATA_DIR" = true ]; then
     rmdir "$BITRIVER_DATA_DIR" 2>/dev/null || true
   fi
@@ -206,6 +212,19 @@ BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
 fi
 
+if [[ "$ENV_FILE" != "$ROOT_ENV_FILE" ]]; then
+  if [ -e "$ROOT_ENV_FILE" ]; then
+    if ! cmp -s "$ENV_FILE" "$ROOT_ENV_FILE"; then
+      echo "error: explicit smoke env cannot replace an existing operator-owned root .env" >&2
+      exit 2
+    fi
+  else
+    cp "$ENV_FILE" "$ROOT_ENV_FILE"
+    chmod 600 "$ROOT_ENV_FILE"
+    CREATED_ROOT_ENV_BRIDGE=true
+  fi
+fi
+
 if [[ "$SMOKE_IMAGE_SOURCE" == "pull" ]]; then
   set -a
   # shellcheck disable=SC1090
@@ -274,7 +293,7 @@ grep_healthcheck() {
 
 grep_healthcheck "bitriver-live" "http://localhost:8080/healthz"
 grep_healthcheck "srs-controller" "http://localhost:1985/healthz"
-grep_healthcheck "srs" "http://localhost:1985/healthz"
+grep_healthcheck "srs" "/api/v1/versions"
 grep_healthcheck "ome" "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/"
 grep_healthcheck "transcoder" "http://localhost:9000/healthz"
 grep_healthcheck "postgres" "pg_isready"

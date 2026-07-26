@@ -29,8 +29,9 @@ func TestReleaseWorkflowKeepsCredentialsJobLocal(t *testing.T) {
 		`sentinel_file="$RUNNER_TEMP/release-secret-values"`,
 		"prepare_release_candidate.py metadata",
 		"prepare_release_candidate.py env",
+		"prepare_release_candidate.py dependencies",
 		"--unpublished-first-party-digests",
-		"--resolve-digests",
+		"--third-party-evidence",
 		`image_namespace="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"`,
 		"name: Remove job-local production inputs",
 		"if: always()",
@@ -77,6 +78,10 @@ func TestReleaseWorkflowBlocksPublicationOnPulledProductEvidence(t *testing.T) {
 		"docker logout ghcr.io",
 		"prepare_release_candidate.py images",
 		"--first-party-evidence",
+		"name: Download verified release dependency evidence",
+		"name: release-contract-evidence",
+		`dependency_evidence="$RUNNER_TEMP/release-contract-evidence/release-dependencies.json"`,
+		"--third-party-evidence",
 		"--product-loopback",
 		"BITRIVER_SMOKE_IMAGE_SOURCE: pull",
 		"BITRIVER_SMOKE_LIVE_MODE: production",
@@ -99,6 +104,27 @@ func TestReleaseWorkflowBlocksPublicationOnPulledProductEvidence(t *testing.T) {
 	releaseJob := workflow[releaseStart:]
 	if !strings.Contains(releaseJob, "- pull-only-product-gate") {
 		t.Fatal("GitHub Release creation must depend on the pulled-image product gate")
+	}
+}
+
+func TestReleaseWorkflowResolvesThirdPartyDependenciesOnce(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	if count := strings.Count(workflow, "prepare_release_candidate.py dependencies"); count != 1 {
+		t.Fatalf("release must resolve third-party dependencies exactly once, got %d", count)
+	}
+	if strings.Contains(workflow, "--resolve-digests") {
+		t.Fatal("release env jobs must consume immutable dependency evidence instead of resolving tags again")
+	}
+	for _, required := range []string{
+		`dependency_evidence="$evidence_dir/release-dependencies.json"`,
+		`--output "$dependency_evidence"`,
+		"name: Download verified release dependency evidence",
+		"path: ${{ runner.temp }}/release-contract-evidence",
+		`--third-party-evidence "$dependency_evidence"`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("release workflow missing reusable dependency evidence invariant %q", required)
+		}
 	}
 }
 
@@ -231,6 +257,44 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 	}
 	if strings.Contains(wix, `Source="$(var.SourceDir)\share\docker-compose.yml"`) {
 		t.Fatal("WiX source must not retain the old two-file share layout")
+	}
+}
+
+func TestReleaseArtifactFanoutUsesHostAndCurrentToolContracts(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+
+	if count := strings.Count(workflow, `host_goos="$(go env GOHOSTOS)"`); count != 3 {
+		t.Fatalf("cross-build host GOOS discovery count=%d, want 3 release matrix steps", count)
+	}
+	if count := strings.Count(workflow, `host_goarch="$(go env GOHOSTARCH)"`); count != 3 {
+		t.Fatalf("cross-build host GOARCH discovery count=%d, want 3 release matrix steps", count)
+	}
+	if count := strings.Count(workflow, `GOOS="$host_goos" GOARCH="$host_goarch"`); count != 4 {
+		t.Fatalf("host-scoped production verifier count=%d, want 4 call sites", count)
+	}
+
+	for _, required := range []string{
+		`$modFileArg = "-modfile=$($env:PRODUCTION_MODFILE)"`,
+		"go mod download $modFileArg all",
+		"go build $modFileArg -trimpath",
+		`cosign sign-blob --yes \`,
+		`--bundle "$launcher_root/bin/bitriver${bin_ext}.sigstore.json"`,
+		"if [ -d public ]; then",
+		`cp -R public "$bundle_root/public"`,
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("release workflow missing repaired fan-out contract %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"mod download -modfile=$env:PRODUCTION_MODFILE",
+		"go build -modfile=$env:PRODUCTION_MODFILE",
+		"--output-signature",
+		`.sig" "$launcher_root/bin/bitriver`,
+	} {
+		if strings.Contains(workflow, forbidden) {
+			t.Fatalf("release workflow retains failed rc.3 contract %q", forbidden)
+		}
 	}
 }
 

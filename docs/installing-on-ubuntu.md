@@ -64,12 +64,13 @@ Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from t
 Confirm the matching images are public before changing the host:
 
 ```bash
+release_tag=v1.2.3-rc.4
 for image in bitriver-live bitriver-viewer bitriver-srs-controller bitriver-transcoder bitriver-ome-config; do
-  docker buildx imagetools inspect "ghcr.io/prohibitedtv/${image}:v1.2.3-rc.1" >/dev/null
+  docker buildx imagetools inspect "ghcr.io/prohibitedtv/${image}:${release_tag}" >/dev/null
 done
 ```
 
-Replace `v1.2.3-rc.1` with the exact release tag you downloaded.
+Replace the sample `release_tag` with the exact release tag you downloaded.
 
 Example archive verification:
 
@@ -77,6 +78,18 @@ Example archive verification:
 grep 'bitriver-launcher-linux-amd64.tar.gz$' CHECKSUMS.txt | sha256sum --check -
 tar -xzf bitriver-launcher-linux-amd64.tar.gz
 cd bitriver-launcher-linux-amd64
+```
+
+The launcher also contains a keyless Sigstore bundle for its `bitriver`
+binary. If Cosign is installed, verify that the binary was signed by the exact
+tag workflow before running the installer:
+
+```bash
+cosign verify-blob \
+  --bundle bin/bitriver.sigstore.json \
+  --certificate-identity "https://github.com/ProhibitedTV/BitRiver-Live/.github/workflows/release.yml@refs/tags/${release_tag}" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  bin/bitriver
 ```
 
 ## 3. Stage the disabled service
@@ -90,7 +103,7 @@ sudo ./install.sh install --operator-user "$USER"
 Package path:
 
 ```bash
-sudo apt install ./bitriver-live_v1.2.3-rc.1_amd64.deb
+sudo apt install "./bitriver-live_${release_tag}_amd64.deb"
 sudo bitriver-host install --operator-user "$USER"
 ```
 

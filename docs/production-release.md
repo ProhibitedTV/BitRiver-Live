@@ -226,9 +226,10 @@ Keep this evidence attached to the release ticket/change request before maintena
    which rebuilds the Go binaries for every platform, packages the viewer
    bundle, publishes version-matched first-party container images (including
    the OME config helper), builds amd64/arm64 launcher archives plus `.deb`/`.rpm`
-   packages, and publishes the artefacts to the GitHub Release. A prerelease
-   tag is marked as a GitHub prerelease and does not move the `latest` image
-   tag. Monitor the workflow until every job completes successfully.
+   packages, signs each launcher binary into a Cosign `.sigstore.json` bundle,
+   and publishes the artefacts to the GitHub Release. A prerelease tag is marked
+   as a GitHub prerelease and does not move the `latest` image tag. Monitor the
+   workflow until every job completes successfully.
 
 The release job is blocked on package acceptance that installs and removes the
 amd64 package in Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers. This is
@@ -250,14 +251,18 @@ The release workflow does not require repository `BITRIVER_*` secrets. Its
 `verify-env` job derives strict version/package metadata from the tag, copies
 [`deploy/.env.example`](../deploy/.env.example) into the runner temporary
 directory, and replaces every sample credential with a strong job-local value.
-It also resolves current third-party image digests, validates the production
-contract with `deploy/check-env.sh`, and enforces digest pins with
-`scripts/require-image-digests.sh`.
+It resolves current third-party image digests once into the sanitized
+`release-dependencies.json` member of `release-contract-evidence`, validates the
+production contract with `deploy/check-env.sh`, and enforces digest pins with
+`scripts/require-image-digests.sh`. The downstream product gate validates and
+reuses that exact reference/digest set instead of resolving the same mutable
+tags again.
 
 Prepublication first-party digest placeholders prove only contract formatting;
 they are labeled that way in the redacted evidence. After the five tagged
-images publish, `pull-only-product-gate` logs out of GHCR, resolves their real
-anonymous manifests with bounded retries, pins those digests into a new
+images publish, `pull-only-product-gate` downloads the verified third-party
+dependency evidence, logs out of GHCR, resolves the first-party images' real
+anonymous manifests with bounded retries, pins both evidence sets into a new
 temporary input, and runs the canonical production/pull stack plus the full
 media/API golden path. GitHub Release creation cannot start until that job
 passes.

@@ -28,9 +28,13 @@ spec:
           livenessProbe:
             exec:
               command:
-                - sh
-                - -c
-                - curl -fsS http://localhost:1985/healthz || curl -fsS http://localhost:1985/api/v1/versions
+                - /bin/bash
+                - -ec
+                - >-
+                  exec 3<>/dev/tcp/127.0.0.1/1985;
+                  printf 'GET /api/v1/versions HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+                  IFS=' ' read -r _ status _ <&3;
+                  test "$status" = "200"
             initialDelaySeconds: 20
             periodSeconds: 30
             timeoutSeconds: 5
@@ -38,9 +42,13 @@ spec:
           readinessProbe:
             exec:
               command:
-                - sh
-                - -c
-                - curl -fsS http://localhost:1985/healthz || curl -fsS http://localhost:1985/api/v1/versions
+                - /bin/bash
+                - -ec
+                - >-
+                  exec 3<>/dev/tcp/127.0.0.1/1985;
+                  printf 'GET /api/v1/versions HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+                  IFS=' ' read -r _ status _ <&3;
+                  test "$status" = "200"
             initialDelaySeconds: 20
             periodSeconds: 15
             timeoutSeconds: 5

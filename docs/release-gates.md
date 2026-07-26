@@ -181,7 +181,9 @@ Before tagging, follow `docs/production-release.md`. A release candidate should 
 - release notes and changelog entries match the diff
 - release workflow artifacts are built from the intended tag
 - production credentials remain job-local and no populated environment or generated credential config is uploaded
-- `release-contract-evidence` reports successful environment and digest validation without values
+- `release-contract-evidence` reports successful environment validation and
+  includes the scanned immutable third-party reference/digest set reused by the
+  product gate, without credentials
 - every first-party manifest is anonymously readable under
   `ghcr.io/prohibitedtv/<image>:<exact-tag>` before publication proceeds
 - `release-product-evidence` proves the pulled, digest-pinned image set passed

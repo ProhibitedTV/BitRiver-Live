@@ -1,5 +1,7 @@
 import json
+import http.server
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -62,6 +64,107 @@ class PollingTests(unittest.TestCase):
             golden.bounded_poll(
                 "test readiness", 0.001, lambda: None, interval=0
             )
+
+
+class ProductClientTests(unittest.TestCase):
+    def test_secure_session_cookie_uses_same_origin_bearer_fallback(self):
+        token = "test-session-token"
+        primary_headers = []
+        cross_origin_headers = []
+
+        class PrimaryHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(201)
+                self.send_header(
+                    "Set-Cookie",
+                    "bitriver_session="
+                    f"{token}; Path=/; Secure; HttpOnly; SameSite=Strict",
+                )
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"user":{"id":"creator"}}')
+
+            def do_GET(self):
+                primary_headers.append(self.headers.get("Authorization"))
+                if self.headers.get("Authorization") not in {
+                    f"Bearer {token}",
+                    "Bearer explicit-test-token",
+                }:
+                    self.send_response(401)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"ready"}')
+
+            def log_message(self, _format, *_args):
+                return
+
+        class CrossOriginHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                cross_origin_headers.append(
+                    self.headers.get("Authorization")
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"public"}')
+
+            def log_message(self, _format, *_args):
+                return
+
+        primary = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), PrimaryHandler
+        )
+        cross_origin = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), CrossOriginHandler
+        )
+        threads = [
+            threading.Thread(target=server.serve_forever, daemon=True)
+            for server in (primary, cross_origin)
+        ]
+        for thread in threads:
+            thread.start()
+        try:
+            observed_tokens = []
+            base_url = f"http://127.0.0.1:{primary.server_port}"
+            client = golden.ProductClient(
+                base_url, 2.0, observed_tokens.append
+            )
+            client.request(
+                "/api/auth/signup",
+                method="POST",
+                payload={"displayName": "Creator"},
+                expected=(201,),
+            )
+            self.assertEqual(
+                client.request("/api/status"), {"status": "ready"}
+            )
+            self.assertEqual(
+                client.request(
+                    "/api/status",
+                    headers={"Authorization": "Bearer explicit-test-token"},
+                ),
+                {"status": "ready"},
+            )
+            client.request(
+                f"http://127.0.0.1:{cross_origin.server_port}/public"
+            )
+        finally:
+            primary.shutdown()
+            cross_origin.shutdown()
+            primary.server_close()
+            cross_origin.server_close()
+            for thread in threads:
+                thread.join(timeout=2)
+
+        self.assertEqual(
+            primary_headers,
+            [f"Bearer {token}", "Bearer explicit-test-token"],
+        )
+        self.assertEqual(cross_origin_headers, [None])
+        self.assertEqual(observed_tokens, [token])
 
 
 class PlaylistTests(unittest.TestCase):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import os
 import stat
 import sys
@@ -185,6 +186,53 @@ class ReleaseEnvironmentTests(unittest.TestCase):
                 secret_factory=self.secret_factory,
             )
 
+    def test_atomic_private_write_retries_transient_replace_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "candidate.env"
+            attempts = 0
+
+            def flaky_replace(source: Path, destination: Path) -> None:
+                nonlocal attempts
+                attempts += 1
+                if attempts < 3:
+                    raise PermissionError("simulated Windows sharing violation")
+                os.replace(source, destination)
+
+            candidate.atomic_private_write(
+                output,
+                "secret=value\n",
+                replace_func=flaky_replace,
+                sleep_func=lambda _: None,
+            )
+
+            self.assertEqual(attempts, 3)
+            self.assertEqual(output.read_text(encoding="utf-8"), "secret=value\n")
+            self.assertEqual(
+                [path for path in output.parent.iterdir() if path != output],
+                [],
+            )
+
+    def test_atomic_private_write_cleans_up_after_terminal_replace_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "candidate.env"
+
+            def always_fail(_: Path, __: Path) -> None:
+                raise PermissionError("persistent sharing violation")
+
+            with self.assertRaises(PermissionError):
+                candidate.atomic_private_write(
+                    output,
+                    "secret=value\n",
+                    replace_func=always_fail,
+                    sleep_func=lambda _: None,
+                    replace_attempts=2,
+                )
+
+            self.assertFalse(output.exists())
+            self.assertEqual(list(output.parent.iterdir()), [])
+
     def test_first_party_images_are_proven_and_applied(self) -> None:
         metadata = candidate.parse_tag("v1.2.3-rc.1")
         evidence = candidate.resolve_first_party_images(
@@ -228,6 +276,88 @@ class ReleaseEnvironmentTests(unittest.TestCase):
                 candidate.read_first_party_evidence(
                     evidence_path, metadata, "ghcr.io/prohibitedtv"
                 )
+
+    def test_third_party_evidence_is_complete_reusable_and_reference_bound(
+        self,
+    ) -> None:
+        evidence = candidate.resolve_third_party_images(
+            self.template,
+            digest_resolver=self.digest_resolver,
+            digest_attempts=1,
+            digest_delay_seconds=0,
+        )
+        self.assertEqual(
+            evidence["schemaVersion"], "bitriver.release-dependencies/v1"
+        )
+        self.assertTrue(evidence["registryManifestAccess"])
+        self.assertEqual(len(evidence["images"]), 8)
+
+        with tempfile.TemporaryDirectory() as directory:
+            evidence_path = Path(directory) / "dependencies.json"
+            evidence_path.write_text(
+                json.dumps(evidence), encoding="utf-8"
+            )
+            digests = candidate.read_third_party_evidence(
+                evidence_path, self.template
+            )
+            rendered, _ = candidate.prepare_environment(
+                self.template,
+                candidate.parse_tag("v1.2.3-rc.1"),
+                "ghcr.io/prohibitedtv",
+                resolve_digests=False,
+                third_party_digests=digests,
+                secret_factory=self.secret_factory,
+            )
+            for digest_key, _ in candidate.THIRD_PARTY_IMAGES:
+                self.assertRegex(
+                    rendered, rf"{digest_key}=@sha256:[12]{{64}}"
+                )
+
+            evidence["images"][0]["reference"] = "redis:latest"
+            evidence_path.write_text(
+                json.dumps(evidence), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                candidate.CandidateError, "reference mismatch"
+            ):
+                candidate.read_third_party_evidence(
+                    evidence_path, self.template
+                )
+
+            evidence["images"][0]["reference"] = "redis:7-alpine"
+            evidence["images"].pop()
+            evidence_path.write_text(
+                json.dumps(evidence), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(candidate.CandidateError, "missing keys"):
+                candidate.read_third_party_evidence(
+                    evidence_path, self.template
+                )
+
+            evidence["images"].append(dict(evidence["images"][0]))
+            evidence_path.write_text(
+                json.dumps(evidence), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(candidate.CandidateError, "repeats key"):
+                candidate.read_third_party_evidence(
+                    evidence_path, self.template
+                )
+
+    def test_third_party_evidence_and_registry_resolution_are_exclusive(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(candidate.CandidateError, "mutually exclusive"):
+            candidate.prepare_environment(
+                self.template,
+                candidate.parse_tag("v1.2.3-rc.1"),
+                "ghcr.io/prohibitedtv",
+                resolve_digests=True,
+                third_party_digests={
+                    key: "sha256:" + "a" * 64
+                    for key, _ in candidate.THIRD_PARTY_IMAGES
+                },
+                secret_factory=self.secret_factory,
+            )
 
     def test_cli_writes_private_separate_files_without_printing_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
