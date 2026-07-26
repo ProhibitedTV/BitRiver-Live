@@ -166,6 +166,21 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       ShellCheck, docs/workflow policy, wizard, and committed-secret guard.
     - PR #1331 is mergeable and its implementation matrix is green.
       Post-merge targeted workflow evidence remains pending.
+    - PR #1331 merged as `14ed412b`; post-merge monitoring run `30215316794`
+      and migrated Postgres run `30215315759` passed on that exact commit.
+    - Standalone Go run `30215317804` exposed two post-merge blockers: Ubuntu
+      leaked `GOPROXY=off` into production-module Docker downloads, while
+      macOS passed Go tests but found the generated Helm SRS copy stale.
+      The focused follow-up must restore network only around Ubuntu
+      `verify.sh`, regenerate Helm assets canonically, and repeat affected
+      release gates before tagging.
+    - The focused workflow regression, CI contract/policy checks, YAML parse,
+      generated Helm asset check, and `git diff --check` passed locally.
+    - Literal `./scripts/verify.sh` passed after selecting the repository's
+      installed Go 1.26.5 toolchain: all Go/script checks, Compose rendering,
+      migrations, production-module builds, OME/API/viewer health, and the
+      complete Docker quickstart smoke passed. The private root `.env` was
+      restored with its original SHA-256.
 
 - [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
   - Acceptance criteria:
