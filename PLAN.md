@@ -23,6 +23,11 @@
 - `ghcr.io/bitriver-live` is not an owned GitHub account namespace, while the repository owner is `ProhibitedTV`; the current workflow cannot publish the references Compose names. Changing the official default is a deployment-contract change and must update Compose, env, CLI preflight, Helm/docs, and generated contract evidence together.
 - GHCR packages may require a one-time public-visibility action after their first push. The workflow must prove anonymous manifest access before creating a GitHub Release; if visibility cannot be changed with the repository token, stop with the exact external action rather than publishing unusable assets.
 - Tag workflows publish immutable external state. A failed `v1.2.3-rc.1` is never force-moved or overwritten; corrections use `rc.2`.
+- The immutable `v1.2.3-rc.1` run reached release validation but stopped
+  before artifact/image publication because its fresh Postgres service database
+  was not migrated. `test-postgres.sh` intentionally requires
+  `BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1` for an externally supplied DSN;
+  both the tagged and reusable Postgres workflows must opt in explicitly.
 - Multi-architecture image publication is slower than registry index propagation. Use bounded manifest retries before the pull-only gate, not unbounded sleeps.
 - Production mode currently requires third-party digest pins but not first-party pins. Resolve and record first-party manifest digests in candidate evidence/release notes; do not claim digest-pinned clean-host proof from tag-only pulls.
 - The existing Windows workflow passes `v...` directly to WiX and stages files under paths WiX does not read. Static checks are insufficient; the remote Windows MSI job remains required before candidate publication.
@@ -40,6 +45,9 @@
 
 - Unit-test tag parsing, prerelease/latest behavior, env replacement, secret uniqueness, sentinel separation, digest formatting, no-value output, and failure on malformed tags or unresolved images.
 - Add workflow-contract tests requiring job-local credentials, the official/overridable GHCR namespace, the post-publish pull-only product job, scanner-approved artifact upload, stable-only `latest`, prerelease metadata, and release-job dependency ordering.
+- Add a workflow-contract regression requiring every CI-owned fresh Postgres
+  service DSN to opt into repository migrations, then run the real
+  Postgres-tagged suite against a disposable service database before `rc.2`.
 - Add quickstart regression tests proving build/development remains the default and pull/production performs no build while enforcing the supplied external env/digest contract.
 - Run shell syntax/ShellCheck, generated contract checks, focused Go/Python tests, Compose rendering in both build and pull shapes, release-bundle/package tests, and `git diff --check`.
 - Run `./scripts/verify.sh --viewer` and the full PR matrix. After merge, tag the RC, monitor every release job, inspect/download the published assets/checksums, verify anonymous GHCR access and image digests, and run a Docker Desktop pull-only golden path before handing the candidate to the clean Ubuntu/XOA gate.

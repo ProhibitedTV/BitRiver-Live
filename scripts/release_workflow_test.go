@@ -122,6 +122,35 @@ func TestReleaseWorkflowHandlesPrereleasesWithoutMovingLatest(t *testing.T) {
 	}
 }
 
+func TestWorkflowOwnedPostgresServicesApplyMigrations(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	for _, relativePath := range []string{
+		filepath.Join(".github", "workflows", "release.yml"),
+		filepath.Join(".github", "workflows", "postgres-tests.yml"),
+	} {
+		t.Run(filepath.Base(relativePath), func(t *testing.T) {
+			workflow := readRepoFile(t, repoRoot, relativePath)
+			stepStart := strings.Index(workflow, "- name: Run postgres-tagged storage tests")
+			if stepStart == -1 {
+				t.Fatal("postgres storage-test step not found")
+			}
+			step := workflow[stepStart:]
+			if nextStep := strings.Index(step[1:], "\n      - name:"); nextStep != -1 {
+				step = step[:nextStep+1]
+			}
+			for _, required := range []string{
+				"BITRIVER_TEST_POSTGRES_DSN:",
+				`BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS: "1"`,
+				"run: ./scripts/test-postgres.sh",
+			} {
+				if !strings.Contains(step, required) {
+					t.Fatalf("fresh workflow-owned Postgres service missing %q", required)
+				}
+			}
+		})
+	}
+}
+
 func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	for _, required := range []string{
