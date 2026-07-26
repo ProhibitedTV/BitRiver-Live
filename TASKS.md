@@ -74,6 +74,32 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The focused path-filter regression, CI contract, YAML parsing, and diff
       checks passed after the correction; a replacement PR run must exercise the
       complete reusable set before merge.
+    - Replacement run `30213641760` selected the full reusable set and exposed a
+      dormant monitoring failure: the pinned images launched `prometheus
+      promtool`/`alertmanager amtool` instead of the requested CLI. The focused
+      fix selects `/bin/promtool` and `/bin/amtool` explicitly and preserves Git
+      Bash volume-path conversion.
+    - Direct pinned-image proof then showed Prometheus config validation also
+      lacked the runtime-mounted metrics token file. Validation now creates a
+      mode-0600, non-secret temp token and mounts it read-only; repository and
+      log outputs retain no credential.
+    - The same proof caught a nested bind-mount conflict and missing runtime
+      rules path. Config, rules, and token are now mounted as separate
+      read-only files at the exact Compose paths; pinned Prometheus 2.51.2
+      accepted the config, discovered one rule file, and validated all nine
+      rules.
+    - An exact Git Bash plus Docker Desktop run also caught broad MSYS path
+      exclusions silently selecting the image-default config. Explicit
+      `cygpath` source normalization plus `--mount` now validates the repository
+      config and all nine rules through the Windows audience's real shell path.
+    - Monitoring Compose validation now supplies `deploy/.env.example`
+      explicitly so clean runners do not depend on an operator-owned root
+      `.env`. The real base-plus-monitoring overlay rendered successfully.
+    - The complete `./scripts` Go suite, Bash syntax, CI contract, Go-workflow
+      policy, all workflow/action YAML parsing, and `git diff --check` passed.
+      The replacement PR run remains responsible for the exact pinned
+      Alertmanager container validation after the local mount safety gate
+      declined that read-only fixture mount.
 
 - [x] Task 4 - Repair and deduplicate release preflight
   - Acceptance criteria:

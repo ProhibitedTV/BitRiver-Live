@@ -43,6 +43,28 @@
   and executes called docs/policy/image jobs, but showed that a reusable
   workflow edit did not select its own path-gated CI job. Each reusable workflow
   and setup action must therefore be an explicit input to the checks it owns.
+- Once selected, the dormant monitoring job exposed a stale container command:
+  the pinned Prometheus/Alertmanager images use server binaries as their
+  entrypoints, so passing `promtool`/`amtool` after the image makes the server
+  parse them as invalid arguments. Select `/bin/promtool` and `/bin/amtool`
+  explicitly and prove both real pinned images before accepting the job.
+- Prometheus config validation must also represent the runtime file contract
+  without using a real metrics credential. Create a private validation-only
+  token in the existing temporary directory, mount it read-only only for
+  container `promtool check config`, rewrite only the two runtime file paths in
+  a temporary config for native `promtool`, and remove all fixtures through the
+  existing exit trap. Mount the config, rules, and token as separate read-only
+  files at their real runtime paths; a read-only parent-directory mount cannot
+  accept a nested token mount and does not reproduce the Compose rules path.
+  On Docker Desktop through Git Bash, normalize only bind sources with
+  `cygpath` and disable automatic argument conversion for each `docker run`;
+  broad `/etc/...` exclusions also suppress conversion of the containing mount
+  argument and can silently validate the image-default config instead.
+- Monitoring's final Compose overlay render must use
+  `deploy/.env.example` explicitly. Clean GitHub runners do not have the
+  operator-owned root `.env`, so relying on Compose's implicit env discovery
+  makes the reusable validation nondeterministic and cannot prove the
+  repository-owned contract.
 - The `rc.2` release failure is bounded to the `go-tests` verification step:
   job-level `GOPROXY=off` is inherited by Compose build arguments, while
   `verify.sh` already applies offline variables directly to host Go tests.

@@ -104,3 +104,38 @@ func TestReusableImageScanUsesCurrentBoundedInstaller(t *testing.T) {
 		}
 	}
 }
+
+func TestMonitoringValidationSelectsContainerToolsExplicitly(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	script := readRepoFile(t, repoRoot, filepath.Join("scripts", "check-monitoring-config.sh"))
+	if count := strings.Count(script, "--entrypoint /bin/promtool"); count != 2 {
+		t.Fatalf("monitoring validation promtool entrypoint count=%d, want 2", count)
+	}
+	if count := strings.Count(script, "--entrypoint /bin/amtool"); count != 1 {
+		t.Fatalf("monitoring validation amtool entrypoint count=%d, want 1", count)
+	}
+	for _, required := range []string{
+		"umask 077",
+		"monitoring-config-validation-only",
+		`promtool check config "$PROM_CONFIG_VALIDATION"`,
+		`cygpath -w "$1"`,
+		"MSYS_NO_PATHCONV=1 docker run",
+		`source=$PROM_CONFIG_MOUNT,target=/etc/prometheus/prometheus.yml,readonly`,
+		`source=$PROM_RULES_MOUNT,target=/etc/prometheus/rules/prometheus-alerts.yml,readonly`,
+		`source=$PROM_TOKEN_MOUNT,target=/etc/prometheus/metrics.token,readonly`,
+		`source=$ALERT_CONFIG_MOUNT,target=/etc/alertmanager/alertmanager.yml,readonly`,
+		`docker compose --env-file "$ROOT_DIR/deploy/.env.example"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("monitoring validation missing non-secret token fixture %q", required)
+		}
+	}
+	for _, stale := range []string{
+		"prom/prometheus:v2.51.2 promtool",
+		"prom/alertmanager:v0.27.0 amtool",
+	} {
+		if strings.Contains(script, stale) {
+			t.Errorf("monitoring validation retains image-default entrypoint seam %q", stale)
+		}
+	}
+}
