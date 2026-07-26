@@ -181,6 +181,38 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       migrations, production-module builds, OME/API/viewer health, and the
       complete Docker quickstart smoke passed. The private root `.env` was
       restored with its original SHA-256.
+    - PR #1332 passed its selected CI matrix and merged as `3556c049`.
+      Merged-main standalone run `30215961551` then passed the repaired Ubuntu
+      full verification gate and macOS, but Windows failed the byte-for-byte
+      Helm SRS drift check because the canonical/generated `.conf` paths have
+      unspecified checkout line endings.
+    - Follow-up: pin both SRS paths to LF in `.gitattributes`, cover the
+      invariant with a focused test, rerun local policy/sync/full verification,
+      and require the standalone three-OS workflow to pass on merged `main`
+      before tagging.
+    - The LF attribute regression, generated-asset byte comparison, CI
+      contract check, and `git diff --check` passed locally. Literal
+      `./scripts/verify.sh` also passed with Go 1.26.5, including migrations,
+      production-module builds, OME/API/viewer health, and full Docker
+      quickstart smoke; the private `.env` retained its original SHA-256.
+    - Explicit PR-head standalone run `30216357352` passed the formerly failing
+      Windows Helm drift step. Windows then failed later because
+      `run-govulncheck.sh` passes Git Bash `/d/...` artifact paths to native
+      Python, which resolves them as missing `\d\...` paths.
+    - Follow-up: translate Bash paths only at the native Python boundary,
+      retain the blocking vulnerability policy, add focused Windows-path
+      coverage, and repeat the full local and three-OS remote gates.
+    - Added bounded Git Bash-to-native-Python path conversion for policy
+      inputs, outputs, and scan-index entries. Focused dependency-policy tests,
+      shell syntax, generated-asset comparison, CI contract checks, and another
+      literal `./scripts/verify.sh` passed; the Docker smoke again reached
+      healthy OME/API/viewer and the private `.env` hash was unchanged.
+    - PR-head standalone run `30216694278` passed on Ubuntu, macOS, and Windows;
+      Windows specifically passed Helm drift, function coverage, build,
+      blocking govulncheck policy, and artifact upload. Automatic PR run
+      `30216675113` passed unified Ubuntu verification, ShellCheck,
+      Windows/macOS Go tests, all three quickstart entrypoint paths, and the
+      secret guard. Exact merged-main proof remains required before tagging.
 
 - [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
   - Acceptance criteria:

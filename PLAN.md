@@ -95,6 +95,21 @@
   canonical forwarding-boundary comments in `deploy/srs/conf/srs.conf`.
   Regenerate through `scripts/sync-helm-deploy-assets.sh`; do not hand-edit the
   generated Helm copy or change canonical SRS behavior.
+- Merged-main standalone run `30215961551` proved the network repair on Ubuntu
+  and the regenerated asset on macOS, but Windows still reports SRS drift.
+  Both SRS files currently have unspecified Git EOL attributes; on Windows the
+  checked-out generated copy becomes CRLF throughout, while the sync script
+  builds its generated header with LF before appending the checked-out
+  canonical content. Pin both the canonical and generated SRS paths to LF in
+  `.gitattributes` and add a regression test for that repository invariant.
+  Do not weaken byte-for-byte generated-asset validation.
+- Explicit PR-head run `30216357352` proves that LF fix on Windows, then exposes
+  a later independent failure: Git Bash writes POSIX-style `/d/...` artifact
+  paths into the govulncheck scan index and passes the same form to native
+  Windows Python. `pathlib` interprets those as `\d\...` on the current drive.
+  Convert Bash paths at the Python boundary with `cygpath -w` when available,
+  including scan-index entries and every Python input/output argument; preserve
+  unchanged POSIX paths elsewhere and keep the vulnerability policy blocking.
 - User-owned untracked deployment notes/helpers/data and the private root
   `.env` remain outside this change and must not be staged, rewritten, or
   included in branch-cleanup evidence.

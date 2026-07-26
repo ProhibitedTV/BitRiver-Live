@@ -41,6 +41,17 @@ sanitize_label() {
   printf '%s' "$1" | tr ' /' '__' | tr -cd '[:alnum:]_.-'
 }
 
+python_path() {
+  local path="$1"
+  local platform
+  platform="$(uname -s)"
+  if [[ "$platform" =~ ^(MINGW|MSYS|CYGWIN) ]] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path"
+    return
+  fi
+  printf '%s\n' "$path"
+}
+
 run_govulncheck_scan() {
   local scan_label="$1"
   local goflags="$2"
@@ -66,7 +77,7 @@ run_govulncheck_scan() {
     return "$govuln_status"
   fi
 
-  printf '%s\t%s\n' "$scan_label" "$output_file" >>"$scan_index_file"
+  printf '%s\t%s\n' "$scan_label" "$(python_path "$output_file")" >>"$scan_index_file"
   return 0
 }
 
@@ -102,7 +113,13 @@ summary_file="${OUTPUT_DIR}/summary.json"
 new_file="${OUTPUT_DIR}/new-findings.json"
 all_findings_file="${OUTPUT_DIR}/findings.json"
 
-python3 - "$BASELINE_FILE" "$scan_index_file" "$summary_file" "$new_file" "$all_findings_file" "$go_version" "$goos" "$goarch" <<'PY'
+baseline_file_python="$(python_path "$BASELINE_FILE")"
+scan_index_file_python="$(python_path "$scan_index_file")"
+summary_file_python="$(python_path "$summary_file")"
+new_file_python="$(python_path "$new_file")"
+all_findings_file_python="$(python_path "$all_findings_file")"
+
+python3 - "$baseline_file_python" "$scan_index_file_python" "$summary_file_python" "$new_file_python" "$all_findings_file_python" "$go_version" "$goos" "$goarch" <<'PY'
 import json
 import pathlib
 import sys
@@ -268,10 +285,10 @@ findings_path.write_text(json.dumps(processed, indent=2) + "\n", encoding="utf-8
 PY
 
 echo "=== New vulnerabilities introduced ==="
-if [ "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$new_file")" -eq 0 ]; then
+if [ "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$new_file_python")" -eq 0 ]; then
   echo "None"
 else
-  python3 - "$new_file" <<'PY'
+  python3 - "$new_file_python" <<'PY'
 import json
 import sys
 items = json.load(open(sys.argv[1], "r", encoding="utf-8"))
@@ -283,7 +300,7 @@ fi
 
 echo
 echo "=== Govulncheck summary ==="
-python3 - "$summary_file" <<'PY'
+python3 - "$summary_file_python" <<'PY'
 import json
 import sys
 summary = json.load(open(sys.argv[1], "r", encoding="utf-8"))
@@ -298,4 +315,4 @@ PY
 
 echo "Artifacts written to: ${OUTPUT_DIR}"
 
-test "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$new_file")" -eq 0
+test "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$new_file_python")" -eq 0

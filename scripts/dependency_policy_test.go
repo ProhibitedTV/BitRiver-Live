@@ -67,6 +67,9 @@ func TestGovulncheckPolicyFailsClosed(t *testing.T) {
 		`("id", "owner", "reason", "tracking_issue", "expires")`,
 		`decoder.raw_decode(data, offset)`,
 		`package.get("name")`,
+		`cygpath -w "$path"`,
+		`"$(python_path "$output_file")"`,
+		`"$new_file_python"`,
 		"expired on",
 		`finding["policy"] = "disallowed-reachable"`,
 	} {
