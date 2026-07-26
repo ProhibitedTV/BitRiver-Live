@@ -142,7 +142,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Focused release/Postgres/network/setup regressions, CI policy, Go workflow
       policy, and all workflow/action YAML parsing passed.
 
-- [-] Task 5 - Verify locally and through GitHub
+- [x] Task 5 - Verify locally and through GitHub
   - Acceptance criteria:
     - Workflow/action parsing, policy checks, focused tests, and full
       `./scripts/verify.sh --viewer` pass.
@@ -213,6 +213,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `30216675113` passed unified Ubuntu verification, ShellCheck,
       Windows/macOS Go tests, all three quickstart entrypoint paths, and the
       secret guard. Exact merged-main proof remains required before tagging.
+    - PR #1333 merged as `7b3d95d6`; exact merged-main standalone run
+      `30217192656` passed Ubuntu full verification plus macOS/Windows unit,
+      generated-asset, function-coverage, build, blocking govulncheck, and
+      artifact-upload gates. Task 5 is complete and `v1.2.3-rc.3` may be tagged
+      from the evidence-only mainline successor.
 
 - [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
   - Acceptance criteria:
