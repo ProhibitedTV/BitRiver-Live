@@ -97,6 +97,7 @@ if command -v amtool >/dev/null 2>&1; then
 elif command -v docker >/dev/null 2>&1; then
   ALERT_CONFIG_MOUNT="$(docker_host_path "$ALERT_CONFIG")"
   MSYS_NO_PATHCONV=1 docker run --rm \
+    --user "$(id -u):$(id -g)" \
     --entrypoint /bin/amtool \
     --mount "type=bind,source=$ALERT_CONFIG_MOUNT,target=/etc/alertmanager/alertmanager.yml,readonly" \
     prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml

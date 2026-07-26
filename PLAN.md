@@ -60,6 +60,9 @@
   `cygpath` and disable automatic argument conversion for each `docker run`;
   broad `/etc/...` exclusions also suppress conversion of the containing mount
   argument and can silently validate the image-default config instead.
+- Keep the rendered Alertmanager config mode 0600. Its container validator must
+  run as the invoking host UID/GID so the bind remains readable without making
+  a potentially credential-bearing render group- or world-readable.
 - Monitoring's final Compose overlay render must use
   `deploy/.env.example` explicitly. Clean GitHub runners do not have the
   operator-owned root `.env`, so relying on Compose's implicit env discovery

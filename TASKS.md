@@ -100,6 +100,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       The replacement PR run remains responsible for the exact pinned
       Alertmanager container validation after the local mount safety gate
       declined that read-only fixture mount.
+    - Replacement run `30214144580` passed the corrected Prometheus config and
+      nine-rule validation, then showed `amtool` could not read the intentionally
+      mode-0600 render as the image's default UID. The container now runs as the
+      invoking host UID/GID so validation retains the private file mode.
 
 - [x] Task 4 - Repair and deduplicate release preflight
   - Acceptance criteria:

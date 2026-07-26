@@ -123,6 +123,7 @@ func TestMonitoringValidationSelectsContainerToolsExplicitly(t *testing.T) {
 		`source=$PROM_CONFIG_MOUNT,target=/etc/prometheus/prometheus.yml,readonly`,
 		`source=$PROM_RULES_MOUNT,target=/etc/prometheus/rules/prometheus-alerts.yml,readonly`,
 		`source=$PROM_TOKEN_MOUNT,target=/etc/prometheus/metrics.token,readonly`,
+		`--user "$(id -u):$(id -g)"`,
 		`source=$ALERT_CONFIG_MOUNT,target=/etc/alertmanager/alertmanager.yml,readonly`,
 		`docker compose --env-file "$ROOT_DIR/deploy/.env.example"`,
 	} {
