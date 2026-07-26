@@ -127,6 +127,11 @@ func TestMonitoringValidationSelectsContainerToolsExplicitly(t *testing.T) {
 		`source=$PROM_TOKEN_MOUNT,target=/etc/prometheus/metrics.token,readonly`,
 		`--user "$(id -u):$(id -g)"`,
 		`source=$ALERT_CONFIG_MOUNT,target=/etc/alertmanager/alertmanager.yml,readonly`,
+		`if [[ ! -e "$COMPOSE_ENV" && ! -L "$COMPOSE_ENV" ]]`,
+		`cp "$ROOT_DIR/deploy/.env.example" "$COMPOSE_ENV"`,
+		`COMPOSE_ENV_CREATED=1`,
+		`if [[ "$COMPOSE_ENV_CREATED" == "1" ]]`,
+		`rm -f "$COMPOSE_ENV"`,
 		`docker compose --env-file "$ROOT_DIR/deploy/.env.example"`,
 	} {
 		if !strings.Contains(script, required) {

@@ -8,6 +8,7 @@ ALERT_TEMPLATE="$ROOT_DIR/deploy/monitoring/alertmanager.yml.tmpl"
 RENDER_SCRIPT="$ROOT_DIR/scripts/render-alertmanager-config.sh"
 COMPOSE_BASE="$ROOT_DIR/deploy/docker-compose.yml"
 COMPOSE_MONITORING="$ROOT_DIR/deploy/docker-compose.monitoring.yml"
+COMPOSE_ENV="$ROOT_DIR/.env"
 GRAFANA_DS="$ROOT_DIR/deploy/monitoring/grafana/provisioning/datasources/prometheus.yml"
 GRAFANA_DASH_PROVISIONING="$ROOT_DIR/deploy/monitoring/grafana/provisioning/dashboards/bitriver-live.yml"
 GRAFANA_DASH_JSON="$ROOT_DIR/deploy/monitoring/bitriver-live-dashboard.json"
@@ -16,7 +17,15 @@ ALERT_CONFIG="$TMP_DIR/alertmanager.yml"
 PROM_TOKEN="$TMP_DIR/metrics.token"
 PROM_CONFIG_VALIDATION="$TMP_DIR/prometheus.yml"
 PROM_RULES_DIR="$TMP_DIR/rules"
-trap 'rm -rf "$TMP_DIR"' EXIT
+COMPOSE_ENV_CREATED=0
+
+cleanup() {
+  rm -rf "$TMP_DIR"
+  if [[ "$COMPOSE_ENV_CREATED" == "1" ]]; then
+    rm -f "$COMPOSE_ENV"
+  fi
+}
+trap cleanup EXIT
 
 required_files=(
   "$PROM_CONFIG"
@@ -107,6 +116,10 @@ else
 fi
 
 if command -v docker >/dev/null 2>&1; then
+  if [[ ! -e "$COMPOSE_ENV" && ! -L "$COMPOSE_ENV" ]]; then
+    cp "$ROOT_DIR/deploy/.env.example" "$COMPOSE_ENV"
+    COMPOSE_ENV_CREATED=1
+  fi
   docker compose --env-file "$ROOT_DIR/deploy/.env.example" \
     -f "$COMPOSE_BASE" \
     -f "$COMPOSE_MONITORING" \

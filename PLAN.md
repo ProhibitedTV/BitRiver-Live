@@ -72,6 +72,11 @@
   operator-owned root `.env`, so relying on Compose's implicit env discovery
   makes the reusable validation nondeterministic and cannot prove the
   repository-owned contract.
+- Because service-level `env_file: ../.env` is resolved independently from
+  Compose's interpolation `--env-file`, create a mode-0600 root validation copy
+  from `deploy/.env.example` only when `.env` is absent. Track ownership and
+  remove only that validator-created file on every exit; never rewrite or
+  delete an existing operator `.env`.
 - The `rc.2` release failure is bounded to the `go-tests` verification step:
   job-level `GOPROXY=off` is inherited by Compose build arguments, while
   `verify.sh` already applies offline variables directly to host Go tests.

@@ -109,6 +109,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `envsubst` or Python. All six defaults are now exported, and a functional
       regression renders from an absent env file and requires every non-empty
       example URL/token.
+    - Run `30214370984` passed Prometheus, all nine rules, and `amtool`, then
+      exposed Compose's separate service-level `env_file: ../.env` resolution.
+      Validation now creates a private example-derived root `.env` only when
+      absent and removes only its own file through the exit trap; an existing
+      operator `.env` is neither rewritten nor deleted.
 
 - [x] Task 4 - Repair and deduplicate release preflight
   - Acceptance criteria:
