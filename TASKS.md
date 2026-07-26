@@ -68,6 +68,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Required local verification and full remote PR CI pass with unrelated user files and private `.env` excluded.
     - The merged commit receives one immutable RC tag; the release workflow, packages, checksums, public image access, and pulled-image golden path pass.
     - Failure never force-moves a tag; the next attempt increments the RC. Remaining clean Ubuntu/XOA/NPM/browser/reboot work is stated exactly.
+    - Every workflow-owned fresh Postgres service explicitly applies repository
+      migrations before tagged storage tests, with a contract regression covering
+      both the reusable and release workflows.
   - Check:
     - Local `./scripts/verify.sh --viewer` passed in 196.1 seconds with pinned Go 1.26.5: all Go packages, architecture/contract/schema checks, release-bundle validation, Postgres migration lifecycle, Compose config, Docker Desktop source quickstart, viewer lint, and 25 suites/215 tests passed.
     - The private root `.env` was moved outside the checkout only for that run, restored in `finally`, and retained the exact SHA-256 hash. The canonical smoke left no BitRiver containers.
@@ -107,7 +110,26 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       1.26.5, all Go/contract/Postgres checks, Docker Compose full-stack
       quickstart, OME health, API/viewer probes, and matching private `.env`
       restoration hash.
-    - PR, remote CI, merge, immutable RC tag, published assets/images, anonymous pull, and tag-workflow product evidence remain pending.
+    - PR #1329 merged as `fbf0df9c`; verified Dependabot PR #1327 then
+      fast-forwarded `main` to `6d78d75e`. The immutable
+      `v1.2.3-rc.1` tag was created and pushed on that exact commit.
+    - Release run `30211792842` passed secret-safe production-environment
+      validation, then stopped before builds/publication in `Postgres storage
+      tests`: the workflow supplied a fresh service DSN without
+      `BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1`, so the script correctly
+      rejected the missing schema. Keep `rc.1` immutable, fix both CI-owned
+      Postgres service workflows with regression coverage, and use `rc.2`.
+    - Both workflow steps now opt into migrations explicitly. The focused Go
+      workflow-contract suite passed, and a disposable Linux proof using
+      Postgres 15 plus Go 1.26.5 applied migrations 0001-0011 through the
+      supplied-DSN branch and passed `go test -tags postgres
+      ./internal/storage/...`.
+    - The complete `./scripts/verify.sh` gate passed on the fix branch:
+      all Go/architecture/contract/Postgres checks, Docker Compose render,
+      source-build quickstart, OME health, API/viewer probes, and private
+      `.env` hash restoration succeeded.
+    - Published assets/images, anonymous pull, and tag-workflow product
+      evidence remain pending.
 
 ## Scoped change: full-stack production golden-path E2E (#1300)
 

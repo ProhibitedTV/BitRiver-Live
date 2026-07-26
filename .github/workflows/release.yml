@@ -237,6 +237,7 @@ jobs:
         env:
           # GitHub Actions service containers are accessed from the host runner via published ports.
           BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@127.0.0.1:54329/bitriver_test?sslmode=disable
+          BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS: "1"
         run: ./scripts/test-postgres.sh
 
   build:
