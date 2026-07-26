@@ -85,6 +85,16 @@
 - The `rc.2` release failure is bounded to the `go-tests` verification step:
   job-level `GOPROXY=off` is inherited by Compose build arguments, while
   `verify.sh` already applies offline variables directly to host Go tests.
+- Post-merge standalone Go run `30215317804` exposed the same network-scope
+  leak in `go-unit-tests.yml`: its Ubuntu `verify.sh` step inherits job-level
+  offline settings into clean Docker builds. Restore the public proxy/checksum
+  database only for that verification step, matching the repaired release
+  workflow while leaving direct host Go steps offline.
+- The same run passed macOS Go tests, then failed the generated Helm asset
+  drift check because `deploy/helm/bitriver-live/files/srs.conf` predates the
+  canonical forwarding-boundary comments in `deploy/srs/conf/srs.conf`.
+  Regenerate through `scripts/sync-helm-deploy-assets.sh`; do not hand-edit the
+  generated Helm copy or change canonical SRS behavior.
 - User-owned untracked deployment notes/helpers/data and the private root
   `.env` remain outside this change and must not be staged, rewritten, or
   included in branch-cleanup evidence.

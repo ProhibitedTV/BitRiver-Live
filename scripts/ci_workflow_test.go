@@ -93,6 +93,26 @@ func TestQuickstartEntrypointMatrixUsesRepositoryGoToolchain(t *testing.T) {
 	}
 }
 
+func TestStandaloneGoVerificationRestoresDependencyNetworkForCompose(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "go-unit-tests.yml"))
+	start := strings.Index(workflow, "- name: Run verification gate")
+	end := strings.Index(workflow, "# ci-contract: allow-duplicate")
+	if start < 0 || end <= start {
+		t.Fatal("standalone Go workflow is missing the bounded Ubuntu verification step")
+	}
+	verificationStep := workflow[start:end]
+	for _, required := range []string{
+		"GOPROXY: https://proxy.golang.org,direct",
+		"GOSUMDB: sum.golang.org",
+		"run: ./scripts/verify.sh",
+	} {
+		if !strings.Contains(verificationStep, required) {
+			t.Errorf("standalone Go verification step missing %q", required)
+		}
+	}
+}
+
 func TestSetupActionsDoNotOwnCheckout(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	for _, relativePath := range []string{

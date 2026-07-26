@@ -37,6 +37,10 @@ jobs:
       - name: Run verification gate
         if: matrix.os == 'ubuntu-latest'
         shell: bash
+        env:
+          # verify.sh forces host Go tests offline; Compose builds need the real dependency graph.
+          GOPROXY: https://proxy.golang.org,direct
+          GOSUMDB: sum.golang.org
         run: ./scripts/verify.sh
 
       # ci-contract: allow-duplicate Cross-platform coverage on non-Linux runners.
