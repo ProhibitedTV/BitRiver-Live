@@ -9,7 +9,6 @@ import (
 func TestViewerDependencyAuditsAreBlocking(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	for _, workflowPath := range []string{
-		filepath.Join(".github", "workflows", "ci.yml"),
 		filepath.Join(".github", "workflows", "viewer-ci.yml"),
 		filepath.Join(".github", "workflows", "release.yml"),
 	} {
@@ -25,16 +24,20 @@ func TestViewerDependencyAuditsAreBlocking(t *testing.T) {
 	}
 
 	mainWorkflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml"))
-	auditIndex := strings.Index(mainWorkflow, "npm audit --audit-level=high")
-	if auditIndex == -1 {
-		t.Fatal("main workflow missing npm audit")
+	if !strings.Contains(mainWorkflow, "uses: ./.github/workflows/viewer-ci.yml") {
+		t.Fatal("main workflow must delegate viewer checks to the reusable workflow")
 	}
-	auditTail := mainWorkflow[auditIndex:]
+	if strings.Contains(mainWorkflow, "npm audit --audit-level=high") {
+		t.Fatal("main workflow must not duplicate the reusable viewer audit")
+	}
+
+	auditIndex := strings.Index(viewerWorkflow, "npm audit --audit-level=high")
+	auditTail := viewerWorkflow[auditIndex:]
 	if newline := strings.Index(auditTail, "\n\n"); newline >= 0 {
 		auditTail = auditTail[:newline]
 	}
 	if strings.Contains(auditTail, "continue-on-error") {
-		t.Fatal("main workflow npm audit must not continue on error")
+		t.Fatal("reusable viewer workflow npm audit must not continue on error")
 	}
 }
 

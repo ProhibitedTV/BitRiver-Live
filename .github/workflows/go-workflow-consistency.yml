@@ -1,6 +1,7 @@
 name: Go workflow consistency
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 jobs:

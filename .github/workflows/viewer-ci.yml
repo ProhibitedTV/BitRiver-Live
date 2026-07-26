@@ -4,8 +4,12 @@ on:
   workflow_call:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  viewer:
+    name: Viewer tests, build, and dependency audit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -31,18 +35,6 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
-
-  audit:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web/viewer
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up viewer Node toolchain
-        uses: ./.github/actions/setup-node-viewer
 
       - name: Audit dependencies
         run: npm audit --audit-level=high

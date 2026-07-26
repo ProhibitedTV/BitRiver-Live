@@ -1,5 +1,133 @@
 # PLAN
 
+## Current scope - branch hygiene and release CI consolidation (2026-07-26)
+
+- Reduce the remote branch inventory without risking active or unincorporated
+  work. Delete only branches whose tips are ancestors of `origin/main`; retain
+  every non-ancestor branch until its pull-request history and remaining diff
+  are classified separately.
+- Keep `ci.yml` as the only automatic pull-request/main orchestrator. Make the
+  targeted manual workflows reusable, then have CI call those definitions
+  instead of maintaining inline copies for viewer, image scan, shell, docs,
+  monitoring, workflow-policy, wizard, and quickstart-entrypoint checks.
+- Keep intentionally distinct heavyweight paths separate: the unified Ubuntu
+  `test-all` gate owns changed-path integration/Compose work, the production
+  golden-path workflow owns full media acceptance, and the standalone Go gate
+  owns manual full-matrix/govulncheck coverage.
+- Make the tag workflow call the reusable Postgres workflow rather than owning a
+  second service definition. Keep host Go verification offline, but restore the
+  public Go proxy/checksum database only for the release verification step so
+  clean Compose image builds can resolve `go.production.mod`.
+- Centralize runtime setup in the local setup actions without a hidden second
+  checkout. Every workflow remains responsible for one explicit, SHA-pinned
+  checkout before invoking a setup action.
+- The reusable quickstart entrypoint matrix must invoke the shared Go setup
+  after checkout. `quickstart.ps1 -ValidateOnly` compiles and runs the real CLI,
+  so accepting whatever Go version happens to be preinstalled on each runner
+  makes the Windows/macOS results nondeterministic. The optional full Compose
+  smoke job must use the same setup before invoking its source-driven wrapper.
+- Do not create `v1.2.3-rc.3` until focused workflow regressions, the complete
+  local gate, the pull-request matrix, and a post-merge targeted workflow run
+  are green. Failed `rc.1` and `rc.2` tags remain immutable.
+
+### Audit evidence and assumptions
+
+- The fetched remote contains exactly 1,000 branches: 943 non-default branch
+  tips are ancestors of `origin/main`, while 57 are not. GitHub reports no open
+  pull requests and no protected branches. `main` and every non-ancestor branch
+  are excluded from the first cleanup pass.
+- The repository registers 13 workflow files plus GitHub's Dependabot workflow.
+  Only `ci.yml` automatically runs for pull requests/main; the other CI
+  workflows are manual and/or reusable, and `release.yml` is tag-only.
+- Proven drift exists today: `ci.yml` embeds Trivy 0.70.0 with bounded download
+  retries while the standalone image workflow embeds 0.50.1 without them.
+  Release also duplicates the reusable Postgres service, which already caused
+  `rc.1` to diverge, and both setup composite actions perform a second checkout
+  using a different action pin than their callers.
+- The first consolidation PR run proved GitHub accepts the reusable-call graph
+  and executes called docs/policy/image jobs, but showed that a reusable
+  workflow edit did not select its own path-gated CI job. Each reusable workflow
+  and setup action must therefore be an explicit input to the checks it owns.
+- Once selected, the dormant monitoring job exposed a stale container command:
+  the pinned Prometheus/Alertmanager images use server binaries as their
+  entrypoints, so passing `promtool`/`amtool` after the image makes the server
+  parse them as invalid arguments. Select `/bin/promtool` and `/bin/amtool`
+  explicitly and prove both real pinned images before accepting the job.
+- Prometheus config validation must also represent the runtime file contract
+  without using a real metrics credential. Create a private validation-only
+  token in the existing temporary directory, mount it read-only only for
+  container `promtool check config`, rewrite only the two runtime file paths in
+  a temporary config for native `promtool`, and remove all fixtures through the
+  existing exit trap. Mount the config, rules, and token as separate read-only
+  files at their real runtime paths; a read-only parent-directory mount cannot
+  accept a nested token mount and does not reproduce the Compose rules path.
+  On Docker Desktop through Git Bash, normalize only bind sources with
+  `cygpath` and disable automatic argument conversion for each `docker run`;
+  broad `/etc/...` exclusions also suppress conversion of the containing mount
+  argument and can silently validate the image-default config instead.
+- Keep the rendered Alertmanager config mode 0600. Its container validator must
+  run as the invoking host UID/GID so the bind remains readable without making
+  a potentially credential-bearing render group- or world-readable.
+- Export the renderer's six fallback webhook variables after assigning them.
+  Both supported substitution engines consume the process environment, so
+  unexported shell defaults otherwise become empty URLs/tokens and produce an
+  invalid clean-runner config.
+- Monitoring's final Compose overlay render must use
+  `deploy/.env.example` explicitly. Clean GitHub runners do not have the
+  operator-owned root `.env`, so relying on Compose's implicit env discovery
+  makes the reusable validation nondeterministic and cannot prove the
+  repository-owned contract.
+- Because service-level `env_file: ../.env` is resolved independently from
+  Compose's interpolation `--env-file`, create a mode-0600 root validation copy
+  from `deploy/.env.example` only when `.env` is absent. Track ownership and
+  remove only that validator-created file on every exit; never rewrite or
+  delete an existing operator `.env`.
+- The `rc.2` release failure is bounded to the `go-tests` verification step:
+  job-level `GOPROXY=off` is inherited by Compose build arguments, while
+  `verify.sh` already applies offline variables directly to host Go tests.
+- User-owned untracked deployment notes/helpers/data and the private root
+  `.env` remain outside this change and must not be staged, rewritten, or
+  included in branch-cleanup evidence.
+
+### Risks
+
+- Squash merges do not make a historical head an ancestor of `main`. This is why
+  the 57 non-ancestor branches are retained during the ancestry-safe cleanup
+  even when their work may already be represented on `main`.
+- Remote deletion of all 943 ancestry-merged branches is intentionally pending
+  a separate explicit confirmation after the execution safety gate rejected the
+  broad mutation. No branch was deleted; CI/release work can proceed
+  independently from the preserved cleanup classification.
+- Reusable-workflow calls change the displayed check hierarchy. There are no
+  protected-branch required-check rules today, but the complete PR run must
+  prove all path-gated jobs still execute or skip as intended before merge.
+- A called workflow cannot elevate caller permissions. The image scan caller
+  must explicitly retain `contents: read` and `packages: read`.
+- Consolidation must not make CI repeat the same Docker lifecycle. The CI call
+  to quickstart smoke will run entrypoint checks only because the unified Ubuntu
+  gate already owns Compose smoke for relevant changes.
+- A green source/CI candidate still does not prove clean Ubuntu/XOA install,
+  Nginx Proxy Manager browser access, reboot recovery, or OME recovery. Those
+  remain stable-promotion evidence after tagged artifacts exist.
+
+### Test and publication plan
+
+- Add workflow-contract tests requiring CI reusable calls, one checkout per
+  workflow path, release reuse of Postgres, explicit migrations in the reusable
+  service, and release verification proxy/checksum restoration.
+- Update existing image/viewer/release tests to inspect the single source of
+  truth instead of requiring duplicated commands in `ci.yml`.
+- Parse every workflow/action YAML file, run `check-ci-contract.sh`,
+  `check-go-workflow-config.sh`, focused Go script tests, shell syntax, and
+  `git diff --check`.
+- Run literal `./scripts/verify.sh --viewer` while preserving/restoring the
+  operator's private root `.env`, then push a small PR and require the complete
+  remote CI result.
+- After merge, manually dispatch the reusable Postgres and other release-relevant
+  targeted gates as needed. Only then tag `v1.2.3-rc.3`, monitor every release
+  job, inspect checksums/packages, prove anonymous GHCR pulls, and run the
+  Docker Desktop pull-only product gate before clean Ubuntu/XOA acceptance.
+
 ## Current scope - first public release-candidate publication gate (#1297, 2026-07-24)
 
 - Make the tag-triggered release workflow runnable from this public repository without preloading deployment credentials. Generate strong job-local validation credentials, retain only sentinel-scanned status evidence, and keep real operator secrets entirely outside GitHub Actions.
@@ -28,6 +156,11 @@
   was not migrated. `test-postgres.sh` intentionally requires
   `BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1` for an externally supplied DSN;
   both the tagged and reusable Postgres workflows must opt in explicitly.
+- The immutable `v1.2.3-rc.2` run crossed the Postgres gate, then stopped
+  before builds because the release Go job's host-only `GOPROXY=off` policy
+  leaked through Compose into clean Docker builds. Keep host Go tests offline,
+  but give the release verification step the real upstream proxy/checksum
+  settings already used by artifact builders.
 - Multi-architecture image publication is slower than registry index propagation. Use bounded manifest retries before the pull-only gate, not unbounded sleeps.
 - Production mode currently requires third-party digest pins but not first-party pins. Resolve and record first-party manifest digests in candidate evidence/release notes; do not claim digest-pinned clean-host proof from tag-only pulls.
 - The existing Windows workflow passes `v...` directly to WiX and stages files under paths WiX does not read. Static checks are insufficient; the remote Windows MSI job remains required before candidate publication.
@@ -48,6 +181,9 @@
 - Add a workflow-contract regression requiring every CI-owned fresh Postgres
   service DSN to opt into repository migrations, then run the real
   Postgres-tagged suite against a disposable service database before `rc.2`.
+- Add a release-workflow regression requiring the verification step to restore
+  production dependency network settings before Docker builds while
+  `verify.sh` continues to force host Go tests offline.
 - Add quickstart regression tests proving build/development remains the default and pull/production performs no build while enforcing the supplied external env/digest contract.
 - Run shell syntax/ShellCheck, generated contract checks, focused Go/Python tests, Compose rendering in both build and pull shapes, release-bundle/package tests, and `git diff --check`.
 - Run `./scripts/verify.sh --viewer` and the full PR matrix. After merge, tag the RC, monitor every release job, inspect/download the published assets/checksums, verify anonymous GHCR access and image digests, and run a Docker Desktop pull-only golden path before handing the candidate to the clean Ubuntu/XOA gate.

@@ -28,11 +28,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
-        with:
-          checkout-fetch-depth: '0'
 
       - name: Run verification gate
         if: matrix.os == 'ubuntu-latest'

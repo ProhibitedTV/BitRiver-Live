@@ -8,12 +8,24 @@ ALERT_TEMPLATE="$ROOT_DIR/deploy/monitoring/alertmanager.yml.tmpl"
 RENDER_SCRIPT="$ROOT_DIR/scripts/render-alertmanager-config.sh"
 COMPOSE_BASE="$ROOT_DIR/deploy/docker-compose.yml"
 COMPOSE_MONITORING="$ROOT_DIR/deploy/docker-compose.monitoring.yml"
+COMPOSE_ENV="$ROOT_DIR/.env"
 GRAFANA_DS="$ROOT_DIR/deploy/monitoring/grafana/provisioning/datasources/prometheus.yml"
 GRAFANA_DASH_PROVISIONING="$ROOT_DIR/deploy/monitoring/grafana/provisioning/dashboards/bitriver-live.yml"
 GRAFANA_DASH_JSON="$ROOT_DIR/deploy/monitoring/bitriver-live-dashboard.json"
 TMP_DIR="$(mktemp -d)"
 ALERT_CONFIG="$TMP_DIR/alertmanager.yml"
-trap 'rm -rf "$TMP_DIR"' EXIT
+PROM_TOKEN="$TMP_DIR/metrics.token"
+PROM_CONFIG_VALIDATION="$TMP_DIR/prometheus.yml"
+PROM_RULES_DIR="$TMP_DIR/rules"
+COMPOSE_ENV_CREATED=0
+
+cleanup() {
+  rm -rf "$TMP_DIR"
+  if [[ "$COMPOSE_ENV_CREATED" == "1" ]]; then
+    rm -f "$COMPOSE_ENV"
+  fi
+}
+trap cleanup EXIT
 
 required_files=(
   "$PROM_CONFIG"
@@ -46,16 +58,42 @@ end
 RUBY
 }
 
+docker_host_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+    return
+  fi
+  printf '%s\n' "$1"
+}
+
 validate_with_ruby_yaml "$GRAFANA_DS" "$GRAFANA_DASH_PROVISIONING" "$COMPOSE_MONITORING"
 
+umask 077
+printf 'monitoring-config-validation-only\n' >"$PROM_TOKEN"
+mkdir -p "$PROM_RULES_DIR"
+cp "$PROM_RULES" "$PROM_RULES_DIR/prometheus-alerts.yml"
+sed \
+  -e "s|/etc/prometheus/metrics.token|$PROM_TOKEN|g" \
+  -e "s|/etc/prometheus/rules/\\*.yml|$PROM_RULES_DIR/*.yml|g" \
+  "$PROM_CONFIG" >"$PROM_CONFIG_VALIDATION"
+
 if command -v promtool >/dev/null 2>&1; then
-  promtool check config "$PROM_CONFIG"
+  promtool check config "$PROM_CONFIG_VALIDATION"
   promtool check rules "$PROM_RULES"
 elif command -v docker >/dev/null 2>&1; then
-  docker run --rm -v "$ROOT_DIR/deploy/monitoring:/etc/prometheus:ro" \
-    prom/prometheus:v2.51.2 promtool check config /etc/prometheus/prometheus.yml
-  docker run --rm -v "$ROOT_DIR/deploy/monitoring:/etc/prometheus:ro" \
-    prom/prometheus:v2.51.2 promtool check rules /etc/prometheus/prometheus-alerts.yml
+  PROM_CONFIG_MOUNT="$(docker_host_path "$PROM_CONFIG")"
+  PROM_RULES_MOUNT="$(docker_host_path "$PROM_RULES")"
+  PROM_TOKEN_MOUNT="$(docker_host_path "$PROM_TOKEN")"
+  MSYS_NO_PATHCONV=1 docker run --rm \
+    --entrypoint /bin/promtool \
+    --mount "type=bind,source=$PROM_CONFIG_MOUNT,target=/etc/prometheus/prometheus.yml,readonly" \
+    --mount "type=bind,source=$PROM_RULES_MOUNT,target=/etc/prometheus/rules/prometheus-alerts.yml,readonly" \
+    --mount "type=bind,source=$PROM_TOKEN_MOUNT,target=/etc/prometheus/metrics.token,readonly" \
+    prom/prometheus:v2.51.2 check config /etc/prometheus/prometheus.yml
+  MSYS_NO_PATHCONV=1 docker run --rm \
+    --entrypoint /bin/promtool \
+    --mount "type=bind,source=$PROM_RULES_MOUNT,target=/etc/prometheus/prometheus-alerts.yml,readonly" \
+    prom/prometheus:v2.51.2 check rules /etc/prometheus/prometheus-alerts.yml
 else
   echo "warning: promtool/docker unavailable, falling back to YAML syntax validation" >&2
   validate_with_ruby_yaml "$PROM_CONFIG" "$PROM_RULES"
@@ -66,15 +104,26 @@ fi
 if command -v amtool >/dev/null 2>&1; then
   amtool check-config "$ALERT_CONFIG"
 elif command -v docker >/dev/null 2>&1; then
-  docker run --rm -v "$TMP_DIR:/etc/alertmanager:ro" \
-    prom/alertmanager:v0.27.0 amtool check-config /etc/alertmanager/alertmanager.yml
+  ALERT_CONFIG_MOUNT="$(docker_host_path "$ALERT_CONFIG")"
+  MSYS_NO_PATHCONV=1 docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --entrypoint /bin/amtool \
+    --mount "type=bind,source=$ALERT_CONFIG_MOUNT,target=/etc/alertmanager/alertmanager.yml,readonly" \
+    prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml
 else
   echo "warning: amtool/docker unavailable, falling back to YAML syntax validation" >&2
   validate_with_ruby_yaml "$ALERT_CONFIG"
 fi
 
 if command -v docker >/dev/null 2>&1; then
-  docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_MONITORING" config >/dev/null
+  if [[ ! -e "$COMPOSE_ENV" && ! -L "$COMPOSE_ENV" ]]; then
+    cp "$ROOT_DIR/deploy/.env.example" "$COMPOSE_ENV"
+    COMPOSE_ENV_CREATED=1
+  fi
+  docker compose --env-file "$ROOT_DIR/deploy/.env.example" \
+    -f "$COMPOSE_BASE" \
+    -f "$COMPOSE_MONITORING" \
+    config >/dev/null
 else
   echo "warning: docker unavailable, skipping compose overlay validation" >&2
 fi

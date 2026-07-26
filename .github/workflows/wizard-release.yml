@@ -1,6 +1,7 @@
 name: Wizard release regression
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 jobs:

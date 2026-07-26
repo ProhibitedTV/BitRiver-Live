@@ -6,7 +6,19 @@ concurrency:
 
 on:
   workflow_call:
+    inputs:
+      run_compose_smoke:
+        description: Run the full Ubuntu Compose quickstart smoke job.
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
+    inputs:
+      run_compose_smoke:
+        description: Run the full Ubuntu Compose quickstart smoke job.
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   quickstart-entrypoints:
@@ -20,6 +32,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go toolchain
+        uses: ./.github/actions/setup-go
 
       - name: Validate quickstart.sh help and static checks
         if: runner.os != 'Windows'
@@ -76,10 +91,14 @@ jobs:
           }
 
   quickstart-smoke:
+    if: inputs.run_compose_smoke
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go toolchain
+        uses: ./.github/actions/setup-go
 
       - name: Verify quickstart defaults match CI seed
         run: python3 scripts/test-quickstart-env.py

@@ -124,30 +124,67 @@ func TestReleaseWorkflowHandlesPrereleasesWithoutMovingLatest(t *testing.T) {
 
 func TestWorkflowOwnedPostgresServicesApplyMigrations(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
-	for _, relativePath := range []string{
-		filepath.Join(".github", "workflows", "release.yml"),
-		filepath.Join(".github", "workflows", "postgres-tests.yml"),
+	postgresPath := filepath.Join(".github", "workflows", "postgres-tests.yml")
+	workflow := readRepoFile(t, repoRoot, postgresPath)
+	stepStart := strings.Index(workflow, "- name: Run postgres-tagged storage tests")
+	if stepStart == -1 {
+		t.Fatal("postgres storage-test step not found")
+	}
+	step := workflow[stepStart:]
+	if nextStep := strings.Index(step[1:], "\n      - name:"); nextStep != -1 {
+		step = step[:nextStep+1]
+	}
+	for _, required := range []string{
+		"BITRIVER_TEST_POSTGRES_DSN:",
+		`BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS: "1"`,
+		"run: ./scripts/test-postgres.sh",
 	} {
-		t.Run(filepath.Base(relativePath), func(t *testing.T) {
-			workflow := readRepoFile(t, repoRoot, relativePath)
-			stepStart := strings.Index(workflow, "- name: Run postgres-tagged storage tests")
-			if stepStart == -1 {
-				t.Fatal("postgres storage-test step not found")
-			}
-			step := workflow[stepStart:]
-			if nextStep := strings.Index(step[1:], "\n      - name:"); nextStep != -1 {
-				step = step[:nextStep+1]
-			}
-			for _, required := range []string{
-				"BITRIVER_TEST_POSTGRES_DSN:",
-				`BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS: "1"`,
-				"run: ./scripts/test-postgres.sh",
-			} {
-				if !strings.Contains(step, required) {
-					t.Fatalf("fresh workflow-owned Postgres service missing %q", required)
-				}
-			}
-		})
+		if !strings.Contains(step, required) {
+			t.Fatalf("fresh workflow-owned Postgres service missing %q", required)
+		}
+	}
+
+	release := readReleaseWorkflow(t)
+	if !strings.Contains(release, "postgres-tests:\n    uses: ./.github/workflows/postgres-tests.yml") {
+		t.Fatal("release must call the migrated reusable Postgres workflow")
+	}
+	for _, duplicate := range []string{
+		"image: postgres:15-alpine",
+		"POSTGRES_DB: bitriver_test",
+		"postgres service container not found",
+	} {
+		if strings.Contains(release, duplicate) {
+			t.Errorf("release retains duplicated Postgres implementation %q", duplicate)
+		}
+	}
+}
+
+func TestReleaseVerificationRestoresDependencyNetwork(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	goJobStart := strings.Index(workflow, "\n  go-tests:\n")
+	postgresJobStart := strings.Index(workflow, "\n  postgres-tests:\n")
+	if goJobStart == -1 || postgresJobStart == -1 || postgresJobStart <= goJobStart {
+		t.Fatal("release Go/Postgres job boundaries not found")
+	}
+	goJob := workflow[goJobStart:postgresJobStart]
+	for _, required := range []string{
+		"GOTOOLCHAIN: local",
+		"GOPROXY: off",
+		"GOSUMDB: off",
+		"- name: Run verification gate",
+		"GOPROXY: https://proxy.golang.org,direct",
+		"GOSUMDB: sum.golang.org",
+		"run: ./scripts/verify.sh",
+	} {
+		if !strings.Contains(goJob, required) {
+			t.Errorf("release Go verification missing %q", required)
+		}
+	}
+
+	repoRoot := filepath.Dir(mustGetwd(t))
+	verify := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
+	if !strings.Contains(verify, "env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off") {
+		t.Fatal("verify.sh must continue to force host Go tests offline")
 	}
 }
 

@@ -333,7 +333,6 @@ func TestWorkflowComposeFixturesIncludePublicMediaURLs(t *testing.T) {
 		"BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://example.com/live",
 	}
 	for _, relativePath := range []string{
-		filepath.Join(".github", "workflows", "ci.yml"),
 		filepath.Join(".github", "workflows", "image-scan.yml"),
 	} {
 		contents, readErr := os.ReadFile(filepath.Join(repoRoot, relativePath))
