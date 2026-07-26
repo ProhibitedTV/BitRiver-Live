@@ -113,6 +113,19 @@ func TestStandaloneGoVerificationRestoresDependencyNetworkForCompose(t *testing.
 	}
 }
 
+func TestGeneratedSRSAssetsUseStableLineEndings(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	attributes := readRepoFile(t, repoRoot, ".gitattributes")
+	for _, required := range []string{
+		"deploy/srs/conf/srs.conf text eol=lf",
+		"deploy/helm/bitriver-live/files/srs.conf text eol=lf",
+	} {
+		if !strings.Contains(attributes, required) {
+			t.Errorf(".gitattributes missing generated SRS line-ending invariant %q", required)
+		}
+	}
+}
+
 func TestSetupActionsDoNotOwnCheckout(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	for _, relativePath := range []string{
