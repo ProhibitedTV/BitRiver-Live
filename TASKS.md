@@ -245,7 +245,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `rc.3` is not a published release candidate; corrections move to
       immutable `v1.2.3-rc.4`.
 
-- [-] Task 7 - Repair release packaging and publish `v1.2.3-rc.4`
+- [x] Task 7 - Repair release packaging and inspect `v1.2.3-rc.4`
   - Acceptance criteria:
     - Cross-platform binary verification runs as a host tool without weakening
       production-module inspection.
@@ -262,8 +262,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       and reused by the product gate without a second registry-resolution pass.
     - Focused checks, literal full verification, complete PR CI, and exact
       merged-main evidence pass before tagging.
-    - The `rc.4` workflow publishes a prerelease with complete checksums/assets,
-      anonymous GHCR access, package acceptance, and pull-only product evidence.
+    - The immutable `rc.4` workflow is accepted only if complete; otherwise all
+      failures are classified before a successor tag is created.
   - Check:
     - Workflow regressions now keep host-side binary verification on the runner
       platform, pass the MSI modfile as one PowerShell argument, use Cosign v3
@@ -297,9 +297,57 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       evidence scans passed, teardown left no BitRiver containers, temporary
       secret inputs were removed, and the operator `.env` retained SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
-    - Full repository verification, PR CI, merge, immutable `v1.2.3-rc.4`
-      tagging, and remote release/package/publication inspection remain in
-      progress.
+    - Full repository verification, PR #1335 CI, merge commit `e67a9304`,
+      merged-main run `30220230319`, and annotated `v1.2.3-rc.4` tagging passed.
+    - Release run `30220542359` passed environment validation, migrated
+      Postgres, the unified Go/Compose gate, all cross-platform CLI and release
+      binary builds, four launcher/signature jobs, Linux amd64 packages, all
+      five image publications/SBOMs, and the complete pull-only media/API gate.
+    - The run then preserved three packaging failures: current
+      `windows-latest` has no hardcoded WiX v3.11 installation; target
+      `GOARCH=arm64` leaked into the host nFPM installation; and the viewer
+      archive producer used `web/viewer/dist` while its uploader consumed root
+      `dist`. Package acceptance, Homebrew generation, and GitHub Release
+      creation were skipped. `rc.4` is not a published GitHub prerelease.
+
+- [-] Task 8 - Repair `rc.4` packaging failures and publish `v1.2.3-rc.5`
+  - Acceptance criteria:
+    - The MSI job provisions and resolves a pinned compatible WiX toolchain
+      without depending on hosted-runner preinstallation.
+    - nFPM is built for the host OS/architecture while Linux packages retain the
+      matrix target architecture.
+    - The viewer bundle producer and uploader use the same workspace-root path.
+    - Focused workflow regressions, YAML parsing, repository verification, PR
+      CI, and exact merged-main CI pass before the successor tag.
+    - The `rc.5` workflow publishes a GitHub prerelease with complete
+      checksums/assets, package acceptance, anonymous GHCR access, and pull-only
+      product evidence.
+  - Check:
+    - `PLAN.md` records the three exact `rc.4` failure causes, risks, evidence
+      boundary, and `rc.5` test/publication plan before implementation.
+    - The MSI job now downloads official WiX 3.14.1 binaries, enforces SHA-256
+      `6ac824e1642d6f7277d0ed7ea09411a508f6116ba6fae0aa5f2c7daa2ff43d31`,
+      validates required tools, and resolves the executables/extension from its
+      job-local directory.
+    - The launcher matrix now installs nFPM with explicit host
+      `GOOS`/`GOARCH` and `GOBIN`, then invokes that host helper by absolute path
+      while retaining the matrix architecture in package metadata.
+    - Viewer packaging now writes and uploads the same absolute
+      `${{ github.workspace }}/dist` archive path.
+    - Focused MSI/tool/viewer workflow regressions, the complete Go scripts
+      suite, CI/workflow policy checks, docs checks, 19-file workflow/action
+      YAML parsing, and `git diff --check` passed.
+    - Official WiX 3.14.1 tools were checksum-verified locally; the canonical
+      staged assets and production-module binary compiled and linked into a
+      7.7 MB MSI. Local ICE validation could not access this sandbox's Windows
+      Installer service and remains a required unsuppressed GitHub Windows
+      check.
+    - Literal `./scripts/verify.sh --viewer` passed: all Go/script checks,
+      migrations, production-module image builds, Compose render/quickstart,
+      SRS/OME/API/viewer health, viewer lint, and 26 Jest suites/217 tests/four
+      snapshots. The operator `.env` was restored with unchanged SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+      Remote PR/merged-main/release verification remains in progress.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 

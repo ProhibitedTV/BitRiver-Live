@@ -1,5 +1,58 @@
 # PLAN
 
+## Current scope - repair the `rc.4` release fan-out (2026-07-26)
+
+- Preserve the immutable `v1.2.3-rc.4` tag at merged commit `e67a9304`.
+  Merged-main CI passed, but release run `30220542359` cannot create a GitHub
+  Release because three packaging jobs failed. Corrections use the next
+  immutable candidate tag, `v1.2.3-rc.5`.
+- Provision the Windows MSI toolchain explicitly. `windows-latest` no longer
+  contains the hardcoded WiX v3.11 installation, so the release must install a
+  pinned compatible WiX release and resolve `heat`, `candle`, and `light`
+  through the installed tool path instead of a runner-image assumption.
+- Keep packaging tools on the runner platform. The Linux arm64 launcher build
+  correctly targets the BitRiver binary to arm64, but that target environment
+  leaked into `go install nfpm`, placing an arm64 helper outside the host
+  executable path. Build nFPM with explicit `GOHOSTOS`/`GOHOSTARCH`, while
+  retaining arm64 only for the shipped binary and package metadata.
+- Anchor viewer output to the workspace artifact directory. Viewer lint, 217
+  Jest tests, 36 Playwright tests, and the production build passed, but the job
+  created its archive under `web/viewer/dist` while `upload-artifact` consumed
+  repository-root `dist`.
+
+### `rc.4` failure evidence
+
+- Release environment validation, migrated Postgres, the unified verification
+  gate, cross-platform CLI/release binaries, four launcher/signature entries,
+  Linux amd64 packages, all five image publications/SBOMs, and the pull-only
+  tagged media/API product gate passed.
+- Windows MSI job `89842557873` failed before WiX compilation because
+  `C:\Program Files (x86)\WiX Toolset v3.11\bin\heat.exe` does not exist on the
+  current hosted runner.
+- Linux arm64 launcher job `89842558023` signed its target binary, then failed
+  with `nfpm: command not found` after target `GOARCH=arm64` affected the host
+  tool installation.
+- Viewer job `89842557853` passed every check and packaged successfully, then
+  failed because producer and upload paths were rooted in different working
+  directories.
+- Downstream package acceptance, Homebrew generation, and GitHub Release
+  creation were skipped; they are not evidence from `rc.4`.
+
+### Test and publication plan
+
+- Add workflow-contract regressions that require pinned MSI tool provisioning,
+  host-scoped nFPM installation, and identical workspace-root viewer
+  producer/upload paths.
+- Parse every workflow/action YAML file, run the focused release and CI contract
+  suites, run `git diff --check`, then run literal
+  `./scripts/verify.sh --viewer`.
+- Require complete pull-request and merged-main CI before tagging
+  `v1.2.3-rc.5`. Monitor every release job; accept the candidate only after
+  package acceptance, checksums/signatures/assets, anonymous GHCR access, and
+  the pull-only media/API product gate all pass.
+- Clean Ubuntu/XOA, Nginx Proxy Manager browser access, reboot, and OME
+  restart/media recovery remain separate promotion evidence.
+
 ## Current scope - repair the `rc.3` release fan-out (2026-07-26)
 
 - Preserve the failed `v1.2.3-rc.3` tag at `c9d5a9f3`. The tag workflow

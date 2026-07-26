@@ -220,10 +220,16 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 		"name: Stage canonical Windows release assets",
 		"stage-release-assets.sh",
 		`--output "$launcher_root/share/bitriver-live"`,
+		"name: Install pinned WiX Toolset",
+		"https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip",
+		"WIX_ARCHIVE_SHA256: 6ac824e1642d6f7277d0ed7ea09411a508f6116ba6fae0aa5f2c7daa2ff43d31",
+		"Get-FileHash -Algorithm SHA256",
+		`$wixRoot = $env:BITRIVER_WIX_ROOT`,
 		"heat.exe",
 		"-cg ReleaseAssets",
 		"-dr RELEASEASSETSDIR",
 		"-dProductVersion=$env:MSI_VERSION",
+		`$wixUIExtension = Join-Path $wixRoot "WixUIExtension.dll"`,
 		"bitriver-release-assets.wixobj",
 	} {
 		if !strings.Contains(workflow, required) {
@@ -234,6 +240,7 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 		"Copy-Item deploy/docker-compose.yml",
 		"Copy-Item deploy/.env.example",
 		"-dProductVersion=$env:RELEASE_TAG",
+		`C:\\Program Files (x86)\\WiX Toolset`,
 	} {
 		if strings.Contains(workflow, forbidden) {
 			t.Fatalf("Windows MSI workflow retains stale path/version seam %q", forbidden)
@@ -269,8 +276,8 @@ func TestReleaseArtifactFanoutUsesHostAndCurrentToolContracts(t *testing.T) {
 	if count := strings.Count(workflow, `host_goarch="$(go env GOHOSTARCH)"`); count != 3 {
 		t.Fatalf("cross-build host GOARCH discovery count=%d, want 3 release matrix steps", count)
 	}
-	if count := strings.Count(workflow, `GOOS="$host_goos" GOARCH="$host_goarch"`); count != 4 {
-		t.Fatalf("host-scoped production verifier count=%d, want 4 call sites", count)
+	if count := strings.Count(workflow, `GOOS="$host_goos" GOARCH="$host_goarch"`); count != 5 {
+		t.Fatalf("host-scoped verifier/tool build count=%d, want 5 call sites", count)
 	}
 
 	for _, required := range []string{
@@ -279,8 +286,16 @@ func TestReleaseArtifactFanoutUsesHostAndCurrentToolContracts(t *testing.T) {
 		"go build $modFileArg -trimpath",
 		`cosign sign-blob --yes \`,
 		`--bundle "$launcher_root/bin/bitriver${bin_ext}.sigstore.json"`,
+		`GOBIN="$host_tools" \`,
+		"go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0",
+		`nfpm="$host_tools/nfpm"`,
+		`GOMAXPROCS=2 "$nfpm" pkg --packager deb`,
+		`GOMAXPROCS=2 "$nfpm" pkg --packager rpm`,
 		"if [ -d public ]; then",
 		`cp -R public "$bundle_root/public"`,
+		`artifact_root="$GITHUB_WORKSPACE/dist"`,
+		`tar -C "$artifact_root" -czf "$artifact_root/bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer`,
+		"path: ${{ github.workspace }}/dist/bitriver-viewer-${{ github.ref_name }}.tar.gz",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Fatalf("release workflow missing repaired fan-out contract %q", required)
@@ -291,6 +306,8 @@ func TestReleaseArtifactFanoutUsesHostAndCurrentToolContracts(t *testing.T) {
 		"go build -modfile=$env:PRODUCTION_MODFILE",
 		"--output-signature",
 		`.sig" "$launcher_root/bin/bitriver`,
+		`export PATH="$HOME/go/bin:$PATH"`,
+		`path: dist/bitriver-viewer-${{ github.ref_name }}.tar.gz`,
 	} {
 		if strings.Contains(workflow, forbidden) {
 			t.Fatalf("release workflow retains failed rc.3 contract %q", forbidden)

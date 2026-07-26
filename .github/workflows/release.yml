@@ -515,16 +515,20 @@ jobs:
           fi
 
           if [ "$GOOS" = "linux" ]; then
-            export PATH="$HOME/go/bin:$PATH"
-            go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+            host_tools="$RUNNER_TEMP/bitriver-host-tools"
+            mkdir -p "$host_tools"
+            GOOS="$host_goos" GOARCH="$host_goarch" GOBIN="$host_tools" \
+              go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+            nfpm="$host_tools/nfpm"
+            test -x "$nfpm"
             workspace="$PWD"
             launcher_root_abs="$(cd "$launcher_root" && pwd -P)"
             (
               cd "$launcher_root_abs"
               NFPM_ARCH="$GOARCH" NFPM_VERSION="$NFPM_VERSION" NFPM_PRERELEASE="$NFPM_PRERELEASE" LAUNCHER_ROOT="$launcher_root_abs" \
-                GOMAXPROCS=2 nfpm pkg --packager deb --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.deb"
+                GOMAXPROCS=2 "$nfpm" pkg --packager deb --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.deb"
               NFPM_ARCH="$GOARCH" NFPM_VERSION="$NFPM_VERSION" NFPM_PRERELEASE="$NFPM_PRERELEASE" LAUNCHER_ROOT="$launcher_root_abs" \
-                GOMAXPROCS=2 nfpm pkg --packager rpm --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.rpm"
+                GOMAXPROCS=2 "$nfpm" pkg --packager rpm --config "$workspace/deploy/installers/nfpm.yaml" --target "$workspace/dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.rpm"
             )
           fi
 
@@ -609,7 +613,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          bundle_root="dist/bitriver-viewer"
+          artifact_root="$GITHUB_WORKSPACE/dist"
+          bundle_root="$artifact_root/bitriver-viewer"
           rm -rf "$bundle_root"
           mkdir -p "$bundle_root"
           cp -R .next "$bundle_root/.next"
@@ -618,14 +623,14 @@ jobs:
             cp -R public "$bundle_root/public"
           fi
           cp package.json package-lock.json next.config.js "$bundle_root/"
-          tar -C dist -czf "dist/bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer
+          tar -C "$artifact_root" -czf "$artifact_root/bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer
           rm -rf "$bundle_root"
 
       - name: Upload viewer bundle artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: viewer-bundle
-          path: dist/bitriver-viewer-${{ github.ref_name }}.tar.gz
+          path: ${{ github.workspace }}/dist/bitriver-viewer-${{ github.ref_name }}.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -946,6 +951,33 @@ jobs:
             --output "$launcher_root/share/bitriver-live"
           echo "BITRIVER_WINDOWS_LAUNCHER_ROOT=$(cygpath -w "$launcher_root")" >>"$GITHUB_ENV"
 
+      - name: Install pinned WiX Toolset
+        shell: pwsh
+        env:
+          WIX_ARCHIVE_SHA256: 6ac824e1642d6f7277d0ed7ea09411a508f6116ba6fae0aa5f2c7daa2ff43d31
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = Join-Path $env:RUNNER_TEMP "wix314-binaries.zip"
+          $wixRoot = Join-Path $env:RUNNER_TEMP "wix314"
+          Invoke-WebRequest `
+            -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" `
+            -OutFile $archive
+          $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:WIX_ARCHIVE_SHA256) {
+            throw "WiX archive checksum mismatch: expected $($env:WIX_ARCHIVE_SHA256), got $actualHash"
+          }
+          if (Test-Path -LiteralPath $wixRoot) {
+            Remove-Item -Recurse -Force -LiteralPath $wixRoot
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $wixRoot
+          foreach ($tool in @("heat.exe", "candle.exe", "light.exe", "WixUIExtension.dll")) {
+            $toolPath = Join-Path $wixRoot $tool
+            if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+              throw "Pinned WiX archive is missing $tool"
+            }
+          }
+          "BITRIVER_WIX_ROOT=$wixRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build MSI
         shell: pwsh
         env:
@@ -968,13 +1000,15 @@ jobs:
 
           $distDir = Join-Path (Get-Location) "dist"
           if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir | Out-Null }
-          $heat = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\heat.exe"
-          $candle = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\candle.exe"
-          $light = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\light.exe"
+          $wixRoot = $env:BITRIVER_WIX_ROOT
+          $heat = Join-Path $wixRoot "heat.exe"
+          $candle = Join-Path $wixRoot "candle.exe"
+          $light = Join-Path $wixRoot "light.exe"
+          $wixUIExtension = Join-Path $wixRoot "WixUIExtension.dll"
           $harvest = Join-Path $env:RUNNER_TEMP "bitriver-release-assets.wxs"
           & $heat dir $releaseAssetsRoot -nologo -cg ReleaseAssets -dr RELEASEASSETSDIR -srd -sreg -ag -var var.ReleaseAssetsDir -out $harvest
           & $candle -nologo -dProductVersion=$env:MSI_VERSION -dSourceDir=$launcherRoot -dReleaseAssetsDir=$releaseAssetsRoot deploy/installers/bitriver-live.wxs $harvest
-          & $light -nologo -ext WixUIExtension bitriver-live.wixobj bitriver-release-assets.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
+          & $light -nologo -ext $wixUIExtension bitriver-live.wixobj bitriver-release-assets.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
