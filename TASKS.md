@@ -114,6 +114,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Validation now creates a private example-derived root `.env` only when
       absent and removes only its own file through the exit trap; an existing
       operator `.env` is neither rewritten nor deleted.
+    - Run `30214468760` passed monitoring and the blocking image scan, then
+      exposed that the reusable Windows quickstart entrypoint check inherited
+      runner Go 1.24.13 even though `-ValidateOnly` builds the Go 1.26 CLI. The
+      cross-platform entrypoint matrix now invokes the shared pinned Go setup
+      after checkout, and the optional full smoke job does the same before its
+      source wrapper, with an ordering/count regression.
 
 - [x] Task 4 - Repair and deduplicate release preflight
   - Acceptance criteria:

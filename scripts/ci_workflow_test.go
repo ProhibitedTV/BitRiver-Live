@@ -76,6 +76,23 @@ func TestReusableWorkflowChangesSelectTheirCIJobs(t *testing.T) {
 	}
 }
 
+func TestQuickstartEntrypointMatrixUsesRepositoryGoToolchain(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "quickstart-smoke.yml"))
+	checkout := strings.Index(workflow, "name: Check out repository")
+	setupGo := strings.Index(workflow, "name: Set up Go toolchain")
+	validate := strings.Index(workflow, "name: Validate quickstart.sh help and static checks")
+	if checkout < 0 || setupGo < 0 || validate < 0 {
+		t.Fatal("quickstart entrypoint workflow is missing checkout, Go setup, or validation")
+	}
+	if !(checkout < setupGo && setupGo < validate) {
+		t.Fatal("quickstart entrypoint matrix must set up the repository Go toolchain after checkout and before validation")
+	}
+	if count := strings.Count(workflow, "uses: ./.github/actions/setup-go"); count != 2 {
+		t.Fatalf("quickstart workflow shared Go setup count=%d, want 2", count)
+	}
+}
+
 func TestSetupActionsDoNotOwnCheckout(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	for _, relativePath := range []string{

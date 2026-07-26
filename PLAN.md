@@ -21,6 +21,11 @@
 - Centralize runtime setup in the local setup actions without a hidden second
   checkout. Every workflow remains responsible for one explicit, SHA-pinned
   checkout before invoking a setup action.
+- The reusable quickstart entrypoint matrix must invoke the shared Go setup
+  after checkout. `quickstart.ps1 -ValidateOnly` compiles and runs the real CLI,
+  so accepting whatever Go version happens to be preinstalled on each runner
+  makes the Windows/macOS results nondeterministic. The optional full Compose
+  smoke job must use the same setup before invoking its source-driven wrapper.
 - Do not create `v1.2.3-rc.3` until focused workflow regressions, the complete
   local gate, the pull-request matrix, and a post-merge targeted workflow run
   are green. Failed `rc.1` and `rc.2` tags remain immutable.
