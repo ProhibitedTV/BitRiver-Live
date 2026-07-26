@@ -183,320 +183,50 @@ jobs:
         run: go test ./... -count=1 -timeout=120s
 
   quickstart-smoke:
-    name: Quickstart entrypoint sanity (${{ matrix.os }})
     needs:
       - changed-files
       - verify
     if: always() && needs.changed-files.outputs.quickstart_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Go toolchain
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/setup-go
-
-      - name: Validate quickstart.sh help and static checks
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          bash -n scripts/quickstart.sh
-          ./scripts/quickstart.sh --help
-          if ./scripts/quickstart.sh --definitely-not-a-real-flag; then
-            echo "Expected unknown-flag invocation to fail" >&2
-            exit 1
-          fi
-
-      - name: Run shellcheck for quickstart.sh
-        if: runner.os != 'Windows'
-        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
-        with:
-          scandir: scripts
-          check_together: 'yes'
-          ignore_names: |
-            *.md
-
-      - name: Validate quickstart.ps1 help output
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: pwsh -File scripts/quickstart.ps1 -help
-
-      - name: Validate quickstart.ps1 no-op entrypoint path
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: pwsh -File scripts/quickstart.ps1 -ValidateOnly
-
-      - name: Static validation for quickstart.ps1 helper usage
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $scriptText = Get-Content -Path scripts/quickstart.ps1 -Raw
-          $requiredSnippets = @(
-            'Ensure-Go',
-            'Invoke-Cli',
-            '$goPath = (Get-Command go -ErrorAction Stop).Source',
-            '$buildOutput = @(& $goPath @buildArgs 2>&1)',
-            '$cliOutput = @(& $tempBinary @CliArgs 2>&1)',
-            'bitriver-live-go-build-cache',
-            'SetEnvironmentVariable(''GOCACHE'', $goCacheRoot, ''Process'')',
-            'if ($ValidateOnly)',
-            'Invoke-Cli -CliArgs @(''quickstart'', ''--help'') -AllowHelpExitCode',
-            '@(''quickstart'') + $QuickstartArgs'
-          )
-
-          foreach ($snippet in $requiredSnippets) {
-            if (-not $scriptText.Contains($snippet)) {
-              Write-Error "Missing expected quickstart.ps1 snippet: $snippet"
-            }
-          }
+    uses: ./.github/workflows/quickstart-smoke.yml
+    with:
+      run_compose_smoke: false
 
   viewer-ci:
-    name: Viewer CI
     needs:
       - changed-files
       - verify
     if: always() && needs.changed-files.outputs.viewer_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web/viewer
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up viewer Node toolchain
-        uses: ./.github/actions/setup-node-viewer
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Viewer integration tests
-        run: npm run test:integration
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Build
-        run: npm run build
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
+    uses: ./.github/workflows/viewer-ci.yml
 
   shellcheck:
-    name: Shell lint
     needs: changed-files
     if: needs.changed-files.outputs.shell_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Lint shell scripts
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mapfile -t shell_files < <(
-            git ls-files \
-              'scripts/*.sh' \
-              'scripts/**/*.sh' \
-              'deploy/install/**/*.sh' \
-              ':(exclude)**/vendor/**' \
-              ':(exclude)**/third_party/**'
-          )
-
-          if ((${#shell_files[@]} == 0)); then
-            echo 'No shell scripts matched; skipping shellcheck.'
-            exit 0
-          fi
-
-          shellcheck "${shell_files[@]}"
+    uses: ./.github/workflows/shellcheck.yml
 
   docs-consistency:
-    name: Docs consistency
     needs: changed-files
     if: needs.changed-files.outputs.docs_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Check installer milestone wording
-        run: ./scripts/check-doc-installer-language.sh
-
-      - name: Check generated contract env docs are fresh
-        run: ./scripts/generate-contract-doc.sh --check
+    uses: ./.github/workflows/docs-consistency.yml
 
   monitoring-config:
-    name: Monitoring config checks
     needs: changed-files
     if: needs.changed-files.outputs.monitoring_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Validate Prometheus + Alertmanager configs
-        shell: bash
-        run: ./scripts/check-monitoring-config.sh
+    uses: ./.github/workflows/monitoring-config.yml
 
   go-workflow-consistency:
-    name: Go workflow consistency
     needs: changed-files
     if: needs.changed-files.outputs.go_workflow_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Validate Go workflow setup conventions
-        run: ./scripts/check-go-workflow-config.sh
+    uses: ./.github/workflows/go-workflow-consistency.yml
 
   wizard-release:
-    name: Wizard release regression
     needs: changed-files
     if: needs.changed-files.outputs.wizard_release_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Run staged release wizard test
-        run: bash scripts/test-wizard-release.sh
+    uses: ./.github/workflows/wizard-release.yml
 
   image-scan:
-    name: Image vulnerability scan
     needs: changed-files
     if: needs.changed-files.outputs.image_scan_changed == 'true'
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-
-      - name: Prepare Compose environment
-        run: |
-          cat <<'ENV' > .ci.env
-          BITRIVER_LIVE_IMAGE_TAG=ci
-          BITRIVER_VIEWER_IMAGE_TAG=ci
-          BITRIVER_SRS_CONTROLLER_IMAGE_TAG=ci
-          BITRIVER_TRANSCODER_IMAGE_TAG=ci
-          BITRIVER_OME_CONFIG_IMAGE_TAG=ci
-          BITRIVER_SRS_IMAGE_TAG=v5.0.185
-          BITRIVER_OME_IMAGE_TAG=0.16.0
-          BITRIVER_LIVE_ADMIN_EMAIL=ci@example.com
-          BITRIVER_LIVE_ADMIN_PASSWORD=ci-admin-password
-          BITRIVER_SRS_TOKEN=ci-srs-token
-          BITRIVER_OME_USERNAME=ci-ome-user
-          BITRIVER_OME_PASSWORD=ci-ome-password
-          BITRIVER_OME_API_TOKEN=ci-ome-api-token
-          BITRIVER_TRANSCODER_TOKEN=ci-transcoder-token
-          BITRIVER_REDIS_PASSWORD=ci-redis-password
-          BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=ci-redis-password
-          BITRIVER_POSTGRES_USER=ci-postgres
-          BITRIVER_POSTGRES_PASSWORD=ci-postgres-password
-          BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://example.com/hls
-          BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://example.com/live
-          BITRIVER_OME_PUBLIC_LLHLS_BASE_URL=https://example.com/live
-          ENV
-
-      - name: Build local images from the Compose stack
-        run: |
-          docker compose --env-file .ci.env -f deploy/docker-compose.yml build \
-            bitriver-live \
-            viewer \
-            srs-controller \
-            transcoder \
-            srs \
-            ome-config
-
-      - name: Collect Compose images
-        run: |
-          docker compose --env-file .ci.env -f deploy/docker-compose.yml config --images | sort -u > /tmp/compose-images.txt
-          cat /tmp/compose-images.txt
-
-      - name: Install Trivy
-        run: |
-          set -euo pipefail
-          TRIVY_VERSION=0.70.0
-          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
-          curl --fail --location --retry 5 --retry-delay 2 --retry-all-errors --output "$archive" "$url"
-          test -s "$archive"
-          tar -xzf "$archive" trivy
-          sudo install trivy /usr/local/bin/trivy
-
-      - name: Verify ome-config has no OS-package CVEs
-        run: |
-          mapfile -t ome_config_images < <(grep -E '^ghcr\.io/prohibitedtv/bitriver-ome-config:' /tmp/compose-images.txt)
-          if ((${#ome_config_images[@]} != 1)); then
-            printf 'Expected exactly one Compose ome-config image, found %d\n' "${#ome_config_images[@]}" >&2
-            exit 1
-          fi
-          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress "${ome_config_images[0]}"
-
-      - name: Scan first-party images for critical vulnerabilities (blocking)
-        run: |
-          set -euo pipefail
-          while read -r image; do
-            if [ -z "$image" ]; then
-              continue
-            fi
-
-            case "$image" in
-              ghcr.io/prohibitedtv/*|bitriver-live/*)
-                echo "Scanning first-party image (blocking): $image"
-                trivy image \
-                  --severity CRITICAL \
-                  --exit-code 1 \
-                  --ignorefile .trivyignore/default.txt \
-                  --no-progress \
-                  "$image"
-                ;;
-            esac
-          done < /tmp/compose-images.txt
-
-      - name: Scan pinned third-party images for critical vulnerabilities (informational)
-        run: |
-          set -euo pipefail
-          while read -r image; do
-            if [ -z "$image" ]; then
-              continue
-            fi
-
-            case "$image" in
-              ghcr.io/prohibitedtv/*|bitriver-live/*)
-                continue
-                ;;
-            esac
-
-            ignore_file=".trivyignore/default.txt"
-            case "$image" in
-              postgres:15-alpine*)
-                ignore_file=".trivyignore/postgres-15-alpine.txt"
-                ;;
-            esac
-
-            echo "Scanning third-party image (informational): $image"
-            trivy image \
-              --severity CRITICAL \
-              --exit-code 0 \
-              --ignorefile "$ignore_file" \
-              --no-progress \
-              "$image"
-          done < /tmp/compose-images.txt
+    uses: ./.github/workflows/image-scan.yml

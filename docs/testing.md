@@ -22,20 +22,20 @@ Use these category entrypoints from the repository root:
 
 - **Unit:** `./scripts/test-unit.sh`
   - Runs `go test ./... -count=1 -timeout=120s` with offline Go env defaults (`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off`).
-  - CI: [`.github/workflows/go-unit-tests.yml`](../.github/workflows/go-unit-tests.yml) and the `go-tests` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+  - CI: the manual [`.github/workflows/go-unit-tests.yml`](../.github/workflows/go-unit-tests.yml) full matrix and the path-gated Ubuntu/cross-platform jobs in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 - **Integration umbrella:** `./scripts/test-integration.sh`
   - Wraps `./scripts/test-postgres.sh` and `./scripts/test-quickstart.sh`.
   - Docker-dependent checks are skipped with explicit messages when Docker is unavailable.
   - The production golden path remains opt-in (`--production-golden-path` or `BITRIVER_TEST_ALL_PRODUCTION_GOLDEN_PATH=1`). When enabled it owns the canonical quickstart lifecycle instead of starting the same stack twice.
 - **Postgres integration (tagged):** `./scripts/test-postgres.sh`
   - Runs storage integration tests behind the `postgres` tag using Docker or `BITRIVER_TEST_POSTGRES_DSN`.
-  - CI: [`.github/workflows/postgres-tests.yml`](../.github/workflows/postgres-tests.yml), plus `postgres-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and release validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+  - CI: the reusable/manual [`.github/workflows/postgres-tests.yml`](../.github/workflows/postgres-tests.yml), the changed-path Ubuntu umbrella gate in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and the same reusable Postgres gate called by [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 - **Postgres migration lifecycle:** `./scripts/test-postgres-migrations.sh`
   - Uses a disposable Postgres 15 container to prove fresh apply, previous-schema upgrade, no-op rerun, checksum drift refusal, failed retry, interrupted-state acknowledgment, and non-sensitive status output.
   - Runs automatically inside `./scripts/verify.sh` when Docker is available.
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
-  - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) and `quickstart-smoke` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+  - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) is the reusable/manual source for cross-platform entrypoint checks and targeted Compose smoke; the CI orchestrator calls its entrypoint matrix while the unified Ubuntu gate owns changed-path Compose smoke.
 - **Release bundle:** `./scripts/test-release-bundle.sh`
   - Stages the source-free release allowlist outside the checkout in a path containing spaces, checks asset parity, and rejects deployment-generated credential files.
 - **Ubuntu host lifecycle:** `./scripts/test-compose-host-installer.sh`
@@ -55,7 +55,7 @@ Use these category entrypoints from the repository root:
   - CI: [`.github/workflows/ingest-e2e.yml`](../.github/workflows/ingest-e2e.yml) and the path-gated Ubuntu job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 - **Viewer integration / Playwright:** `npm --prefix web/viewer run test:integration`
   - Runs viewer lint + Jest + Playwright integration checks.
-  - CI: [`.github/workflows/viewer-ci.yml`](../.github/workflows/viewer-ci.yml), `viewer-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and release viewer validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+  - CI: [`.github/workflows/viewer-ci.yml`](../.github/workflows/viewer-ci.yml) is the reusable/manual source called by [`.github/workflows/ci.yml`](../.github/workflows/ci.yml); release viewer validation remains in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
 Run everything with the umbrella entrypoint:
 
@@ -202,12 +202,11 @@ Authentication/session lifecycle coverage lives in
 logout, and admin-only enforcement without external services. No additional
 environment toggles are required beyond the standard offline Go flags above.
 
-Viewer CI (`.github/workflows/viewer-ci.yml`) intentionally triggers for both
-`web/viewer/**` and backend contract-facing paths (`internal/api/**`,
-`internal/domain/**`, and `internal/api/viewer_contract_test.go`) because the
-viewer consumes those API payload shapes directly. Treat backend contract
-changes as cross-surface updates and run viewer checks when touching those
-paths.
+The CI orchestrator calls the reusable viewer workflow for `web/viewer/**` and
+immediate contract/runtime paths (`deploy/.env.example`, `internal/api/**`, and
+`internal/server/**`) because the viewer consumes those payloads and settings
+directly. Treat backend contract changes as cross-surface updates and run the
+manual viewer workflow when validating a branch outside a pull request.
 
 Viewer payload contracts live in `internal/api/viewer_contract_test.go`. Run
 the suite with the same offline flags and cache-busting timeout CI expects:
@@ -296,7 +295,8 @@ module, scan label, and platform:
 
 Container image CVE scanning is enforced by
 [`.github/workflows/image-scan.yml`](../.github/workflows/image-scan.yml). The
-workflow keeps **CRITICAL** gating enabled for first-party images
+CI orchestrator calls this same reusable workflow instead of embedding a second
+scanner implementation. It keeps **CRITICAL** gating enabled for first-party images
 (`ghcr.io/prohibitedtv/*` and local `bitriver-live/*` builds) and runs a
 separate informational scan for pinned third-party images.
 
@@ -353,7 +353,7 @@ Run the compose smoke guard to ensure the default `.env` and `deploy/docker-comp
 
 When no `.env` exists in the repository root, the helper seeds one with the same quickstart fixture defaults (including `BITRIVER_LIVE_MODE=production` to match `deploy/check-env.sh` validation), renders `docker compose config`, and verifies that the API, transcoder, OME, SRS, Postgres, and Redis healthchecks still point at their expected endpoints. It then boots the compose stack with the seeded `.env`, waits for all healthchecks to go green, curls the API health endpoint and viewer page, and tears the stack down via `docker compose down -v` so nothing is left behind. The script also invokes the Go renderer (`go run ./cmd/bitriver ome render`, or the `scripts/render-ome-config.sh` wrapper) against the seeded `.env` and fails fast when `deploy/ome/Server.generated.xml` is stale or missing required `<Bind>`, `<IP>`, or control credential values so the tracked compose mount stays fresh. It cleans up the temporary `.env` after the run.
 
-CI enforces the same guardrails in [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml): keep both the `quickstart-entrypoints` matrix job (Ubuntu/macOS shell usage + static checks, Windows PowerShell help + `-ValidateOnly` no-op path) and the Ubuntu `quickstart-smoke` compose job enabled as required pull-request checks so script drift is blocked before merge.
+CI calls [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) with Compose smoke disabled so the reusable `quickstart-entrypoints` matrix covers Ubuntu/macOS shell usage plus Windows PowerShell help/`-ValidateOnly` without starting the same stack twice. Manual dispatch keeps Compose smoke enabled by default; changed-path pull requests run it through the unified Ubuntu gate.
 
 For a fast operator confidence check outside the heavier quickstart suite, run:
 
@@ -372,7 +372,7 @@ Run the installer-language guard to keep shipped milestones consistent across re
 ./scripts/check-doc-installer-language.sh
 ```
 
-CI enforces the same check in [`.github/workflows/docs-consistency.yml`](../.github/workflows/docs-consistency.yml).
+CI calls the same reusable [`.github/workflows/docs-consistency.yml`](../.github/workflows/docs-consistency.yml) definition when documentation inputs change.
 
 Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce SHA-pinned `actions/setup-go@<40-hex-sha>` usage (either directly in workflows or through the approved `./.github/actions/setup-go` composite action that pins `actions/setup-go` by SHA), `go-version-file: .go-version`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across core verification workflows.
 

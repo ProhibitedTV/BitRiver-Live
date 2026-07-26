@@ -1,5 +1,121 @@
 # TASKS
 
+## Scoped change: branch hygiene and release CI consolidation
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit remote branches and the Actions graph
+  - Acceptance criteria:
+    - `PLAN.md` records the branch classes, workflow ownership, proven drift,
+      release failure cause, risks, and test plan before implementation.
+    - Open PRs/protected branches and recent CI/release runs are inspected
+      read-only.
+    - Untracked operator files, private configuration, and unproved deployment
+      claims remain explicit boundaries.
+  - Check:
+    - Fetched/pruned remote refs contain 1,000 branches: 943 non-default tips are
+      merged by ancestry into `origin/main`, and 57 are not.
+    - GitHub reports zero open PRs and zero protected branches; the first cleanup
+      pass excludes `main` and all 57 non-ancestor branches.
+    - Thirteen repository workflow files plus Dependabot are active. `ci.yml` is
+      the only automatic PR/main CI orchestrator; the remaining test workflows
+      are manual/reusable and release is tag-only.
+    - Confirmed duplicate/drift seams include inline CI/manual image scans on
+      different Trivy versions, release/reusable Postgres services, and setup
+      composites that repeat checkout with different action pins.
+    - Release run `30212555952` passed environment and Postgres gates, then
+      failed before any build/publication because `GOPROXY=off` leaked from the
+      Go job into clean Compose builds.
+
+- [x] Task 2 - Prepare the ancestry-safe remote branch cleanup
+  - Acceptance criteria:
+    - Classify the deletion set strictly by ancestry to `origin/main`.
+    - Preserve `main`, tags, and all non-ancestor branches in the proposed
+      operation.
+    - Do not execute the broad remote mutation without the separate explicit
+      confirmation required by the execution safety gate.
+  - Check:
+    - The proposed command rechecks all 943 tips immediately before bounded
+      deletion batches and aborts on classification change.
+    - The execution safety gate rejected mass deletion without a separate
+      explicit user confirmation. No remote branch was deleted; the 1,000/943/57
+      inventory remains current for the next approved cleanup pass.
+
+- [x] Task 3 - Consolidate reusable CI and setup ownership
+  - Acceptance criteria:
+    - CI calls reusable single-source workflows for duplicated checks while
+      retaining path filters and permissions.
+    - Setup composites no longer perform hidden second checkouts.
+    - Intentionally distinct full-stack/release gates remain separate and
+      documented.
+  - Check:
+    - `ci.yml` now delegates viewer, image scan, shell, docs, monitoring,
+      Go-workflow policy, wizard, and quickstart entrypoint checks to their
+      reusable/manual workflow definitions instead of embedding copies.
+    - Manual quickstart dispatch retains the full Compose smoke by default; CI
+      passes `run_compose_smoke: false` because the unified Ubuntu gate owns the
+      same changed-path Docker lifecycle.
+    - The single image-scan definition now pins Trivy 0.70.0 and uses bounded,
+      fail-closed download validation; the stale 0.50.1 implementation is gone.
+    - Setup Go/Node composite actions no longer perform a second checkout or
+      accept checkout-depth inputs. The Go action now shares the release's
+      pinned setup-go v7.0.0 revision; the full-history manual Go checkout moved
+      to its explicit workflow checkout step.
+    - Added CI ownership regressions and updated viewer/image workflow tests plus
+      testing docs for the reusable model. `go test ./scripts`, CI contract,
+      Go-workflow convention, 15-file YAML parsing, and `git diff --check`
+      passed.
+
+- [x] Task 4 - Repair and deduplicate release preflight
+  - Acceptance criteria:
+    - Release calls the reusable migrated Postgres gate.
+    - Release verification restores dependency network settings for Compose
+      builds while host Go tests remain offline.
+    - Focused regressions reject either drift.
+  - Check:
+    - `release.yml` now calls `./.github/workflows/postgres-tests.yml`; the
+      second Postgres 15 service/wait/test implementation was removed while all
+      downstream release jobs retain their `postgres-tests` dependency.
+    - The reusable service remains permission-minimal and explicitly sets
+      `BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1` for its fresh supplied DSN.
+    - The release `Run verification gate` step restores
+      `GOPROXY=https://proxy.golang.org,direct` and `GOSUMDB=sum.golang.org` for
+      clean Compose builds. Its job keeps offline defaults, and `verify.sh`
+      continues to override host Go tests with `GOPROXY=off GOSUMDB=off`.
+    - All six release Go setup steps now call the shared pinned local setup
+      action instead of maintaining a second action revision/configuration.
+    - Focused release/Postgres/network/setup regressions, CI policy, Go workflow
+      policy, and all workflow/action YAML parsing passed.
+
+- [-] Task 5 - Verify locally and through GitHub
+  - Acceptance criteria:
+    - Workflow/action parsing, policy checks, focused tests, and full
+      `./scripts/verify.sh --viewer` pass.
+    - A reviewable PR contains only intended files and full remote CI passes.
+    - Post-merge targeted workflow proof passes before tagging.
+  - Check:
+    - Literal `./scripts/verify.sh --viewer` passed with pinned Go 1.26.5 and
+      bundled Python: release bundle, all first-party Go/script tests,
+      architecture/dependency/contract checks, real Postgres migration
+      lifecycle, Compose rendering, and Docker quickstart all passed.
+    - The quickstart rebuilt the release-sensitive production module graph,
+      brought Postgres/Redis/SRS/controller/transcoder/OME/API/viewer healthy,
+      completed migrations, and passed API/viewer probes before clean teardown.
+    - Viewer lint plus 26 Jest suites/217 tests/four snapshots passed.
+    - The private root `.env` was parked only for verification, restored in
+      `finally`, and matched its original SHA-256 hash.
+    - PR and post-merge targeted workflow evidence remain pending.
+
+- [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
+  - Acceptance criteria:
+    - The immutable tag points at the verified merged commit.
+    - Release jobs, packages, checksums, anonymous image pulls, and pull-only
+      Docker Desktop product evidence pass.
+    - Remaining clean Ubuntu/XOA/NPM/browser/reboot/OME recovery evidence is
+      stated without overclaiming.
+  - Check:
+    - Pending.
+
 ## Scoped change: first public release-candidate publication gate (#1297)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

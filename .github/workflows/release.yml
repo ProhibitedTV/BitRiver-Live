@@ -28,10 +28,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
@@ -157,10 +154,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Verify placeholder OME config freshness
         run: |
@@ -177,68 +171,15 @@ jobs:
           fi
 
       - name: Run verification gate
+        env:
+          # verify.sh keeps host Go tests offline; Compose builds need the
+          # upstream production dependency graph in clean build containers.
+          GOPROXY: https://proxy.golang.org,direct
+          GOSUMDB: sum.golang.org
         run: ./scripts/verify.sh
 
   postgres-tests:
-    name: Postgres storage tests
-    runs-on: ubuntu-latest
-    env:
-      GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: bitriver
-          POSTGRES_PASSWORD: bitriver
-          POSTGRES_DB: bitriver_test
-        ports:
-          - 54329:5432
-        options: >-
-          --health-cmd="pg_isready -U bitriver -d bitriver_test"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
-
-
-      - name: Wait for Postgres service
-        run: |
-          container_id="$(docker ps --filter "name=postgres" --format "{{.ID}}" | head -n1)"
-          if [ -z "$container_id" ]; then
-            echo "postgres service container not found" >&2
-            docker ps
-            exit 1
-          fi
-
-          for attempt in $(seq 1 30); do
-            status=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
-            if [ "$status" = "healthy" ]; then
-              exit 0
-            fi
-            echo "waiting for postgres service to become healthy (attempt $attempt)..." >&2
-            sleep 2
-          done
-
-          echo "postgres service failed to become healthy" >&2
-          docker logs "$container_id"
-          exit 1
-
-      - name: Run postgres-tagged storage tests
-        env:
-          # GitHub Actions service containers are accessed from the host runner via published ports.
-          BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@127.0.0.1:54329/bitriver_test?sslmode=disable
-          BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS: "1"
-        run: ./scripts/test-postgres.sh
+    uses: ./.github/workflows/postgres-tests.yml
 
   build:
     name: Build release artifacts
@@ -272,10 +213,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Prepare upstream production module graph
         run: |
@@ -411,10 +349,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Prepare upstream production module graph
         run: |
@@ -500,10 +435,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Prepare upstream production module graph
         run: |
@@ -967,10 +899,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: '.go-version'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Prepare upstream production module graph
         shell: pwsh

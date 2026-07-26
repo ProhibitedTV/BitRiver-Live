@@ -1,6 +1,7 @@
 name: Monitoring config checks
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 permissions:

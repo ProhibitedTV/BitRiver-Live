@@ -50,32 +50,36 @@ func TestGoRuntimeBaselineIsAligned(t *testing.T) {
 	if strings.Contains(releaseWorkflow, "go-version-file: 'go.mod'") {
 		t.Fatal("release workflow must not infer an unpatched Go toolchain from go.mod")
 	}
-	if count := strings.Count(releaseWorkflow, "go-version-file: '.go-version'"); count != 7 {
-		t.Fatalf("release workflow exact Go setup count=%d, want 7", count)
+	if strings.Contains(releaseWorkflow, "actions/setup-go@") {
+		t.Fatal("release workflow must use the shared pinned setup-go action")
+	}
+	if count := strings.Count(releaseWorkflow, "uses: ./.github/actions/setup-go"); count != 6 {
+		t.Fatalf("release workflow shared Go setup count=%d, want 6", count)
 	}
 }
 
 func TestImageScansUseTheComposeOMEConfigImage(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
-	for _, path := range []string{
-		filepath.Join(".github", "workflows", "ci.yml"),
-		filepath.Join(".github", "workflows", "image-scan.yml"),
+	path := filepath.Join(".github", "workflows", "image-scan.yml")
+	workflow := readRepoFile(t, repoRoot, path)
+	if strings.Contains(workflow, "bitriver-live/ome-config:local") {
+		t.Errorf("%s must not scan the retired local-only OME helper tag", path)
+	}
+	for _, required := range []string{
+		"BITRIVER_OME_CONFIG_IMAGE_TAG=ci",
+		"mapfile -t ome_config_images",
+		"grep -E '^ghcr\\.io/prohibitedtv/bitriver-ome-config:' /tmp/compose-images.txt",
+		"((${#ome_config_images[@]} != 1))",
+		`"${ome_config_images[0]}"`,
 	} {
-		workflow := readRepoFile(t, repoRoot, path)
-		if strings.Contains(workflow, "bitriver-live/ome-config:local") {
-			t.Errorf("%s must not scan the retired local-only OME helper tag", path)
+		if !strings.Contains(workflow, required) {
+			t.Errorf("%s missing Compose-derived OME scan invariant %q", path, required)
 		}
-		for _, required := range []string{
-			"BITRIVER_OME_CONFIG_IMAGE_TAG=ci",
-			"mapfile -t ome_config_images",
-			"grep -E '^ghcr\\.io/prohibitedtv/bitriver-ome-config:' /tmp/compose-images.txt",
-			"((${#ome_config_images[@]} != 1))",
-			`"${ome_config_images[0]}"`,
-		} {
-			if !strings.Contains(workflow, required) {
-				t.Errorf("%s missing Compose-derived OME scan invariant %q", path, required)
-			}
-		}
+	}
+
+	ci := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml"))
+	if !strings.Contains(ci, "uses: ./.github/workflows/image-scan.yml") {
+		t.Fatal("CI must reuse the single image-scan workflow")
 	}
 }
 

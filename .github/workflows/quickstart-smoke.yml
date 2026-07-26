@@ -6,7 +6,19 @@ concurrency:
 
 on:
   workflow_call:
+    inputs:
+      run_compose_smoke:
+        description: Run the full Ubuntu Compose quickstart smoke job.
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
+    inputs:
+      run_compose_smoke:
+        description: Run the full Ubuntu Compose quickstart smoke job.
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   quickstart-entrypoints:
@@ -76,6 +88,7 @@ jobs:
           }
 
   quickstart-smoke:
+    if: inputs.run_compose_smoke
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
