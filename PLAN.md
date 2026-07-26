@@ -63,6 +63,10 @@
 - Keep the rendered Alertmanager config mode 0600. Its container validator must
   run as the invoking host UID/GID so the bind remains readable without making
   a potentially credential-bearing render group- or world-readable.
+- Export the renderer's six fallback webhook variables after assigning them.
+  Both supported substitution engines consume the process environment, so
+  unexported shell defaults otherwise become empty URLs/tokens and produce an
+  invalid clean-runner config.
 - Monitoring's final Compose overlay render must use
   `deploy/.env.example` explicitly. Clean GitHub runners do not have the
   operator-owned root `.env`, so relying on Compose's implicit env discovery

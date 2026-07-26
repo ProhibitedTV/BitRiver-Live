@@ -104,6 +104,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       nine-rule validation, then showed `amtool` could not read the intentionally
       mode-0600 render as the image's default UID. The container now runs as the
       invoking host UID/GID so validation retains the private file mode.
+    - Run `30214233612` proved the file is readable, then exposed empty fallback
+      webhook values: the renderer assigned defaults without exporting them to
+      `envsubst` or Python. All six defaults are now exported, and a functional
+      regression renders from an absent env file and requires every non-empty
+      example URL/token.
 
 - [x] Task 4 - Repair and deduplicate release preflight
   - Acceptance criteria:

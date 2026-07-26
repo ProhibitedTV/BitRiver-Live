@@ -1,6 +1,8 @@
 package scripts_test
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -137,6 +139,52 @@ func TestMonitoringValidationSelectsContainerToolsExplicitly(t *testing.T) {
 	} {
 		if strings.Contains(script, stale) {
 			t.Errorf("monitoring validation retains image-default entrypoint seam %q", stale)
+		}
+	}
+}
+
+func TestAlertmanagerRendererExportsValidationDefaults(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "alertmanager.yml")
+	missingEnvPath := filepath.Join(tempDir, "missing.env")
+	renderScript := filepath.Join(repoRoot, "scripts", "render-alertmanager-config.sh")
+
+	cmd := exec.Command(
+		testBash(t),
+		shellPath(renderScript),
+		"--env-file",
+		shellPath(missingEnvPath),
+		"--output",
+		shellPath(outputPath),
+	)
+	cmd.Env = append(os.Environ(),
+		"BITRIVER_ALERTMANAGER_DEFAULT_WEBHOOK_URL=",
+		"BITRIVER_ALERTMANAGER_DEFAULT_WEBHOOK_TOKEN=",
+		"BITRIVER_ALERTMANAGER_CRITICAL_WEBHOOK_URL=",
+		"BITRIVER_ALERTMANAGER_CRITICAL_WEBHOOK_TOKEN=",
+		"BITRIVER_ALERTMANAGER_AUTH_WEBHOOK_URL=",
+		"BITRIVER_ALERTMANAGER_AUTH_WEBHOOK_TOKEN=",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("render Alertmanager validation defaults: %v\n%s", err, output)
+	}
+
+	renderedBytes, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read rendered Alertmanager config: %v", err)
+	}
+	rendered := string(renderedBytes)
+	for _, required := range []string{
+		"http://example.invalid/default",
+		"replace-default-token",
+		"http://example.invalid/critical",
+		"replace-critical-token",
+		"http://example.invalid/auth",
+		"replace-auth-token",
+	} {
+		if !strings.Contains(rendered, required) {
+			t.Errorf("rendered Alertmanager config missing exported default %q", required)
 		}
 	}
 }
