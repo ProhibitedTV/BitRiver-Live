@@ -207,6 +207,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       shell syntax, generated-asset comparison, CI contract checks, and another
       literal `./scripts/verify.sh` passed; the Docker smoke again reached
       healthy OME/API/viewer and the private `.env` hash was unchanged.
+    - PR-head standalone run `30216694278` passed on Ubuntu, macOS, and Windows;
+      Windows specifically passed Helm drift, function coverage, build,
+      blocking govulncheck policy, and artifact upload. Automatic PR run
+      `30216675113` passed unified Ubuntu verification, ShellCheck,
+      Windows/macOS Go tests, all three quickstart entrypoint paths, and the
+      secret guard. Exact merged-main proof remains required before tagging.
 
 - [ ] Task 6 - Publish and inspect `v1.2.3-rc.3`
   - Acceptance criteria:
