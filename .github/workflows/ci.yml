@@ -55,6 +55,8 @@ jobs:
         with:
           filters: |
             verify_changed:
+              - '.github/actions/**'
+              - '.github/workflows/**'
               - 'go.mod'
               - 'go.sum'
               - '**/*.go'
@@ -66,6 +68,8 @@ jobs:
               - 'web/viewer/**'
             go_changed:
               # Go runtime + module/dependency inputs (exclude docs-only changes).
+              - '.go-version'
+              - '.github/actions/setup-go/action.yml'
               - 'go.mod'
               - 'go.sum'
               - '**/*.go'
@@ -75,16 +79,20 @@ jobs:
               - 'deploy/**'
             viewer_changed:
               # Viewer app + immediate viewer/runtime contract dependencies.
+              - '.github/actions/setup-node-viewer/action.yml'
+              - '.github/workflows/viewer-ci.yml'
               - 'web/viewer/**'
               - 'deploy/.env.example'
               - 'internal/api/**'
               - 'internal/server/**'
             monitoring_changed:
+              - '.github/workflows/monitoring-config.yml'
               - 'deploy/monitoring/**'
               - 'deploy/docker-compose.monitoring.yml'
               - 'scripts/check-monitoring-config.sh'
               - 'scripts/render-alertmanager-config.sh'
             docs_changed:
+              - '.github/workflows/docs-consistency.yml'
               - 'README.md'
               - 'docs/**'
               - 'deploy/.env.example'
@@ -104,6 +112,7 @@ jobs:
               - 'deploy/ome/**'
             shell_changed:
               # Shell scripts only.
+              - '.github/workflows/shellcheck.yml'
               - 'scripts/**/*.sh'
               - 'deploy/install/**/*.sh'
             postgres_changed:
@@ -122,13 +131,17 @@ jobs:
               - 'internal/**'
               - 'web/viewer/**'
             quickstart_changed:
+              - '.github/actions/setup-go/action.yml'
+              - '.github/workflows/quickstart-smoke.yml'
               - 'cmd/bitriver/**'
               - 'deploy/**'
               - 'scripts/**'
             wizard_release_changed:
+              - '.github/workflows/wizard-release.yml'
               - 'deploy/install/wizard.sh'
               - 'scripts/test-wizard-release.sh'
             go_workflow_changed:
+              - '.github/actions/setup-go/action.yml'
               - '.github/workflows/go-unit-tests.yml'
               - '.github/workflows/postgres-tests.yml'
               - '.github/workflows/ingest-e2e.yml'

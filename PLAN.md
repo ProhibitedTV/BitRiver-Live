@@ -39,6 +39,10 @@
   Release also duplicates the reusable Postgres service, which already caused
   `rc.1` to diverge, and both setup composite actions perform a second checkout
   using a different action pin than their callers.
+- The first consolidation PR run proved GitHub accepts the reusable-call graph
+  and executes called docs/policy/image jobs, but showed that a reusable
+  workflow edit did not select its own path-gated CI job. Each reusable workflow
+  and setup action must therefore be an explicit input to the checks it owns.
 - The `rc.2` release failure is bounded to the `go-tests` verification step:
   job-level `GOPROXY=off` is inherited by Compose build arguments, while
   `verify.sh` already applies offline variables directly to host Go tests.

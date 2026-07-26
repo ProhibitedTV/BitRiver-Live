@@ -48,6 +48,32 @@ func TestCIUsesReusableWorkflowSources(t *testing.T) {
 	}
 }
 
+func TestReusableWorkflowChangesSelectTheirCIJobs(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	ci := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml"))
+	for _, workflow := range []string{
+		"quickstart-smoke.yml",
+		"viewer-ci.yml",
+		"shellcheck.yml",
+		"docs-consistency.yml",
+		"monitoring-config.yml",
+		"wizard-release.yml",
+		"image-scan.yml",
+	} {
+		if count := strings.Count(ci, ".github/workflows/"+workflow); count < 2 {
+			t.Errorf("%s must appear in its path filter and reusable call, found %d references", workflow, count)
+		}
+	}
+	for _, action := range []string{
+		".github/actions/setup-go/action.yml",
+		".github/actions/setup-node-viewer/action.yml",
+	} {
+		if !strings.Contains(ci, action) {
+			t.Errorf("CI path filters must select checks when %s changes", action)
+		}
+	}
+}
+
 func TestSetupActionsDoNotOwnCheckout(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	for _, relativePath := range []string{

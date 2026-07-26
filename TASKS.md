@@ -65,6 +65,15 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       testing docs for the reusable model. `go test ./scripts`, CI contract,
       Go-workflow convention, 15-file YAML parsing, and `git diff --check`
       passed.
+    - PR run `30213569005` proved GitHub accepts the reusable-call syntax and
+      started called docs/policy/image jobs, but reusable viewer/shell/
+      quickstart/monitoring/wizard jobs skipped because their own workflow files
+      were absent from the corresponding path filters. The follow-up adds every
+      reusable workflow/setup action to its owner filter and a regression that
+      requires both the filter and call reference.
+    - The focused path-filter regression, CI contract, YAML parsing, and diff
+      checks passed after the correction; a replacement PR run must exercise the
+      complete reusable set before merge.
 
 - [x] Task 4 - Repair and deduplicate release preflight
   - Acceptance criteria:
