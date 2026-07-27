@@ -21,10 +21,10 @@
   },
   "dependencies": {
     "hls.js": "1.6.16",
-    "next": "16.2.11",
+    "next": "16.2.12",
     "ovenplayer": "0.10.52",
-    "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
