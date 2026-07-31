@@ -497,6 +497,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       the two optional Docker-build mirror overrides.
     - Installer wording and generated contract documentation consistency checks
       pass after the testing-guide update.
+    - PR #1348 CI run `30651676770` passes completely: Ubuntu test-all, image
+      build/scan, native arm64 viewer build/runtime, shellcheck, docs
+      consistency, macOS/Windows Go, viewer integration/build/audit, and all
+      quickstart entrypoint matrices.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:
