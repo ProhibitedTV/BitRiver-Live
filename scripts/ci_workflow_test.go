@@ -10,7 +10,11 @@ import (
 
 func TestCIUsesReusableWorkflowSources(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
-	ci := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml"))
+	ci := strings.ReplaceAll(
+		readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml")),
+		"\r\n",
+		"\n",
+	)
 
 	reusable := []string{
 		"quickstart-smoke.yml",
@@ -154,6 +158,42 @@ func TestReusableImageScanUsesCurrentBoundedInstaller(t *testing.T) {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("image scan workflow missing %q", required)
 		}
+	}
+}
+
+func TestReusableImageScanProvesViewerOnNativeArm64(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "image-scan.yml"))
+	for _, required := range []string{
+		"viewer-arm64:",
+		"runs-on: ubuntu-24.04-arm",
+		"timeout-minutes: 20",
+		`test "$(uname -m)" = "aarch64"`,
+		"docker build --platform linux/arm64",
+		`--format '{{.Architecture}}'`,
+		"docker run --rm --entrypoint uname bitriver-viewer:arm64-ci -m",
+		"docker run --rm --entrypoint node bitriver-viewer:arm64-ci --version",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("image scan workflow missing native viewer arm64 invariant %q", required)
+		}
+	}
+	if strings.Contains(workflow, "setup-qemu") || strings.Contains(workflow, "Set up QEMU") {
+		t.Fatal("image scan workflow must not emulate the native viewer arm64 proof")
+	}
+
+	ci := strings.ReplaceAll(
+		readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml")),
+		"\r\n",
+		"\n",
+	)
+	filterStart := strings.Index(ci, "            image_scan_changed:\n")
+	filterEnd := strings.Index(ci, "            quickstart_changed:\n")
+	if filterStart == -1 || filterEnd <= filterStart {
+		t.Fatal("CI workflow is missing the image-scan path filter")
+	}
+	if !strings.Contains(ci[filterStart:filterEnd], "'.github/workflows/release.yml'") {
+		t.Fatal("release workflow changes must trigger native viewer arm64 proof")
 	}
 }
 

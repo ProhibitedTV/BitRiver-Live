@@ -1,6 +1,48 @@
 # PLAN
 
-## Current scope - restore the release baseline and publish `rc.6` (2026-07-31)
+## Current scope - repair the `rc.6` hosted release failures and publish `rc.7` (2026-07-31)
+
+- Preserve immutable `v1.2.3-rc.6` at verified main commit `d94ac432`.
+  Release run `30643868431` proved the restored viewer baseline, Go/Postgres,
+  every CLI/release/launcher matrix entry, Linux packages and all three
+  package-acceptance hosts, Homebrew, and four first-party multi-architecture
+  images. It did not create a GitHub prerelease.
+- Repair the hosted MSI at the actual ICE validation boundary. Precomposed WiX
+  definition arguments worked and `candle.exe` compiled both sources, but
+  `light.exe` rejected both shortcut key-path rows with `ICE03: Invalid
+  registry path`. The WiX XML incorrectly uses doubled backslashes in registry
+  keys (and shortcut target paths), even though XML does not escape a
+  backslash. Use canonical single-backslash Windows paths and retain ICE
+  validation.
+- Remove emulated Node installation from viewer image publication. The amd64
+  image completed, while the arm64 Buildx leg crashed inside `npm ci` with
+  `qemu: uncaught target signal 4 (Illegal instruction)` and never unwound.
+  Build amd64 on `ubuntu-latest` and arm64 on GitHub's native
+  `ubuntu-24.04-arm` runner, then assemble the public multi-architecture
+  manifest and SBOM in a bounded finalizer job. Keep the other four image
+  publishers unchanged apart from an explicit timeout.
+
+### `rc.7` test and publication plan
+
+- Add regressions requiring canonical WiX registry/shortcut paths, native
+  per-architecture viewer jobs, absence of QEMU from the viewer path, bounded
+  image jobs, final manifest assembly, and downstream product/release
+  dependencies.
+- Prove the native amd64 viewer image locally and structurally verify exact
+  runner/platform pairing for both architectures; hosted PR/release jobs are
+  authoritative for native arm64 build/runtime evidence. Parse all
+  workflow/action YAML, compile/link the MSI with pinned WiX, run focused and
+  full workflow tests, then finish with literal `./scripts/verify.sh --viewer`
+  while preserving the operator `.env` hash.
+- Require complete PR CI and exact merged-main CI before annotated immutable
+  `v1.2.3-rc.7`. Accept the candidate only after the hosted MSI, both native
+  viewer architectures, multi-architecture manifest/SBOM, all packages and
+  release assets/checksums, anonymous GHCR pulls, OME-backed product gate, and
+  GitHub prerelease publication pass.
+- Clean Ubuntu/XOA installation, Nginx Proxy Manager browser access, reboot,
+  and repeated OME restart/media recovery remain separate promotion evidence.
+
+## Previous scope - restore the release baseline and publish `rc.6` (2026-07-31)
 
 - Preserve the immutable `v1.2.3-rc.5` tag at commit `72283baf`. Release run
   `30222035324` passed environment validation, migrated Postgres, repository
