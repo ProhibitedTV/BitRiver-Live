@@ -104,7 +104,7 @@ done
 
 grep -Fq "scripts/stage-release-assets.sh --output \"\$out_dir\"" "$repo_root/.github/workflows/release.yml"
 grep -Fq "scripts/stage-release-assets.sh --output \"\$launcher_root/share/bitriver-live\"" "$repo_root/.github/workflows/release.yml"
-[[ $(grep -Fc -- '--release-tag "$RELEASE_TAG"' "$repo_root/.github/workflows/release.yml") -eq 3 ]] || {
+[[ $(grep -Fc -- "--release-tag \"\$RELEASE_TAG\"" "$repo_root/.github/workflows/release.yml") -eq 3 ]] || {
   echo "every release asset staging path must pass the exact immutable release tag" >&2
   exit 1
 }

@@ -811,6 +811,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       BitRiver containers, generated configs have no diff, and the private
       root `.env` was restored byte-for-byte at SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR #1353 run `30671011370` passed the unified Ubuntu product gate,
+      image scans, native arm64 viewer proof, Windows/macOS Go tests, and the
+      Windows quickstart entrypoint. Its only defect was ShellCheck SC2016 on
+      an intentional literal `$RELEASE_TAG` assertion, repeated by the Linux
+      and macOS quickstart jobs; the assertion now uses an escaped double-
+      quoted pattern so the literal contract remains intact without a lint
+      suppression.
 
 - [ ] Task 12 - Rewrite README around the consumer golden path
   - Acceptance criteria:
