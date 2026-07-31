@@ -124,6 +124,7 @@ jobs:
               - 'third_party/**'
             image_scan_changed:
               - '.github/workflows/image-scan.yml'
+              - '.github/workflows/release.yml'
               - '.trivyignore/**'
               - 'deploy/docker-compose.yml'
               - 'deploy/**/Dockerfile*'

@@ -359,7 +359,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       GitHub Release job skipped. `rc.5` remains immutable and is not a
       published prerelease.
 
-- [-] Task 9 - Restore the release baseline and publish `v1.2.3-rc.6`
+- [x] Task 9 - Restore the release baseline and inspect `v1.2.3-rc.6`
   - Acceptance criteria:
     - Current `main` returns to green by restoring the six viewer versions
       guarded by the proven runtime baseline without reverting compatible
@@ -369,9 +369,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Focused workflow/runtime tests, clean viewer install/audit/tests/build,
       viewer image build, YAML parsing, literal full verification, PR CI, and
       exact merged-main CI pass before tagging.
-    - The immutable `rc.6` workflow publishes a GitHub prerelease with complete
-      assets/checksums, package acceptance, anonymous GHCR access, and the
-      OME-backed pull-only product gate.
+    - The immutable `rc.6` workflow is inspected completely; any release or
+      image-publication failure is classified before a successor tag.
   - Check:
     - Read-only live inspection found current-main CI run `30404788813` red:
       `TestViewerRuntimeBaselineIsAligned` rejected six drifted versions and
@@ -394,7 +393,54 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Postgres/Redis/SRS/SRS controller/OME/transcoder/API/viewer smoke checks.
       The operator `.env` was restored with unchanged SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
-      PR, merged-main, and hosted release verification remain in progress.
+    - PR #1345 run `30642592147`, squash merge `d94ac432`, and exact
+      merged-main run `30643297236` passed before annotated
+      `v1.2.3-rc.6` was pushed.
+    - Release run `30643868431` passed the restored viewer checks, Go/Postgres,
+      every CLI/release/launcher entry, Linux packages, Ubuntu 24.04/Debian
+      12/Rocky 9 package acceptance, Homebrew, and four first-party image
+      publishers. The hosted MSI compiled both WiX sources with concrete
+      arguments, then `light.exe` rejected the doubled-backslash shortcut
+      registry keys with `ICE03: Invalid registry path`.
+    - The viewer amd64 image built, while emulated arm64 `npm ci` crashed with
+      `qemu: uncaught target signal 4 (Illegal instruction)` and left Buildx in
+      the same step. The already-failed run was cancelled after the job remained
+      nonterminal; viewer SBOM, pull-only product gate, release aggregation, and
+      GitHub prerelease publication did not run. `rc.6` remains immutable and
+      is not a published prerelease.
+
+- [-] Task 9a - Repair hosted MSI and viewer arm64 publication, then publish `v1.2.3-rc.7`
+  - Acceptance criteria:
+    - WiX registry and shortcut paths use canonical single backslashes; pinned
+      WiX compiles and links with unsuppressed ICE validation.
+    - Viewer amd64 and arm64 images build on matching native GitHub runners,
+      publish architecture tags, and assemble the release tag into one
+      multi-architecture manifest with a release SBOM.
+    - Image jobs have bounded timeouts; the viewer path does not use QEMU; the
+      pull-only product gate and final release depend on the assembled viewer
+      manifest.
+    - Focused/full workflow regressions, YAML parsing, local architecture/MSI
+      proof, literal verification, PR CI, and exact merged-main CI pass before
+      tagging.
+    - The immutable `rc.7` workflow publishes the MSI, packages, complete
+      assets/checksums, public multi-architecture images/SBOMs, the OME-backed
+      pull-only product gate, and a GitHub prerelease.
+  - Check:
+    - `PLAN.md` records both exact `rc.6` hosted failures, bounded fixes, risks,
+      tests, immutable-tag rule, and the remaining clean-host evidence boundary
+      before implementation.
+    - Local RC7 proof passes: focused and full workflow/CI regression suites;
+      all 15 workflow/action YAML files; both CI contract scripts; pinned WiX
+      3.14.1 compile plus unsuppressed ICE link to a 7.7 MB MSI; and native
+      amd64 viewer image build/runtime (`x86_64`, Node 24). PR CI is the
+      authoritative native arm64 build/runtime gate before tagging.
+    - Literal `./scripts/verify.sh --viewer` passes all Go packages, migrated
+      Postgres, Compose rendering, canonical image builds, healthy
+      Postgres/Redis/SRS/SRS controller/OME/transcoder/API/viewer smoke, and 26
+      Jest suites/217 tests/four snapshots. The operator `.env` was restored
+      with unchanged SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+      PR, merged-main, and hosted release evidence remain in progress.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:

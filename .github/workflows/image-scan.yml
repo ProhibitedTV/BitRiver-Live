@@ -9,6 +9,29 @@ permissions:
   packages: read
 
 jobs:
+  viewer-arm64:
+    name: Viewer native arm64 build and runtime
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify native arm64 runner
+        run: test "$(uname -m)" = "aarch64"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Build viewer arm64 image
+        run: docker build --platform linux/arm64 --file web/viewer/Dockerfile --tag bitriver-viewer:arm64-ci web/viewer
+
+      - name: Verify viewer arm64 runtime
+        run: |
+          test "$(docker image inspect bitriver-viewer:arm64-ci --format '{{.Architecture}}')" = "arm64"
+          test "$(docker run --rm --entrypoint uname bitriver-viewer:arm64-ci -m)" = "aarch64"
+          docker run --rm --entrypoint node bitriver-viewer:arm64-ci --version
+
   image-scan:
     runs-on: ubuntu-latest
     steps:

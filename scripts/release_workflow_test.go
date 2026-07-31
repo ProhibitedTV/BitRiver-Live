@@ -261,6 +261,7 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 	for _, required := range []string{
 		`<Directory Id="RELEASEASSETSDIR" Name="bitriver-live" />`,
 		`<ComponentGroupRef Id="ReleaseAssets" />`,
+		`Target="[SystemFolder]WindowsPowerShell\v1.0\powershell.exe"`,
 	} {
 		if !strings.Contains(wix, required) {
 			t.Fatalf("WiX source missing harvested release-asset invariant %q", required)
@@ -268,6 +269,78 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 	}
 	if strings.Contains(wix, `Source="$(var.SourceDir)\share\docker-compose.yml"`) {
 		t.Fatal("WiX source must not retain the old two-file share layout")
+	}
+	if count := strings.Count(wix, `Key="Software\BitRiverLive"`); count != 2 {
+		t.Fatalf("WiX shortcut registry key count=%d, want 2 canonical paths", count)
+	}
+	for _, forbidden := range []string{
+		`Key="Software\\BitRiverLive"`,
+		`WindowsPowerShell\\v1.0\\powershell.exe`,
+	} {
+		if strings.Contains(wix, forbidden) {
+			t.Fatalf("WiX source retains doubled-backslash Windows path %q", forbidden)
+		}
+	}
+}
+
+func TestViewerImagePublicationUsesNativeArchitectures(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	genericStart := strings.Index(workflow, "\n  publish-images:\n")
+	nativeStart := strings.Index(workflow, "\n  publish-viewer-architectures:\n")
+	manifestStart := strings.Index(workflow, "\n  publish-viewer-image:\n")
+	productGateStart := strings.Index(workflow, "\n  pull-only-product-gate:\n")
+	if genericStart == -1 || nativeStart <= genericStart || manifestStart <= nativeStart || productGateStart <= manifestStart {
+		t.Fatal("release workflow must order generic images, native viewer images, viewer manifest, and product gate")
+	}
+
+	genericImages := workflow[genericStart:nativeStart]
+	if strings.Contains(genericImages, "component: viewer") {
+		t.Fatal("viewer must not execute npm under the generic QEMU multi-architecture publisher")
+	}
+	if !strings.Contains(genericImages, "timeout-minutes: 45") {
+		t.Fatal("generic image publication must have a bounded timeout")
+	}
+
+	nativeViewer := workflow[nativeStart:manifestStart]
+	for _, required := range []string{
+		"runs-on: ${{ matrix.runner }}",
+		"timeout-minutes: 30",
+		"platform: linux/amd64",
+		"runner: ubuntu-latest",
+		"platform: linux/arm64",
+		"runner: ubuntu-24.04-arm",
+		"platforms: ${{ matrix.platform }}",
+		"${{ env.RELEASE_TAG }}-${{ matrix.arch }}",
+		"Verify native runner architecture",
+		`actual="$(uname -m)"`,
+		"Verify pushed viewer architecture",
+		`docker run --rm --entrypoint uname "$image" -m`,
+		`docker run --rm --entrypoint node "$image" --version`,
+	} {
+		if !strings.Contains(nativeViewer, required) {
+			t.Errorf("native viewer image workflow missing %q", required)
+		}
+	}
+	if strings.Contains(nativeViewer, "setup-qemu") || strings.Contains(nativeViewer, "Set up QEMU") {
+		t.Fatal("native viewer image publication must not install QEMU")
+	}
+
+	viewerManifest := workflow[manifestStart:productGateStart]
+	for _, required := range []string{
+		"timeout-minutes: 15",
+		"- publish-viewer-architectures",
+		"docker buildx imagetools create",
+		`"$release_ref-amd64"`,
+		`"$release_ref-arm64"`,
+		"needs.verify-env.outputs.publish_latest",
+		"container-sbom-viewer",
+	} {
+		if !strings.Contains(viewerManifest, required) {
+			t.Errorf("viewer manifest workflow missing %q", required)
+		}
+	}
+	if count := strings.Count(workflow, "- publish-viewer-image"); count != 2 {
+		t.Fatalf("viewer manifest downstream dependency count=%d, want product gate and release", count)
 	}
 }
 

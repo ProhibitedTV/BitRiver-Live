@@ -709,6 +709,7 @@ jobs:
       - postgres-tests
       - verify-env
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       matrix:
         include:
@@ -724,10 +725,6 @@ jobs:
             context: .
             dockerfile: cmd/transcoder/Dockerfile
             image_name: bitriver-transcoder
-          - component: viewer
-            context: web/viewer
-            dockerfile: web/viewer/Dockerfile
-            image_name: bitriver-viewer
           - component: ome-config
             context: .
             dockerfile: deploy/ome-config/Dockerfile
@@ -787,11 +784,159 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  publish-viewer-architectures:
+    name: Publish viewer image (${{ matrix.arch }})
+    needs:
+      - go-tests
+      - postgres-tests
+      - verify-env
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    env:
+      REGISTRY: ghcr.io
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select repository-owner image namespace
+        id: image-namespace
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >>"$GITHUB_OUTPUT"
+
+      - name: Verify native runner architecture
+        run: |
+          set -euo pipefail
+          case "${{ matrix.arch }}" in
+            amd64) expected=x86_64 ;;
+            arm64) expected=aarch64 ;;
+            *) exit 2 ;;
+          esac
+          actual="$(uname -m)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Runner architecture mismatch: expected $expected, got $actual" >&2
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push viewer ${{ matrix.arch }} image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: web/viewer
+          file: web/viewer/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.image-namespace.outputs.value }}/bitriver-viewer:${{ env.RELEASE_TAG }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Verify pushed viewer architecture
+        run: |
+          set -euo pipefail
+          image="${{ steps.image-namespace.outputs.value }}/bitriver-viewer:${RELEASE_TAG}-${{ matrix.arch }}"
+          case "${{ matrix.arch }}" in
+            amd64) expected=x86_64 ;;
+            arm64) expected=aarch64 ;;
+            *) exit 2 ;;
+          esac
+          docker pull "$image"
+          actual="$(docker run --rm --entrypoint uname "$image" -m)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Viewer image architecture mismatch: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          docker run --rm --entrypoint node "$image" --version
+
+  publish-viewer-image:
+    name: Publish viewer multi-architecture manifest
+    needs:
+      - verify-env
+      - publish-viewer-architectures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REGISTRY: ghcr.io
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Select repository-owner image namespace
+        id: image-namespace
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >>"$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble viewer manifest
+        id: manifest
+        env:
+          PUBLISH_LATEST: ${{ needs.verify-env.outputs.publish_latest }}
+        run: |
+          set -euo pipefail
+          image="${{ steps.image-namespace.outputs.value }}/bitriver-viewer"
+          release_ref="$image:$RELEASE_TAG"
+          docker buildx imagetools create \
+            --tag "$release_ref" \
+            "$release_ref-amd64" \
+            "$release_ref-arm64"
+          if [[ "$PUBLISH_LATEST" == "true" ]]; then
+            docker buildx imagetools create \
+              --tag "$image:latest" \
+              "$release_ref-amd64" \
+              "$release_ref-arm64"
+          fi
+          digest="$(docker buildx imagetools inspect "$release_ref" --format '{{.Manifest.Digest}}')"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Invalid viewer manifest digest: $digest" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >>"$GITHUB_OUTPUT"
+
+      - name: Generate SBOM for viewer image
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ steps.image-namespace.outputs.value }}/bitriver-viewer@${{ steps.manifest.outputs.digest }}
+          output-file: bitriver-viewer-${{ env.RELEASE_TAG }}.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: container-sbom-viewer
+          path: bitriver-viewer-${{ env.RELEASE_TAG }}.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
   pull-only-product-gate:
     name: Pull-only tagged product gate
     needs:
       - verify-env
       - publish-images
+      - publish-viewer-image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -1033,6 +1178,7 @@ jobs:
       - package-acceptance
       - build-viewer
       - publish-images
+      - publish-viewer-image
       - pull-only-product-gate
       - brew-formula
       - windows-msi
