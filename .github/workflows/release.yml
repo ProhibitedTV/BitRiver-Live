@@ -1006,8 +1006,11 @@ jobs:
           $light = Join-Path $wixRoot "light.exe"
           $wixUIExtension = Join-Path $wixRoot "WixUIExtension.dll"
           $harvest = Join-Path $env:RUNNER_TEMP "bitriver-release-assets.wxs"
+          $productVersionArg = "-dProductVersion=$($env:MSI_VERSION)"
+          $sourceDirArg = "-dSourceDir=$launcherRoot"
+          $releaseAssetsDirArg = "-dReleaseAssetsDir=$releaseAssetsRoot"
           & $heat dir $releaseAssetsRoot -nologo -cg ReleaseAssets -dr RELEASEASSETSDIR -srd -sreg -ag -var var.ReleaseAssetsDir -out $harvest
-          & $candle -nologo -dProductVersion=$env:MSI_VERSION -dSourceDir=$launcherRoot -dReleaseAssetsDir=$releaseAssetsRoot deploy/installers/bitriver-live.wxs $harvest
+          & $candle -nologo $productVersionArg $sourceDirArg $releaseAssetsDirArg deploy/installers/bitriver-live.wxs $harvest
           & $light -nologo -ext $wixUIExtension bitriver-live.wixobj bitriver-release-assets.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
 
       - name: Upload MSI artifact
