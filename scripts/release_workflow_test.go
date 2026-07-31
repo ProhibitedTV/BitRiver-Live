@@ -214,6 +214,37 @@ func TestReleaseVerificationRestoresDependencyNetwork(t *testing.T) {
 	}
 }
 
+func TestReleaseImagePublisherUsesVerifiedModuleProxy(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	publishStart := strings.Index(workflow, "\n  publish-images:\n")
+	viewerStart := strings.Index(workflow, "\n  publish-viewer-architectures:\n")
+	if publishStart == -1 || viewerStart == -1 || viewerStart <= publishStart {
+		t.Fatal("release image publisher boundaries not found")
+	}
+	publisher := workflow[publishStart:viewerStart]
+	buildStart := strings.Index(publisher, "- name: Build and push ${{ matrix.component }} image")
+	sbomStart := strings.Index(publisher, "- name: Generate SBOM for ${{ matrix.component }} image")
+	if buildStart == -1 || sbomStart == -1 || sbomStart <= buildStart {
+		t.Fatal("release image build step boundaries not found")
+	}
+	buildStep := publisher[buildStart:sbomStart]
+	for _, required := range []string{
+		"build-args: |",
+		"GOPROXY=https://proxy.golang.org,direct",
+		"GOSUMDB=sum.golang.org",
+	} {
+		if !strings.Contains(buildStep, required) {
+			t.Errorf("release image publisher missing %q", required)
+		}
+	}
+
+	repoRoot := filepath.Dir(mustGetwd(t))
+	verify := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
+	if !strings.Contains(verify, "env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off") {
+		t.Fatal("release image network settings must not weaken offline host Go verification")
+	}
+}
+
 func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	for _, required := range []string{
