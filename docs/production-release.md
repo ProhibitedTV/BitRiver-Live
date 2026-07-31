@@ -8,6 +8,10 @@ For the promotion ladder that explains which checks are blocking or advisory at
 each stage, read [`docs/release-gates.md`](release-gates.md) before changing CI,
 release workflows, or operator-facing deployment behavior.
 
+Current reference: [`v1.2.3-rc.12`](releases/v1.2.3-rc.12.md) completed the
+automated publication and pull-only product gates. Its clean target-host
+promotion checks remain open and must not be inferred from CI.
+
 **Canonical deployment path:** Production rollouts must flow through the
 repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails
 (`deploy/check-env.sh`, `scripts/render-ome-config.sh`). Go CLI shims and CI
@@ -214,14 +218,15 @@ Keep this evidence attached to the release ticket/change request before maintena
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.
 2. Create one annotated tag that follows
-   `vMAJOR.MINOR.PATCH[-PRERELEASE]`. Use a numbered RC for the first public
-   candidate:
+   `vMAJOR.MINOR.PATCH[-PRERELEASE]`. Increment the numbered candidate for each
+   immutable RC attempt:
    ```bash
-   git tag -a v1.2.3-rc.1 -m "Release v1.2.3-rc.1"
-   git push origin v1.2.3-rc.1
+   release_tag=v1.2.3-rc.N
+   git tag -a "$release_tag" -m "Release $release_tag"
+   git push origin "$release_tag"
    ```
    Tags are immutable publication inputs. If a candidate fails, fix the source
-   and publish `rc.2`; never force-move or overwrite `rc.1`.
+   and increment the suffix; never force-move or overwrite an existing tag.
 3. The push triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml),
    which rebuilds the Go binaries for every platform, packages the viewer
    bundle, publishes version-matched first-party container images (including
@@ -311,7 +316,9 @@ published tag, then follow [`docs/installing-on-ubuntu.md`](installing-on-ubuntu
 Record all of the following against the exact release tag and checksums:
 
 1. Artifact-only install from a path containing spaces and a non-root Docker
-   operator using explicit `sudo` lifecycle commands.
+   operator using explicit `sudo` lifecycle commands. Before installation,
+   extract the downloaded package/archive and confirm all five first-party
+   `BITRIVER_*_IMAGE_TAG` values equal the exact release tag.
 2. Configuration/doctor/activation success with the systemd unit enabled.
 3. OME config render and token consistency, healthy OME/config helper services,
    and an authenticated manager/control request. The unauthenticated root

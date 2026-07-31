@@ -14,8 +14,8 @@ The archive includes:
 - `package.json`, `package-lock.json`, and `next.config.js`
 
 This structure mirrors what `next build` produces locally, allowing you to run
-the viewer behind a reverse proxy or host it from static infrastructure without
-cloning the repository.
+the standalone Node server behind a reverse proxy without cloning the
+repository. BitRiver does not publish a static-export or GitHub Pages build.
 
 ## Downloading the bundle
 
@@ -26,10 +26,11 @@ cloning the repository.
 
 ```bash
 sudo mkdir -p /opt/bitriver-viewer
-sudo tar -xzvf bitriver-viewer-v1.2.3.tar.gz -C /opt/bitriver-viewer --strip-components=1
+sudo tar -xzvf bitriver-viewer-v1.2.3-rc.12.tar.gz -C /opt/bitriver-viewer --strip-components=1
 ```
 
-> Replace `v1.2.3` with the actual tag name you downloaded.
+> Keep the viewer bundle, API, and first-party image tag aligned. The current
+> public candidate is `v1.2.3-rc.12`.
 
 The extraction creates `/opt/bitriver-viewer/.next/standalone/`,
 `/opt/bitriver-viewer/.next/static/`, and `/opt/bitriver-viewer/public/`. Keep
@@ -99,23 +100,12 @@ docker run -d --name bitriver-viewer \
   --restart unless-stopped \
   -p 3000:3000 \
   --env-file /opt/bitriver-viewer/.env \
-  ghcr.io/prohibitedtv/bitriver-viewer:v1.2.3
+  ghcr.io/prohibitedtv/bitriver-viewer:v1.2.3-rc.12
 ```
 
 Use Docker Compose or Kubernetes manifests when you need to manage replicas, but
 keep the environment variables consistent so the viewer points at the correct
 API origin.
-
-## Hosting via GitHub Pages
-
-If your organization enables the optional GitHub Pages publication step, the
-workflow uploads the same build output using `actions/upload-pages-artifact` and
-`actions/deploy-pages`. In that configuration the viewer is accessible at the
-Pages URL announced in the Release notes.
-
-When hosting from Pages (or any other CDN) make sure the `NEXT_VIEWER_BASE_PATH`
-value matches the path segment you serve the site from so that asset URLs
-resolve correctly.
 
 > **Need to build from source?** Clone the repository and follow
 > [`web/viewer/README.md`](../web/viewer/README.md) only when you are modifying

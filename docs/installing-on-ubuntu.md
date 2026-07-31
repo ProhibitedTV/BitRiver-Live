@@ -2,13 +2,12 @@
 
 This is the artifact-only installation path for an operator-managed Ubuntu VM. It installs the canonical Docker Compose stack; it does not build application images or require a source checkout.
 
-> **Availability:** the repository contains this installer and package pipeline, but no tagged GitHub Release or downloadable Ubuntu artifact exists yet. Use the source-checkout quickstart for evaluation. Use the commands below only with assets and images published together by an actual release tag.
+> **Current candidate:** [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12) publishes checksum-covered Ubuntu packages, launcher archives, signatures, SBOMs, and five matching first-party images. It is a prerelease, not stable promotion.
 
-The planned first artifact set is `v1.2.3-rc.1`. A tag containing a hyphen is
-a GitHub prerelease and does not move the `latest` image tag. Official images
-use `ghcr.io/prohibitedtv`; forks and mirrors can override
-`BITRIVER_IMAGE_NAMESPACE`. The release workflow logs out of GHCR and proves
-that all five official tagged manifests are anonymously readable before it
+A tag containing a hyphen is a GitHub prerelease and does not move the `latest`
+image tag. Official images use `ghcr.io/prohibitedtv`; forks and mirrors can
+override `BITRIVER_IMAGE_NAMESPACE`. The release workflow logs out of GHCR and
+proves that all five exact-tag manifests are anonymously readable before it
 publishes the GitHub prerelease.
 
 ## Support and evidence boundary
@@ -16,9 +15,20 @@ publishes the GitHub prerelease.
 - Production target: Ubuntu Server 24.04 LTS on amd64.
 - Package build coverage: amd64 and arm64 `.deb`/`.rpm` artifacts.
 - Package install coverage: Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers.
-- Provisional until clean-host evidence is attached to a tagged release: Debian 12, Rocky Linux, arm64, XOA/XCP-ng reboot recovery, and public ingest/playback.
+- RC12 release evidence: Ubuntu 24.04, Debian 12, and Rocky Linux 9 package
+  install/inspect/remove passed; the pull-only five-image stack passed real
+  RTMP, decoded OME/transcoder media, chat/moderation, VOD, and aggregate
+  status checks.
+- Provisional until target-host evidence is recorded: Debian/Rocky production
+  support, arm64, clean XOA/XCP-ng installation, NPM browser access, reboot
+  recovery, and repeated OME failure/media recovery.
 
-The installer can prove rendered configuration, migration completion, process health, and critical Compose health. Source-built canonical Compose also has an automated real RTMP, OvenMediaEngine/transcoder decode, chat/moderation, VOD, and aggregate-health gate. A release is not production-approved until the tagged pull-only artifacts pass that same product gate on a clean Ubuntu host plus authenticated OvenMediaEngine control and reboot/recovery acceptance. Track those remaining host-specific gates in issues #1297 and #1304.
+The installer proves rendered configuration, migration completion, process
+health, and critical Compose health. RC12's tag workflow also proved the real
+media/API product path from published images. Stable promotion still requires
+the package to be installed and exercised on the target Ubuntu VM through its
+real proxy, firewall, authenticated OvenMediaEngine control path, and reboot
+cycle.
 
 ## XOA/XCP-ng VM baseline
 
@@ -29,7 +39,10 @@ Create a bridged Ubuntu 24.04 VM with:
 - Correct DNS, NTP, and a hostname that survives reboot.
 - A separate backup target for Postgres, `/etc/bitriver-live`, and `/var/lib/bitriver-live`.
 
-The built-in doctor floor is 2 logical CPUs, 4 GiB RAM, and 10 GiB free disk. Transcoding, concurrent streams, and media retention normally need more. Take an XOA snapshot before upgrades, but do not treat a VM snapshot as the only database backup.
+The built-in doctor floor is 4 logical CPUs, 8 GiB RAM, and 20 GiB free disk.
+Transcoding, concurrent streams, and media retention normally need more. Take
+an XOA snapshot before upgrades, but do not treat a VM snapshot as the only
+database backup.
 
 ## 1. Install Docker Engine and Compose
 
@@ -59,23 +72,31 @@ Membership in the `docker` group is effectively root-level host access. Use a de
 
 ## 2. Download and verify a release artifact
 
-Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from the same [GitHub release](https://github.com/ProhibitedTV/BitRiver-Live/releases). Never mix a package, archive, or checksum file from different tags.
+Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from
+the same [RC12 release](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12).
+Never mix a package, archive, or checksum file from different tags.
+
+```bash
+release_tag=v1.2.3-rc.12
+base_url="https://github.com/ProhibitedTV/BitRiver-Live/releases/download/${release_tag}"
+curl -fLO "${base_url}/bitriver-live_${release_tag}_amd64.deb"
+curl -fLO "${base_url}/bitriver-launcher-linux-amd64.tar.gz"
+curl -fLO "${base_url}/CHECKSUMS.txt"
+grep "  bitriver-live_${release_tag}_amd64.deb$" CHECKSUMS.txt | sha256sum --check -
+grep '  bitriver-launcher-linux-amd64.tar.gz$' CHECKSUMS.txt | sha256sum --check -
+```
 
 Confirm the matching images are public before changing the host:
 
 ```bash
-release_tag=v1.2.3-rc.4
 for image in bitriver-live bitriver-viewer bitriver-srs-controller bitriver-transcoder bitriver-ome-config; do
   docker buildx imagetools inspect "ghcr.io/prohibitedtv/${image}:${release_tag}" >/dev/null
 done
 ```
 
-Replace the sample `release_tag` with the exact release tag you downloaded.
-
 Example archive verification:
 
 ```bash
-grep 'bitriver-launcher-linux-amd64.tar.gz$' CHECKSUMS.txt | sha256sum --check -
 tar -xzf bitriver-launcher-linux-amd64.tar.gz
 cd bitriver-launcher-linux-amd64
 ```

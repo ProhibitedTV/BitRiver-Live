@@ -2,6 +2,10 @@
 
 This guide provides an opinionated, conservative starting profile for running BitRiver Live on one physical or virtual host.
 
+For the packaged Ubuntu 24.04 amd64 path, install the current public candidate
+through [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md), then return
+here for sizing and optional resource overlays.
+
 > [!IMPORTANT]
 > Capacity depends on codec mix, bitrate ladder, viewer behavior, storage backend latency, and network quality. Validate these numbers in your own environment before committing to an SLA.
 

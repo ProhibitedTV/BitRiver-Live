@@ -1,217 +1,258 @@
 # BitRiver Live
 
-BitRiver Live is a self-hosted live-streaming website: creators publish over RTMP, viewers browse and watch channels, and operators run the control plane, media services, and stateful dependencies as one Docker Compose stack.
+[![CI](https://github.com/ProhibitedTV/BitRiver-Live/actions/workflows/ci.yml/badge.svg)](https://github.com/ProhibitedTV/BitRiver-Live/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ProhibitedTV/BitRiver-Live?include_prereleases&sort=semver)](https://github.com/ProhibitedTV/BitRiver-Live/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-The supported baseline is one operator-managed Linux host—or Docker Desktop using Linux containers for evaluation. It is not a managed service, an autoscaling platform, or a Kubernetes-first product.
+BitRiver Live is a self-hosted streaming website for one operator-managed host.
+Creators publish from OBS over RTMP; viewers discover channels, watch low-latency
+video, chat, follow creators, and play published VODs. The Go control plane,
+Next.js viewer, media services, Postgres, and Redis ship as one Docker Compose
+stack.
 
-> **Release status:** install from a source checkout today. This repository does not currently publish a GitHub Release, Ubuntu package, or downloadable installer. The release workflows and Ubuntu installer work are being hardened, but this README will not point at artifacts that do not exist.
-
-The repository includes the candidate Ubuntu package, archive, and systemd lifecycle implementation so it can be exercised before the first tag. Those paths become downloadable only after a release publishes matching images, checksums, and assets.
-
-The first publication will be an immutable release candidate such as
-`v1.2.3-rc.1`, not a stable-production declaration. Its five matching images
-will use `ghcr.io/prohibitedtv`, and the tag workflow must prove anonymous
-image access plus the full pull-only media/API golden path before it creates a
-GitHub prerelease. Stable promotion additionally requires the clean Ubuntu
-24.04/XOA, Nginx Proxy Manager, authenticated OME, browser, and reboot evidence
-described in [`docs/installing-on-ubuntu.md`](docs/installing-on-ubuntu.md).
+**Current public candidate:**
+[`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12).
+It is a prerelease for evaluation and staged home-hosting rollout, not a stable
+or managed-service promise.
 
 ![BitRiver Live viewer home showing one live channel](docs/assets/screenshots/viewer-home.png)
 
-_The shipped Next.js viewer, captured from the canonical Compose stack on Docker Desktop for Windows. The account and channel are local demo data; no mockup or concept art is used._
+_The shipped viewer running from the canonical Compose stack on Docker Desktop
+for Windows. The account and channel are local demo data; this is a product
+capture, not concept art._
 
-## What ships today
+## What you get
 
-- A public Next.js viewer with discovery, channels, live chat, follows, schedules, and published VODs.
-- Creator onboarding with channel creation, masked stream credentials, live-state monitoring, sharing, and uploads.
-- A Go API and admin/control centre with session auth, moderation, analytics, health, and readiness endpoints.
-- SRS RTMP ingest with token-authenticated callbacks and per-channel forwarding.
-- OvenMediaEngine (OME) LL-HLS playback through the same public `/live/` origin as the viewer.
-- FFmpeg transcoding jobs with 1080p, 720p, and 480p HLS renditions.
-- Postgres for durable product state and Redis for shared chat/runtime coordination.
-- A canonical root `.env` plus [`deploy/docker-compose.yml`](deploy/docker-compose.yml) deployment contract.
+- A public Next.js viewer with live discovery, channel pages, chat, follows,
+  schedules, and published VODs.
+- Creator setup with channel creation, masked OBS credentials, live-state
+  monitoring, share links, and uploads.
+- A Go API and control centre with session auth, moderation, analytics,
+  liveness, readiness, and aggregate dependency health.
+- SRS RTMP ingest with authenticated callbacks and public channel mapping.
+- OvenMediaEngine (OME) LL-HLS playback on the viewer's `/live/` origin.
+- FFmpeg transcoding with 1080p, 720p, and 480p HLS renditions.
+- Postgres persistence, Redis coordination, checksummed installers, SBOMs, and
+  a boot-managed Ubuntu Compose lifecycle.
 
 ![BitRiver Live live directory](docs/assets/screenshots/live-directory.png)
 
-## The working media path
+## Choose your path
 
-```mermaid
-flowchart LR
-  OBS["OBS / RTMP encoder"] -->|"rtmp://host:1935/live + stream key"| SRS["SRS ingest"]
-  SRS -->|"authenticated publish callback"| API["Go control plane"]
-  API -->|"key -> public channel ID"| SRS
-  SRS -->|"private RTMP forward"| OME["OvenMediaEngine"]
-  API -->|"start / stop job"| FFmpeg["FFmpeg transcoder"]
-  OME -->|"LL-HLS via /live/"| Viewer["Next.js viewer"]
-  FFmpeg -->|"1080p / 720p / 480p HLS"| Media["transcoder-public"]
-  API --> Postgres[("Postgres")]
-  API --> Redis[("Redis")]
+| Goal | Supported entry point | What has been proved |
+| --- | --- | --- |
+| Evaluate on Windows | Source checkout + Docker Desktop Linux containers | Native PowerShell contract check and full local Compose/OME startup |
+| Host on Ubuntu | RC12 `.deb` or launcher archive on Ubuntu Server 24.04 amd64 | Checksums, package install/remove, anonymous image pulls, and pull-only media/API product gate |
+| Develop or contribute | Source checkout on Windows, macOS, or Linux | Cross-platform Go and entrypoint CI plus the canonical repository gate |
+
+The Ubuntu package and archive are real public downloads. Clean XOA VM reboot,
+Nginx Proxy Manager browser access, and repeated OME failure/recovery are still
+operator acceptance checks; see [Production evidence boundary](#production-evidence-boundary).
+
+## Try it on Docker Desktop for Windows
+
+Prerequisites:
+
+- Windows 11 with Docker Desktop using Linux containers and the WSL 2 backend
+- Git
+- Go 1.26 or newer (the repository and production builders pin Go 1.26.5)
+- At least 4 logical CPUs, 8 GiB RAM, and 20 GiB free disk available to the stack
+
+From PowerShell:
+
+```powershell
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
+Set-Location BitRiver-Live
+Copy-Item deploy\.env.example .env
+go run ./cmd/bitriver env init --env-file .\.env
+.\scripts\verify-windows-docker.ps1 -Start
 ```
 
-The public stream key never becomes the OME stream name. SRS accepts the private key, asks the control plane for the public channel mapping, and forwards to OME as `default/live/<channel-id>`. Viewer playback is then `https://your-host/live/<channel-id>/llhls.m3u8`.
+The final command validates Docker Desktop and Compose, builds the first-party
+images, runs migrations, starts the canonical stack, and requires successful
+responses from:
 
-OME process health alone is not accepted as playback proof. The deployment path validates the declared `default/live` application, and release acceptance still requires a bounded real publish plus manifest/decode checks.
+- Viewer: <http://localhost:8080/viewer>
+- Control centre: <http://localhost:8080/admin>
+- Liveness: <http://localhost:8080/healthz>
+- Dependency readiness: <http://localhost:8080/readyz>
 
-## Quick evaluation
+It prints the exact cleanup command and leaves the stack available for
+inspection. `.env` contains local credentials; never commit or post it.
 
-### Prerequisites
-
-- Docker Engine or Docker Desktop with Compose V2
-- Linux containers (`desktop-linux` / WSL 2 on Windows)
-- Go 1.26 or newer; CI and images currently pin Go 1.26.5
-- Enough disk for the application images and Postgres/Redis/media state
-
-### 1. Create and initialize `.env`
-
-macOS, Linux, or Git Bash:
+For the shorter source path on Linux, macOS, or Git Bash:
 
 ```bash
 cp deploy/.env.example .env
 go run ./cmd/bitriver env init --env-file ./.env
-```
-
-Windows PowerShell:
-
-```powershell
-Copy-Item deploy/.env.example .env
-go run ./cmd/bitriver env init --env-file .\.env
-```
-
-The initializer generates required local secrets. Do not commit `.env`.
-
-### 2. Start from source
-
-macOS, Linux, or Git Bash:
-
-```bash
 BITRIVER_LIVE_MODE=development ./scripts/quickstart.sh --image-source build
 ```
 
-Windows PowerShell:
+See the [quickstart guide](docs/quickstart.md) for platform notes, profiles,
+resource sizing, update commands, and troubleshooting.
 
-```powershell
-$env:BITRIVER_LIVE_MODE = "development"
-.\scripts\quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml --image-source build
-Remove-Item Env:BITRIVER_LIVE_MODE
-```
+## Install the Ubuntu release candidate
 
-Open:
-
-- Viewer: <http://localhost:8080/viewer>
-- Admin/control centre: <http://localhost:8080/admin>
-- Liveness: <http://localhost:8080/healthz>
-- Dependency readiness: <http://localhost:8080/readyz>
-
-The source command behind both wrappers is:
+The production deployment target is Ubuntu Server 24.04 LTS on amd64 with
+Docker Engine and the Compose plugin. Download the package and checksum from
+the same immutable release:
 
 ```bash
-go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --image-source build
+release_tag=v1.2.3-rc.12
+base_url="https://github.com/ProhibitedTV/BitRiver-Live/releases/download/${release_tag}"
+
+curl -fLO "${base_url}/bitriver-live_${release_tag}_amd64.deb"
+curl -fLO "${base_url}/CHECKSUMS.txt"
+grep "  bitriver-live_${release_tag}_amd64.deb$" CHECKSUMS.txt | sha256sum --check -
+
+sudo apt install "./bitriver-live_${release_tag}_amd64.deb"
+sudo bitriver-host install --operator-user "$USER"
+sudo bitriver-host configure
+sudo bitriver-host doctor
 ```
 
-### 3. Prove Docker Desktop for Windows
+Installation is deliberately two-phase. It installs a disabled systemd unit
+and rotates sample credentials, but it does not expose the stack until public
+URLs, trusted proxies, image digests, Docker access, and production validation
+pass. Follow the [Ubuntu installation guide](docs/installing-on-ubuntu.md) to
+finish configuration and activate it:
 
-From native PowerShell after `.env` is initialized:
-
-```powershell
-.\scripts\verify-windows-docker.ps1 -Start
+```bash
+sudo bitriver-host activate
+sudo bitriver-host status
 ```
 
-This checks that Docker Desktop is reachable in Linux-container mode, validates Compose, builds this checkout, starts the canonical stack, and waits for `/healthz`, `/readyz`, `/viewer`, and `/admin`. Failures identify whether Docker itself is stopped/inaccessible or the repository contract failed.
+Prefer a portable archive? The same release includes
+`bitriver-launcher-linux-amd64.tar.gz`, plus Linux arm64 packages, RPMs, a
+Windows MSI, launcher archives, a Homebrew formula, checksums, signatures, and
+software bills of materials.
 
-For config/engine validation without starting services:
+## First broadcast
 
-```powershell
-.\scripts\verify-windows-docker.ps1
-```
-
-See [`docs/quickstart.md`](docs/quickstart.md) for resource sizing, profiles, update commands, and troubleshooting.
-
-## First stream workflow
-
-1. Enable self-signup for a local evaluation or sign in with the bootstrapped admin account.
+1. Sign in with the bootstrapped administrator, or enable self-signup for a
+   private evaluation.
 2. Open **Creator setup**, create a channel, and copy the masked OBS settings.
-3. In OBS, use the displayed RTMP server URL and paste the stream key into its separate key field.
-4. Start streaming. SRS validates the key, the channel transitions live, OME publishes LL-HLS, and the transcoder records the configured rendition URLs.
-5. Open the public channel link in a second browser session and verify video, audio, chat, and the offline transition when OBS stops.
+3. In OBS, put the displayed RTMP URL in **Server** and the secret stream key in
+   its separate **Stream Key** field.
+4. Start streaming and wait for the channel to become live.
+5. Open its public channel page in a second browser session. Confirm video,
+   audio, chat, and the offline transition after OBS stops.
 
-Never put the stream key in screenshots, issue bodies, terminal transcripts, or committed config.
+Never put a stream key in screenshots, issue bodies, logs, or committed files.
 
-## Home hosting: Ubuntu VM + XOA + Nginx Proxy Manager
+## How media moves
 
-The intended production shape is an Ubuntu 24.04 LTS VM on XCP-ng/XOA, with Docker Compose on the VM and Nginx Proxy Manager (NPM) providing the public HTTPS edge.
+```mermaid
+flowchart LR
+  OBS["OBS / RTMP encoder"] -->|"RTMP + private stream key"| SRS["SRS ingest"]
+  SRS -->|"authenticated publish callback"| API["Go control plane"]
+  API -->|"public channel mapping"| SRS
+  SRS -->|"private RTMP forward"| OME["OvenMediaEngine"]
+  API -->|"job lifecycle"| FFmpeg["FFmpeg transcoder"]
+  OME -->|"LL-HLS at /live/"| Viewer["Next.js viewer"]
+  FFmpeg -->|"HLS renditions at /hls/"| Viewer
+  API --> Postgres[("Postgres")]
+  API --> Redis[("Redis")]
+```
 
-- Send the public HTTP host to BitRiver on port `8080`. The viewer, API, chat websocket, admin surface, and OME LL-HLS path are all served on that origin (`/viewer`, `/api`, `/admin`, and `/live`).
-- Enable websocket forwarding for `/api/chat/ws` and other documented realtime routes.
-- Publish creator RTMP separately on TCP `1935`. NPM's HTTP proxy-host screen cannot carry RTMP; use an NPM **Stream** entry, a direct DNS/LAN/VPN route, or another TCP proxy. A normal Cloudflare orange-cloud record does not proxy RTMP.
-- Treat direct OME HTTP/API ports as private diagnostics. The golden viewer path is `/live/` through BitRiver, not a second public OME origin.
-- Keep Postgres, Redis, the SRS control API, the transcoder control API, and the OME manager API off the public network.
+The private stream key never becomes the public OME stream name. SRS validates
+the key through the control plane and forwards the broadcast as
+`default/live/<channel-id>`. Public LL-HLS is then
+`https://your-host/live/<channel-id>/llhls.m3u8`.
 
-Start with [`docs/installing-on-ubuntu.md`](docs/installing-on-ubuntu.md), [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md), [`docs/production-single-host.md`](docs/production-single-host.md), and [`docs/security.md`](docs/security.md).
+OME process health is not playback proof. Release and production acceptance
+also require the declared `default/live` application, a real publish, manifest
+retrieval, and several seconds of decoded audio/video.
 
-## Operational acceptance
+## Home hosting behind Nginx Proxy Manager
 
-Container status is useful, but it is not the finish line. Before putting an instance behind a public proxy, prove all of the following:
+The intended home-hosting shape is an Ubuntu VM on XCP-ng/XOA with Nginx Proxy
+Manager (NPM) at the HTTPS edge:
 
-- `docker compose ... config` renders with the intended `.env`.
-- `/healthz`, `/readyz`, `/viewer`, and `/admin` return successfully.
-- OME reaches healthy state within a bounded timeout and its declared `default/live` application is readable through the authenticated manager API.
-- A real RTMP publish transitions the channel live without exposing its stream key.
-- `/live/<channel-id>/llhls.m3u8` returns through the public origin and at least several seconds of video and audio decode.
-- All advertised rendition manifests return successfully.
-- Stopping the publisher returns the channel offline; retry/restart does not leave stale jobs or a permanently live channel.
-- Backups, restore, firewall rules, TLS, and log rotation match the runbooks.
+- Forward the public app host to the VM on TCP `8080`; `/viewer`, `/api`,
+  `/admin`, websocket routes, and `/live/` stay on that origin.
+- Forward `/hls/` to the VM on TCP `9080` for transcoder renditions.
+- Publish creator ingest separately on TCP `1935`. NPM's HTTP Proxy Host cannot
+  carry RTMP; use an NPM Stream entry or another L4 path.
+- Keep Postgres, Redis, SRS control, transcoder control, and the OME manager API
+  private.
+- Open OME signalling, relay, and UDP ICE ports only when you deliberately
+  enable and test WebRTC. An HTTP reverse proxy does not replace those NAT and
+  firewall rules.
 
-Useful operator commands:
+Use the complete [NPM/Cloudflare guide](docs/reverse-proxy-npm-cloudflare.md)
+and [single-host production runbook](docs/production-single-host.md), including
+the exact trusted-proxy, TLS, firewall, and media-port guidance.
+
+## Production evidence boundary
+
+RC12 proves:
+
+- checksum-complete public release assets and five anonymously readable GHCR
+  image manifests;
+- package install/inspect/remove on Ubuntu 24.04, Debian 12, and Rocky Linux 9;
+- a pull-only tagged stack with authenticated configuration and bounded OME
+  startup; and
+- an eight-stage product gate covering accounts/channel creation, RTMP live
+  state, decoded live media, offline transition, chat/moderation, VOD upload and
+  playback, and aggregate status.
+
+Before calling your own host production-ready, also record on that host:
+
+- clean Ubuntu/XOA installation and firewall/NAT behavior;
+- browser access through the real NPM/TLS path;
+- authenticated OME manager access plus live and rendition playback;
+- boot recovery after a VM reboot; and
+- repeated OME restart/media recovery without stale live state or jobs.
+
+The commands and evidence checklist are in the
+[Ubuntu guide](docs/installing-on-ubuntu.md),
+[release gates](docs/release-gates.md), and
+[production release runbook](docs/production-release.md).
+
+## Operate and recover
+
+Installed Ubuntu host:
+
+```bash
+sudo bitriver-host status
+sudo bitriver-host logs
+sudo journalctl -u bitriver-live-compose.service -n 200 --no-pager
+```
+
+Source checkout:
 
 ```bash
 docker compose --env-file .env -f deploy/docker-compose.yml ps
-docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 bitriver-live srs-controller ome transcoder
+docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 \
+  bitriver-live srs-controller ome transcoder
 go run ./cmd/bitriver smoke --env-file ./.env
 ```
 
-For a destructive local release rehearsal that owns a disposable quickstart
-stack, creates real accounts and a channel, publishes deterministic 1080p RTMP,
-decodes both OME and transcoder playback, exercises chat/moderation and VOD,
-scans its evidence, and tears everything down:
-
-```bash
-./scripts/test-production-golden-path.sh \
-  --stack quickstart \
-  --client docker
-```
-
-The sanitized result is
-`.artifacts/production-golden-path/production-golden-path.json`. Do not point
-this lifecycle-owning mode at an operator stack whose data must be preserved;
-use `--stack running` against a deliberately prepared staging installation.
+Back up configuration, Postgres, and media state before upgrades. The Ubuntu
+uninstaller preserves `/etc/bitriver-live` and `/var/lib/bitriver-live` unless
+you supply both explicit purge flags. See [operations](docs/operations.md),
+[upgrades and rollback](docs/upgrades.md), and
+[security](docs/security.md).
 
 ## Support boundary
 
 Supported and actively hardened:
 
-- One operator-managed host
-- Docker Compose with Postgres and Redis
-- Source-checkout evaluation on Linux/macOS and Windows Docker Desktop
-- RTMP ingest, OME LL-HLS, transcoding, viewer, chat, moderation, and VOD workflows described in this repository
+- One operator-managed host using the canonical Docker Compose contract
+- Source-checkout evaluation on Windows Docker Desktop, macOS, and Linux
+- Ubuntu Server 24.04 amd64 as the first packaged production target
+- RTMP ingest, OME LL-HLS, transcoding, viewer, chat, moderation, and VOD
 
 Not promised:
 
 - A managed BitRiver service
 - Hands-off high availability, autoscaling, or multi-host failover
-- Kubernetes as the primary install path
-- CDN/global distribution guarantees
-- An installer, package, or immutable release artifact before one is actually published
+- Kubernetes as the primary installation path
+- CDN or global-distribution guarantees
+- Stable-release support while `v1.2.3` remains a release candidate
 
-## Repository map
-
-- [`cmd/`](cmd) — process entrypoints and the deployment CLI
-- [`internal/`](internal) — API, domain, auth, ingest, storage, server, and runtime code
-- [`web/viewer/`](web/viewer) — the public Next.js application
-- [`deploy/`](deploy) — Compose, migrations, SRS/OME/nginx configuration, Helm assets, and installers
-- [`scripts/`](scripts) — quickstart, validation, backup/restore, and release helpers
-- [`docs/`](docs) — architecture, operator, security, testing, and release runbooks
-
-## Verification and contribution
+## Verify or contribute
 
 Run the repository gate from Git Bash, Linux, or macOS:
 
@@ -219,31 +260,19 @@ Run the repository gate from Git Bash, Linux, or macOS:
 ./scripts/verify.sh --viewer
 ```
 
-Common focused checks:
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [testing](docs/testing.md), and the
+[deployment contract](docs/contract.md) before changing runtime behavior.
+Security reports belong through [SECURITY.md](SECURITY.md), not a public issue.
 
-```bash
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
-npm --prefix web/viewer run lint
-npm --prefix web/viewer run test
-npm --prefix web/viewer run build
-docker compose --env-file .env -f deploy/docker-compose.yml config
-```
+Repository map:
 
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/testing.md`](docs/testing.md), and [`docs/contract.md`](docs/contract.md) before changing runtime behavior. Security reports belong through [`SECURITY.md`](SECURITY.md), not a public issue.
+- [`cmd/`](cmd) — process entrypoints and the deployment CLI
+- [`internal/`](internal) — API, auth, ingest, storage, server, and runtime code
+- [`web/viewer/`](web/viewer) — the public Next.js application
+- [`deploy/`](deploy) — Compose, migrations, media config, and installers
+- [`scripts/`](scripts) — quickstart, validation, backup, and release helpers
+- [`docs/`](docs) — architecture, operator, security, testing, and release docs
 
-## Key docs
-
-- [Quickstart](docs/quickstart.md)
-- [Deployment contract](docs/contract.md)
-- [Architecture](docs/architecture.md)
-- [Stream lifecycle](docs/stream-lifecycle.md)
-- [Operations](docs/operations.md)
-- [Single-host production baseline](docs/production-single-host.md)
-- [Ubuntu/XOA artifact installation target](docs/installing-on-ubuntu.md)
-- [Nginx Proxy Manager / Cloudflare](docs/reverse-proxy-npm-cloudflare.md)
-- [Security](docs/security.md)
-- [Release gates](docs/release-gates.md)
-- [Production release runbook](docs/production-release.md)
-- [Support](SUPPORT.md)
-- [Changelog](CHANGELOG.md)
-- [MIT License](LICENSE)
+Start with [quickstart](docs/quickstart.md), [architecture](docs/architecture.md),
+[stream lifecycle](docs/stream-lifecycle.md), [support](SUPPORT.md), and the
+[changelog](CHANGELOG.md).

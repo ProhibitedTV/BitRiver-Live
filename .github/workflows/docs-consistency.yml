@@ -14,5 +14,10 @@ jobs:
       - name: Check installer milestone wording
         run: ./scripts/check-doc-installer-language.sh
 
+      - name: Check local Markdown links
+        run: |
+          python3 -m unittest scripts/check_doc_links_test.py
+          python3 scripts/check_doc_links.py
+
       - name: Check generated contract env docs are fresh
         run: ./scripts/generate-contract-doc.sh --check

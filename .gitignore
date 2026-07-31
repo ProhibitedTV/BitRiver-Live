@@ -14,6 +14,10 @@ bin/
 .gocache/
 /.gocache-*/
 
+# Python artifacts
+__pycache__/
+*.py[cod]
+
 # Editors
 .idea/
 .vscode/

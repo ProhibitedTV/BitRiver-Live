@@ -4,6 +4,18 @@ This document defines how BitRiver Live uses release-stage labels and what opera
 
 BitRiver Live can be promoted as **production-capable for operator-managed, single-host deployments** when run on the documented Docker Compose contract.
 
+## Current public candidate
+
+[`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12)
+is the current prerelease. Its checksum-complete assets, package acceptance,
+five anonymous image manifests, and pull-only eight-stage media/API product
+gate passed at commit `3a9572f0`.
+
+That is release-candidate evidence, not stable promotion. Clean installation on
+the target Ubuntu/XOA VM, browser/media access through its real Nginx Proxy
+Manager and firewall path, reboot recovery, and repeated OME recovery still
+need operator evidence.
+
 ## Status levels
 
 ### dev

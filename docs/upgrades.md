@@ -47,6 +47,10 @@ sudo ./install.sh upgrade --operator-user "$USER"
 sudo bitriver-host upgrade --operator-user "$USER"
 ```
 
+Keep the package, launcher, five first-party image tags, and resolved digests on
+one exact release. In particular, do not replace an RC tag with the unqualified
+stable `v1.2.3` tag until that stable release actually exists.
+
 The host manager preserves configuration/data and restarts only when the unit was already active. Run `sudo bitriver-host status`, authenticated OME control, real ingest, and playback checks after every upgrade. Follow [`docs/installing-on-ubuntu.md`](installing-on-ubuntu.md) for reboot and Nginx Proxy Manager acceptance.
 
 Before changing images, query the database-backed plan. This command is read-only and does not create the ledger on an uninitialized database:

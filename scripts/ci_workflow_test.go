@@ -186,6 +186,23 @@ func TestReusableImageScanUsesVerifiedModuleProxyForComposeBuilds(t *testing.T) 
 	}
 }
 
+func TestVerifySelectsPythonRunnerForMarkdownChecks(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	verify := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
+	for _, required := range []string{
+		"PYTHON_RUNNER=()",
+		"PYTHON_RUNNER=(python3)",
+		"PYTHON_RUNNER=(py -3)",
+		"PYTHON_RUNNER=(python)",
+		`run_step "Markdown local-link checker tests" "${PYTHON_RUNNER[@]}" -m unittest scripts/check_doc_links_test.py`,
+		`run_step "Markdown local-link check" "${PYTHON_RUNNER[@]}" scripts/check_doc_links.py`,
+	} {
+		if !strings.Contains(verify, required) {
+			t.Errorf("verify.sh Python runner wiring missing %q", required)
+		}
+	}
+}
+
 func TestReusableImageScanProvesViewerOnNativeArm64(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "image-scan.yml"))

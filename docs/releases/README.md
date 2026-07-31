@@ -13,8 +13,13 @@ Use the release docs in this order:
 Naming convention:
 
 - `vX.Y.Z-draft.md` while notes are still being prepared
-- `vX.Y.Z.md` once the release is published and the note is final
+- `vX.Y.Z-rc.N.md` for a published release candidate
+- `vX.Y.Z.md` once the stable release is published and the note is final
 
-Current draft:
+Current published candidate:
+
+- [`v1.2.3-rc.12.md`](v1.2.3-rc.12.md)
+
+Stable-line draft:
 
 - [`v1.2.3-draft.md`](v1.2.3-draft.md)

@@ -15,11 +15,16 @@ If you are evaluating the project, start here. If you are preparing a production
 
 | Path | Use this when | Entry point |
 | --- | --- | --- |
-| Source checkout (recommended for evaluation and contribution) | You want the quickest path from a clone to a working local stack, or you expect to inspect/change code. | `go run ./cmd/bitriver quickstart` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart"`) |
+| Windows Docker Desktop evaluation | You want a native PowerShell check that builds, starts, and probes the full local stack. | `.\scripts\verify-windows-docker.ps1 -Start` |
+| Source checkout | You want a local stack on Linux/macOS or plan to inspect/change code. | `./scripts/quickstart.sh` |
+| Ubuntu 24.04 amd64 host | You want a source-free, boot-managed Compose installation. | [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12) `.deb` or launcher archive; follow [`installing-on-ubuntu.md`](installing-on-ubuntu.md) |
 
-There is no published GitHub Release, `.deb`, `.rpm`, Homebrew formula, or Windows installer at this time. Packaging code in the repository is development work, not an available download path.
-
-Once a tag actually publishes the matching images and checksummed assets, Ubuntu 24.04 amd64 operators can use the boot-managed archive or `.deb` path documented in [`installing-on-ubuntu.md`](installing-on-ubuntu.md). Until then, use the source-checkout path above; do not substitute guessed `releases/latest` URLs.
+RC12 is a public prerelease, not the stable `v1.2.3` declaration. Its release
+contains checksum-covered binaries, launcher archives, amd64/arm64 Linux
+packages, a Windows MSI, a Homebrew formula, viewer and container SBOMs, and
+five matching anonymous GHCR images. Package availability does not replace the
+clean-host, reverse-proxy, reboot, and OME recovery checks required for your
+production host.
 
 The control centre's browser-based Home Server Installer now mirrors the Ubuntu helper with a seven-step flow: Welcome, System Check, Install Mode, Core Settings, Review, Installing, and Success. Quick Install is the default path, while Advanced Install opens the lower-level storage, network, and service controls only when you explicitly ask for them.
 
@@ -110,9 +115,9 @@ Install Go 1.26+ to use the source-based quickstart (`go run ./cmd/bitriver quic
 
 `bitriver doctor` now enforces conservative production defaults before startup:
 
-- CPU: **2+ logical cores**
-- RAM: **4+ GiB total host memory**
-- Free disk: **10+ GiB** on the BitRiver workspace filesystem
+- CPU: **4+ logical cores**
+- RAM: **8+ GiB total host memory**
+- Free disk: **20+ GiB** on the BitRiver workspace filesystem
 - Docker: **24.0.0+**
 - Docker Compose plugin: **2.20.0+**
 

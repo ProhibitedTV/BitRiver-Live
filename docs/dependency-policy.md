@@ -77,4 +77,10 @@ Go exceptions live in `scripts/govulncheck-baseline.json`; the scanner rejects i
 
 ## Current below-threshold disposition
 
-As of 2026-07-12, npm reports two moderate findings through Next.js 16.2.10's PostCSS dependency (GHSA-qx2v-qp2m-jg93). npm offers only an invalid downgrade to Next.js 9.3.3. The codebase does not call PostCSS on untrusted runtime input; maintainers own the disposition and will review it by 2026-08-12 or immediately when a supported Next.js fix is published.
+As of 2026-07-31, the viewer uses Next.js 16.2.11 with explicit fixed PostCSS
+8.5.22 and Sharp 0.35.3 overrides. A clean production-only npm audit reports
+zero findings at the high/critical blocking threshold. The overrides remain
+release inputs and must be reevaluated whenever Next.js updates its transitive
+pins; do not remove them without a clean install, audit, test, and production
+build. Maintainers own this temporary override set and will review it by 2026-08-12
+even if no aligned Next.js release is available by then.

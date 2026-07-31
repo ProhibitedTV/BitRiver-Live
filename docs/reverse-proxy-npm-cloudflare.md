@@ -15,8 +15,9 @@ transcoder controller private.
 
 ## 1. Public environment values
 
-Set these values in the root `.env` before rendering Compose. Replace both
-example hostnames with records you control.
+Set these values in the root `.env` for a source checkout, or in
+`/etc/bitriver-live/bitriver.env` for the Ubuntu package. Replace both example
+hostnames with records you control.
 
 ```dotenv
 NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer
@@ -36,12 +37,17 @@ BITRIVER_SRS_PUBLIC_RTMP_BASE_URL=rtmp://ingest.example.com:1935/live
 ```
 
 Do not put the Compose-only names `ome`, `srs`, or `transcoder-public` in a
-viewer-facing URL. Re-apply the stack after editing `.env`:
+viewer-facing URL. For a source checkout, re-apply the stack after editing
+`.env`:
 
 ```bash
 docker compose --env-file .env -f deploy/docker-compose.yml config
 docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ```
+
+For an installed Ubuntu package, use `sudo bitriver-host doctor` followed by
+`sudo bitriver-host activate`; the host manager uses the installed env path and
+bounded systemd lifecycle.
 
 ## 2. DNS and TLS
 

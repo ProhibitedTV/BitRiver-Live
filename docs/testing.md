@@ -37,12 +37,18 @@ Use these category entrypoints from the repository root:
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) is the reusable/manual source for cross-platform entrypoint checks and targeted Compose smoke; the CI orchestrator calls its entrypoint matrix while the unified Ubuntu gate owns changed-path Compose smoke.
 - **Release bundle:** `./scripts/test-release-bundle.sh`
-  - Stages the source-free release allowlist outside the checkout in a path containing spaces, checks asset parity, and rejects deployment-generated credential files.
+  - Stages the source-free release allowlist outside the checkout in a path
+    containing spaces, checks asset parity, rejects deployment-generated
+    credential files, and proves an exact candidate tag is written to all five
+    staged first-party image defaults without changing the source env.
 - **Ubuntu host lifecycle:** `./scripts/test-compose-host-installer.sh`
   - Exercises rerunnable install/upgrade, separated configuration/data, bounded unit rendering, safe uninstall, rejected purge, and confirmed purge under an isolated root prefix.
   - Runs automatically from `./scripts/verify.sh` on Linux.
 - **Linux package generation:** `BITRIVER_INSTALL_NFPM=1 ./scripts/test-linux-packages.sh`
-  - Installs the pinned nFPM version when opted in, then builds and inspects amd64/arm64 `.deb`/`.rpm` packages from the canonical bundle.
+  - Installs the pinned nFPM version when opted in, then builds stable and
+    separately tag-stamped prerelease amd64/arm64 `.deb`/`.rpm` packages from
+    the canonical bundle. On Linux it extracts the prerelease `.deb` and checks
+    all five installed image tags.
   - The release workflow separately installs/removes the amd64 package in Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers before publication.
 - **Deploy smoke:** `./scripts/deploy-smoke.sh`
   - Boots the compose stack with an isolated temporary project name, waits for API `/readyz`, prints a short PASS/FAIL summary, and always tears down.
