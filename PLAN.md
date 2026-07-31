@@ -1,5 +1,66 @@
 # PLAN
 
+## Current scope - restore the release baseline and publish `rc.6` (2026-07-31)
+
+- Preserve the immutable `v1.2.3-rc.5` tag at commit `72283baf`. Release run
+  `30222035324` passed environment validation, migrated Postgres, repository
+  verification, the viewer bundle, every CLI/release/launcher artifact except
+  the MSI, Linux arm64 and amd64 packages, Ubuntu/Debian/Rocky package
+  acceptance, Homebrew generation, all five container publications/SBOMs, and
+  the pull-only tagged media/API product gate. GitHub Release creation skipped
+  because the MSI job failed, so `rc.5` is not a published prerelease.
+- Fix the remaining MSI failure without weakening validation. Pinned WiX 3.14.1
+  downloaded and checksum-verified on the hosted Windows runner, but PowerShell
+  passed `-dProductVersion=$env:MSI_VERSION` literally to `candle.exe`. Compose
+  the WiX definition arguments as explicit PowerShell strings before invoking
+  the native tool, and keep ICE validation enabled.
+- Restore the viewer's proven release baseline before any successor tag.
+  Dependabot merges moved `main` to Next 16.2.12, React/React DOM 19.2.8,
+  Node types 26.1.1, ESLint 10.8.0, and TypeScript 7.0.2. Current-main CI run
+  `30404788813` failed the pinned runtime-baseline contract and clean viewer
+  image construction; `ts-jest@29.4.11` requires TypeScript `<7`. Restore only
+  the six guarded versions while retaining unrelated compatible updates, then
+  prove the lockfile, clean install, audit, tests, build, and container image.
+
+### `rc.6` test and publication plan
+
+- Extend release-workflow regression coverage to require precomposed
+  `ProductVersion`, `SourceDir`, and `ReleaseAssetsDir` arguments and reject the
+  inline PowerShell environment-variable form that reached WiX literally.
+- Run focused Go workflow/runtime-baseline suites, parse all workflow/action
+  YAML, run a clean viewer `npm ci`, dependency-tree validation, production
+  audit, lint, Jest, Playwright, Next production build, and a real viewer image
+  build. Finish with literal `./scripts/verify.sh --viewer` and confirm the
+  operator-owned root `.env` hash is unchanged.
+- Require complete PR CI and exact merged-main CI. Only then create the next
+  annotated immutable tag, `v1.2.3-rc.6`, and accept it only if the hosted MSI,
+  package acceptance, release assets/checksums, anonymous GHCR pulls, and the
+  OME-backed pull-only product gate all pass and GitHub publishes a prerelease.
+- Clean Ubuntu/XOA installation, Nginx Proxy Manager browser access, reboot,
+  and repeated OME restart/media recovery remain separate promotion evidence.
+
+## Next scope - public repository hygiene and first-time install docs (2026-07-31)
+
+- The refreshed remote inventory contains 1,003 branches including `main`:
+  943 non-default tips are ancestors of `origin/main`; 59 are not merged and
+  include the two open Dependabot PR heads. Delete only the 943 ancestry-merged
+  refs after an immediate pre-delete ancestry recheck; preserve `main`, tags,
+  all 59 non-ancestor refs, and any newly opened PR head.
+- Re-audit the repository from a first-time consumer's point of view after a
+  successful public candidate exists. README should lead with what BitRiver
+  Live is, supported install choices, prerequisites, a short Docker Desktop
+  evaluation path, the Ubuntu 24.04 artifact/package path, post-install stream
+  workflow, reverse-proxy/media-port boundaries, and honest release status.
+- Replace promotional/generated imagery with actual product and workflow
+  screenshots only when their provenance and currentness can be verified.
+  Until then, prefer concise diagrams or text over imagery that misrepresents
+  the shipped UI.
+- Align quickstart, Ubuntu/XOA/Nginx Proxy Manager, production release,
+  operations, security, architecture, upgrade/backup, troubleshooting, and
+  release-note docs with the same commands and evidence boundaries. Add link
+  and wording regressions so stale no-release or source-only guidance cannot
+  silently return.
+
 ## Current scope - repair the `rc.4` release fan-out (2026-07-26)
 
 - Preserve the immutable `v1.2.3-rc.4` tag at merged commit `e67a9304`.

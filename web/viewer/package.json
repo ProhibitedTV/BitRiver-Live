@@ -21,10 +21,10 @@
   },
   "dependencies": {
     "hls.js": "1.6.16",
-    "next": "16.2.12",
+    "next": "16.2.11",
     "ovenplayer": "0.10.52",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
@@ -34,16 +34,16 @@
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
     "@types/jest": "30.0.0",
-    "@types/node": "26.1.1",
+    "@types/node": "24.13.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "brace-expansion": "5.0.8",
-    "eslint": "10.8.0",
+    "eslint": "9.39.5",
     "eslint-config-next": "16.2.11",
     "jest": "30.4.2",
     "jest-environment-jsdom": "30.4.1",
     "ts-jest": "29.4.11",
-    "typescript": "7.0.2"
+    "typescript": "6.0.3"
   },
   "overrides": {
     "brace-expansion": "$brace-expansion",

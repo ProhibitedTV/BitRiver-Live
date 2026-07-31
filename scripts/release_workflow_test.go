@@ -228,7 +228,10 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 		"heat.exe",
 		"-cg ReleaseAssets",
 		"-dr RELEASEASSETSDIR",
-		"-dProductVersion=$env:MSI_VERSION",
+		`$productVersionArg = "-dProductVersion=$($env:MSI_VERSION)"`,
+		`$sourceDirArg = "-dSourceDir=$launcherRoot"`,
+		`$releaseAssetsDirArg = "-dReleaseAssetsDir=$releaseAssetsRoot"`,
+		`& $candle -nologo $productVersionArg $sourceDirArg $releaseAssetsDirArg`,
 		`$wixUIExtension = Join-Path $wixRoot "WixUIExtension.dll"`,
 		"bitriver-release-assets.wixobj",
 	} {
@@ -239,6 +242,7 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 	for _, forbidden := range []string{
 		"Copy-Item deploy/docker-compose.yml",
 		"Copy-Item deploy/.env.example",
+		"-dProductVersion=$env:MSI_VERSION",
 		"-dProductVersion=$env:RELEASE_TAG",
 		`C:\\Program Files (x86)\\WiX Toolset`,
 	} {

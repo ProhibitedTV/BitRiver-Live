@@ -310,7 +310,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `dist`. Package acceptance, Homebrew generation, and GitHub Release
       creation were skipped. `rc.4` is not a published GitHub prerelease.
 
-- [-] Task 8 - Repair `rc.4` packaging failures and publish `v1.2.3-rc.5`
+- [x] Task 8 - Repair `rc.4` packaging failures and inspect `v1.2.3-rc.5`
   - Acceptance criteria:
     - The MSI job provisions and resolves a pinned compatible WiX toolchain
       without depending on hosted-runner preinstallation.
@@ -319,9 +319,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The viewer bundle producer and uploader use the same workspace-root path.
     - Focused workflow regressions, YAML parsing, repository verification, PR
       CI, and exact merged-main CI pass before the successor tag.
-    - The `rc.5` workflow publishes a GitHub prerelease with complete
-      checksums/assets, package acceptance, anonymous GHCR access, and pull-only
-      product evidence.
+    - The immutable `rc.5` workflow is inspected completely; any failure keeps
+      GitHub Release creation blocked and is classified before a successor tag.
   - Check:
     - `PLAN.md` records the three exact `rc.4` failure causes, risks, evidence
       boundary, and `rc.5` test/publication plan before implementation.
@@ -347,7 +346,109 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       SRS/OME/API/viewer health, viewer lint, and 26 Jest suites/217 tests/four
       snapshots. The operator `.env` was restored with unchanged SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
-      Remote PR/merged-main/release verification remains in progress.
+      PR run `30221501875`, merge commit `72283baf`, and exact merged-main run
+      `30221776092` passed before annotated `v1.2.3-rc.5` was pushed.
+    - Release run `30222035324` passed environment validation, migrated
+      Postgres, repository verification, the viewer bundle, all five image
+      publications/SBOMs, every CLI/release/launcher matrix entry, Linux amd64
+      and arm64 packages, Ubuntu 24.04/Debian 12/Rocky 9 package acceptance,
+      Homebrew generation, and the pull-only tagged media/API product gate.
+    - Hosted Windows downloaded and checksum-verified pinned WiX 3.14.1, then
+      `candle.exe` rejected the literal value `$env:MSI_VERSION` received from
+      the inline `-dProductVersion` argument. The MSI artifact failed and the
+      GitHub Release job skipped. `rc.5` remains immutable and is not a
+      published prerelease.
+
+- [-] Task 9 - Restore the release baseline and publish `v1.2.3-rc.6`
+  - Acceptance criteria:
+    - Current `main` returns to green by restoring the six viewer versions
+      guarded by the proven runtime baseline without reverting compatible
+      unrelated dependency updates.
+    - WiX definition arguments are precomposed as PowerShell strings; the
+      hosted MSI build keeps unsuppressed validation and uploads the result.
+    - Focused workflow/runtime tests, clean viewer install/audit/tests/build,
+      viewer image build, YAML parsing, literal full verification, PR CI, and
+      exact merged-main CI pass before tagging.
+    - The immutable `rc.6` workflow publishes a GitHub prerelease with complete
+      assets/checksums, package acceptance, anonymous GHCR access, and the
+      OME-backed pull-only product gate.
+  - Check:
+    - Read-only live inspection found current-main CI run `30404788813` red:
+      `TestViewerRuntimeBaselineIsAligned` rejected six drifted versions and
+      clean Docker `npm ci` rejected TypeScript 7.0.2 because
+      `ts-jest@29.4.11` requires TypeScript `<7`.
+    - `PLAN.md` records the exact current-main and `rc.5` failure evidence,
+      bounded repair, risks, tests, and immutable publication plan before code
+      changes.
+    - Local repair proof passes with Go 1.26.5: the focused runtime/MSI
+      regressions and full `go test ./scripts` suite; clean `npm ci`; the exact
+      dependency tree; a production audit with zero vulnerabilities; lint; 26
+      Jest suites/217 tests/four snapshots; the Next production build; all 36
+      Playwright tests; and a clean viewer Docker image build.
+    - All 15 workflow/action YAML files parse, both CI contract scripts pass,
+      `git diff --check` passes, and pinned WiX 3.14.1 compiles the product and
+      harvested assets with the precomposed `1.2.3`, source, and asset
+      definition arguments.
+    - Literal `./scripts/verify.sh --viewer` passes all Go packages, migrated
+      Postgres, Compose rendering, canonical image builds, and healthy
+      Postgres/Redis/SRS/SRS controller/OME/transcoder/API/viewer smoke checks.
+      The operator `.env` was restored with unchanged SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+      PR, merged-main, and hosted release verification remain in progress.
+
+- [ ] Task 10 - Execute ancestry-safe remote branch cleanup
+  - Acceptance criteria:
+    - Immediately refetch/prune and recompute ancestry against current
+      `origin/main` before deletion.
+    - Delete only non-default refs whose tips are ancestors of `origin/main`;
+      preserve tags, `main`, every non-ancestor ref, and every open PR head.
+    - Use bounded batches, stop on any classification change/failure, and
+      publish before/after counts plus the retained-branch inventory.
+  - Check:
+    - The 2026-07-31 refresh contains 1,003 remote branches including `main`:
+      943 ancestry-merged non-default refs and 59 non-ancestor refs. The latter
+      include open PR heads `dependabot/github_actions/docker/login-action-4.5.2`
+      and `dependabot/npm_and_yarn/web/viewer/viewer-tooling-ca5479bf07`.
+
+- [ ] Task 11 - Audit the repository as a first-time installer
+  - Acceptance criteria:
+    - Inventory README claims, screenshots, release/download links, install
+      commands, supported hosts, reverse-proxy/media ports, first-stream flow,
+      upgrades/backups, troubleshooting, and evidence boundaries against code
+      and the published candidate.
+    - Identify stale, duplicated, source-only, or no-longer-available guidance
+      before rewriting public docs.
+    - Record a bounded screenshot plan using only current product/runtime
+      captures with known provenance.
+
+- [ ] Task 12 - Rewrite README around the consumer golden path
+  - Acceptance criteria:
+    - Lead with the product, honest support boundary, prerequisites, and two
+      visible install choices: Docker Desktop evaluation and Ubuntu 24.04
+      artifact/package hosting.
+    - Show install, configure, verify, first stream, playback, reverse proxy,
+      upgrade, backup, and recovery entry points without duplicating runbooks.
+    - Replace stale promotional imagery with verified current product captures
+      or concise workflow diagrams.
+
+- [ ] Task 13 - Align install, operations, release, and support documentation
+  - Acceptance criteria:
+    - Quickstart, Ubuntu/XOA/Nginx Proxy Manager, production release,
+      operations, security, architecture, troubleshooting, upgrade/backup, and
+      release-note docs use the same shipped commands and support claims.
+    - Release assets and image names match the actual GitHub prerelease; OME
+      diagnostics and bounded recovery remain explicit.
+    - Stale/no-release wording and contradictory source-only paths are removed
+      or clearly labeled for contributors.
+
+- [ ] Task 14 - Verify and publish the repository refresh
+  - Acceptance criteria:
+    - Link/reference/wording regressions, generated docs, Markdown checks,
+      required repository verification, PR CI, and exact merged-main CI pass.
+    - Final public README rendering and all referenced images/links are checked
+      against GitHub before merge.
+    - The handoff distinguishes proven Docker Desktop/tag/package behavior from
+      still-pending clean XOA/NPM/reboot/repeated OME recovery evidence.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 
