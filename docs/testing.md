@@ -347,6 +347,8 @@ Run the compose smoke guard to ensure the default `.env` and `deploy/docker-comp
 
 `./scripts/verify.sh` now validates compose config with an explicit env file, preferring root `.env` and falling back to `deploy/.env.example` when `.env` is absent, so missing environment variables surface during verification. When Docker is available, verify then runs `./scripts/test-quickstart.sh` as an integration/smoke phase immediately after compose validation. Both Docker-dependent phases emit explicit skip messages when Docker is unavailable.
 
+Host Go tests remain offline (`GOPROXY=off GOSUMDB=off`). Clean production-module downloads inside quickstart container builds use `https://proxy.golang.org,direct` with `sum.golang.org` so a transient vanity-domain outage does not make Docker verification depend on a direct `gopkg.in` fetch. CI image scanning applies the same build-only policy. To test a different module mirror without changing runtime containers, set `BITRIVER_DOCKER_GOPROXY` and `BITRIVER_DOCKER_GOSUMDB` for `./scripts/test-quickstart.sh`.
+
 ```bash
 ./scripts/test-quickstart.sh
 ```

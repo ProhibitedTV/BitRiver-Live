@@ -627,6 +627,35 @@ func TestQuickstartSmokeSupportsExplicitPullProductionMode(t *testing.T) {
 	}
 }
 
+func TestQuickstartSmokeUsesNetworkOnlyForContainerDependencyBuilds(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "test-quickstart.sh"))
+	if err != nil {
+		t.Fatalf("read test-quickstart: %v", err)
+	}
+	script := string(content)
+
+	for _, required := range []string{
+		`DOCKER_BUILD_GOPROXY="${BITRIVER_DOCKER_GOPROXY:-https://proxy.golang.org,direct}"`,
+		`DOCKER_BUILD_GOSUMDB="${BITRIVER_DOCKER_GOSUMDB:-sum.golang.org}"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("quickstart container build network contract missing %q", required)
+		}
+	}
+	if count := strings.Count(script, `GOPROXY="$DOCKER_BUILD_GOPROXY"`); count != 2 {
+		t.Fatalf("quickstart container build GOPROXY application count=%d, want 2", count)
+	}
+	if count := strings.Count(script, `GOSUMDB="$DOCKER_BUILD_GOSUMDB"`); count != 2 {
+		t.Fatalf("quickstart container build GOSUMDB application count=%d, want 2", count)
+	}
+}
+
 func TestQuickstartSmokeBridgesExternalEnvWithoutReplacingOperatorConfig(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

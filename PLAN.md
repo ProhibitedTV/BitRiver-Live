@@ -17,11 +17,19 @@
   progress, and make the configured-login browser regression wait for the
   mocked auth response before clicking. This prevents the observed user-facing
   misroute and proves the expected external-login contract deterministically.
+- Harden the Docker dependency-fetch boundary exposed by PR CI. Both the
+  initial run and failed-job rerun reached direct `gopkg.in` fetches and failed
+  on HTTP 502 while native arm64 viewer proof passed. Keep host Go tests
+  offline, but give quickstart/verification Compose builds and the reusable
+  image-scan build an explicit `https://proxy.golang.org,direct` plus checksum
+  database configuration. Do not change runtime networking or image tags.
 
 ### `rc.8` test and publication plan
 
 - Add/adjust focused Navbar and Playwright regressions for initial auth loading
-  and configured-login navigation; keep the release workflow unchanged.
+  and configured-login navigation. Add workflow/script contracts that require
+  the build-only Go proxy in quickstart and image scan; keep the release
+  workflow and offline host-test policy unchanged.
 - Run viewer lint, Jest, Playwright, and production build, the relevant Go
   workflow contracts, workflow/action YAML parsing, `git diff --check`, and
   literal `./scripts/verify.sh --viewer` while preserving the operator `.env`

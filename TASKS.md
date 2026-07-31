@@ -454,6 +454,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       discovery completes.
     - The configured-login Playwright test waits for the mocked auth response
       and deterministically redirects to `/login?redirect=%2F`.
+    - Docker Compose image builds use the public Go module proxy with direct
+      fallback and checksum verification, while host Go tests remain offline.
     - Focused viewer tests, full viewer integration/build checks, workflow
       contracts/YAML, literal verification, PR CI, and exact merged-main CI pass
       before tagging.
@@ -478,6 +480,23 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       transcoder/API, viewer smoke, lint, and 26 Jest suites/218 tests/four
       snapshots. The operator `.env` was restored with unchanged SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR CI run `30650568202` passed secret/path selection and native arm64
+      viewer build/runtime, but both the initial image scan/Ubuntu gate and a
+      failed-job rerun hit repeatable HTTP 502 responses from direct
+      `gopkg.in` module fetches. This justifies a build-only proxy repair rather
+      than another blind rerun.
+    - Focused build-network regressions, Bash syntax, the full Go 1.26.5
+      `./scripts` package, all 19 workflow/action YAML files, and
+      `git diff --check` pass after the repair.
+    - A second literal `./scripts/verify.sh --viewer` passes with the hardened
+      build path; clean container logs show
+      `GOPROXY=https://proxy.golang.org,direct` and `GOSUMDB=sum.golang.org`,
+      then migrated Postgres and all SRS/OME/transcoder/API/viewer health gates
+      pass. The private `.env` hash remains unchanged.
+    - `docs/testing.md` documents the offline-host/build-network separation and
+      the two optional Docker-build mirror overrides.
+    - Installer wording and generated contract documentation consistency checks
+      pass after the testing-guide update.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:
