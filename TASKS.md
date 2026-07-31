@@ -440,7 +440,67 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Jest suites/217 tests/four snapshots. The operator `.env` was restored
       with unchanged SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
-      PR, merged-main, and hosted release evidence remain in progress.
+      PR #1347 and exact merged-main CI passed. Hosted release run
+      `30648508975` proved the MSI, native amd64/arm64 viewer images, assembled
+      viewer manifest, all other images/SBOMs, packages and package acceptance,
+      Homebrew, and the pull-only tagged product gate. The viewer bundle alone
+      failed: its configured-login Playwright test clicked before initial auth
+      discovery completed and observed the local auth URL. GitHub prerelease
+      creation therefore skipped; `rc.7` remains immutable and unpublished.
+
+- [-] Task 9b - Repair the viewer auth-discovery race and publish `v1.2.3-rc.8`
+  - Acceptance criteria:
+    - Navbar authentication actions cannot be invoked until initial viewer-auth
+      discovery completes.
+    - The configured-login Playwright test waits for the mocked auth response
+      and deterministically redirects to `/login?redirect=%2F`.
+    - Docker Compose image builds use the public Go module proxy with direct
+      fallback and checksum verification, while host Go tests remain offline.
+    - Focused viewer tests, full viewer integration/build checks, workflow
+      contracts/YAML, literal verification, PR CI, and exact merged-main CI pass
+      before tagging.
+    - The immutable `rc.8` workflow publishes every artifact, checksum, image,
+      SBOM, package, and the GitHub prerelease after the pull-only product gate.
+  - Check:
+    - `PLAN.md` records the exact `rc.7` failure, bounded product/test fix,
+      evidence plan, immutable-tag rule, and remaining clean-host boundary
+      before implementation.
+    - Focused Navbar Jest regression passes: one suite, 30 tests, including
+      disabled sign-in/create-account actions during initial auth discovery.
+    - Focused configured-login Playwright regression passes against a fresh
+      production build and standalone server (one test, 14 seconds).
+    - Full `npm run test:integration` passes: zero-warning lint, 26 Jest
+      suites/218 tests/four snapshots, a production Next.js build, and all 36
+      Playwright workflows.
+    - Go 1.26.5 passes the full `./scripts` workflow-contract package; Node
+      parses all 19 workflow/action YAML files; `git diff --check` passes.
+    - Literal `./scripts/verify.sh --viewer` passes in a clean-checkout env:
+      release bundle, all Go packages, contract invariants, migrated Postgres,
+      Compose render/build, healthy Postgres/Redis/SRS/SRS controller/OME/
+      transcoder/API, viewer smoke, lint, and 26 Jest suites/218 tests/four
+      snapshots. The operator `.env` was restored with unchanged SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR CI run `30650568202` passed secret/path selection and native arm64
+      viewer build/runtime, but both the initial image scan/Ubuntu gate and a
+      failed-job rerun hit repeatable HTTP 502 responses from direct
+      `gopkg.in` module fetches. This justifies a build-only proxy repair rather
+      than another blind rerun.
+    - Focused build-network regressions, Bash syntax, the full Go 1.26.5
+      `./scripts` package, all 19 workflow/action YAML files, and
+      `git diff --check` pass after the repair.
+    - A second literal `./scripts/verify.sh --viewer` passes with the hardened
+      build path; clean container logs show
+      `GOPROXY=https://proxy.golang.org,direct` and `GOSUMDB=sum.golang.org`,
+      then migrated Postgres and all SRS/OME/transcoder/API/viewer health gates
+      pass. The private `.env` hash remains unchanged.
+    - `docs/testing.md` documents the offline-host/build-network separation and
+      the two optional Docker-build mirror overrides.
+    - Installer wording and generated contract documentation consistency checks
+      pass after the testing-guide update.
+    - PR #1348 CI run `30651676770` passes completely: Ubuntu test-all, image
+      build/scan, native arm64 viewer build/runtime, shellcheck, docs
+      consistency, macOS/Windows Go, viewer integration/build/audit, and all
+      quickstart entrypoint matrices.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:

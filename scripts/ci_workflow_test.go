@@ -161,6 +161,31 @@ func TestReusableImageScanUsesCurrentBoundedInstaller(t *testing.T) {
 	}
 }
 
+func TestReusableImageScanUsesVerifiedModuleProxyForComposeBuilds(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "image-scan.yml"))
+	start := strings.Index(workflow, "- name: Build local images from the Compose stack")
+	end := strings.Index(workflow, "- name: Collect Compose images")
+	if start < 0 || end <= start {
+		t.Fatal("image scan workflow is missing the Compose image build step")
+	}
+	buildStep := workflow[start:end]
+	for _, required := range []string{
+		"GOPROXY: https://proxy.golang.org,direct",
+		"GOSUMDB: sum.golang.org",
+		"docker compose --env-file .ci.env -f deploy/docker-compose.yml build",
+	} {
+		if !strings.Contains(buildStep, required) {
+			t.Errorf("image scan Compose build step missing %q", required)
+		}
+	}
+
+	verify := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
+	if !strings.Contains(verify, "env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off") {
+		t.Fatal("host Go verification must remain offline")
+	}
+}
+
 func TestReusableImageScanProvesViewerOnNativeArm64(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "image-scan.yml"))

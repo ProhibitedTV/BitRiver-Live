@@ -68,6 +68,9 @@ jobs:
           ENV
 
       - name: Build local images from the Compose stack
+        env:
+          GOPROXY: https://proxy.golang.org,direct
+          GOSUMDB: sum.golang.org
         run: |
           docker compose --env-file .ci.env -f deploy/docker-compose.yml build \
             bitriver-live \

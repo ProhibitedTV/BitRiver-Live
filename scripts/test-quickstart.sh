@@ -54,6 +54,8 @@ fi
 export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-rtmp://localhost:1935/live}"
 export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"
 export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"
+DOCKER_BUILD_GOPROXY="${BITRIVER_DOCKER_GOPROXY:-https://proxy.golang.org,direct}"
+DOCKER_BUILD_GOSUMDB="${BITRIVER_DOCKER_GOSUMDB:-sum.golang.org}"
 
 COMPOSE_SMOKE_OVERRIDE="$(mktemp)"
 if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
@@ -261,7 +263,10 @@ fi
 
 if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
   echo "Building the canonical OME config helper image..."
-  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build ome-config
+  env \
+    GOPROXY="$DOCKER_BUILD_GOPROXY" \
+    GOSUMDB="$DOCKER_BUILD_GOSUMDB" \
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build ome-config
 else
   echo "Using the published OME config helper image from the release environment."
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull ome-config
@@ -438,7 +443,10 @@ PY
 
 if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
   echo "Building local docker compose images..."
-  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
+  env \
+    GOPROXY="$DOCKER_BUILD_GOPROXY" \
+    GOSUMDB="$DOCKER_BUILD_GOSUMDB" \
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
 else
   echo "Pull-only smoke selected; no Compose image builds are permitted."
 fi

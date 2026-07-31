@@ -47,7 +47,7 @@ const isExternalSignupDestination = (rawUrl?: string) => {
 };
 
 export function Navbar() {
-  const { allowSelfSignup, user, signIn, signOut, signUp } = useAuth();
+  const { allowSelfSignup, user, loading: authLoading, signIn, signOut, signUp } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -478,12 +478,17 @@ export function Navbar() {
           <div className="navbar-right">
             <div className="nav-icon-group" role="group" aria-label="Account and preferences">
               {!user && (
-                <div className="auth-buttons">
-                  <button type="button" className={signupUrl ? "ghost-button" : "accent-button"} onClick={handleSignIn}>
+                <div className="auth-buttons" aria-busy={authLoading}>
+                  <button
+                    type="button"
+                    className={signupUrl ? "ghost-button" : "accent-button"}
+                    onClick={handleSignIn}
+                    disabled={authLoading}
+                  >
                     Sign in
                   </button>
                   {shouldOfferJoin && (
-                    <button type="button" className="accent-button" onClick={handleJoin}>
+                    <button type="button" className="accent-button" onClick={handleJoin} disabled={authLoading}>
                       Create account
                     </button>
                   )}
