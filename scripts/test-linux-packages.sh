@@ -23,11 +23,20 @@ if ! command -v nfpm >/dev/null 2>&1; then
 fi
 
 launcher_root="$tmp_root/launcher-root"
-mkdir -p "$launcher_root/bin" "$launcher_root/share/bitriver-live" "$tmp_root/packages"
+prerelease_launcher_root="$tmp_root/prerelease-launcher-root"
+mkdir -p \
+  "$launcher_root/bin" "$launcher_root/share/bitriver-live" \
+  "$prerelease_launcher_root/bin" "$prerelease_launcher_root/share/bitriver-live" \
+  "$tmp_root/packages"
 bash "$repo_root/scripts/stage-release-assets.sh" --output "$launcher_root/share/bitriver-live"
-printf '#!/bin/sh\nexit 0\n' >"$launcher_root/bin/bitriver"
-printf '#!/bin/sh\nexit 0\n' >"$launcher_root/bin/bitriver-live"
-chmod +x "$launcher_root/bin/bitriver" "$launcher_root/bin/bitriver-live"
+bash "$repo_root/scripts/stage-release-assets.sh" \
+  --output "$prerelease_launcher_root/share/bitriver-live" \
+  --release-tag v1.2.3-rc.1
+for root in "$launcher_root" "$prerelease_launcher_root"; do
+  printf '#!/bin/sh\nexit 0\n' >"$root/bin/bitriver"
+  printf '#!/bin/sh\nexit 0\n' >"$root/bin/bitriver-live"
+  chmod +x "$root/bin/bitriver" "$root/bin/bitriver-live"
+done
 
 for arch in amd64 arm64; do
   for format in deb rpm; do
@@ -48,11 +57,11 @@ done
 for format in deb rpm; do
   target="$tmp_root/packages/bitriver-live_v1.2.3-rc.1_amd64.${format}"
   (
-    cd "$launcher_root"
+    cd "$prerelease_launcher_root"
     NFPM_ARCH=amd64 \
     NFPM_VERSION=1.2.3 \
     NFPM_PRERELEASE=rc.1 \
-    LAUNCHER_ROOT="$launcher_root" \
+    LAUNCHER_ROOT="$prerelease_launcher_root" \
     GOMAXPROCS=2 \
       nfpm pkg --packager "$format" --config "$repo_root/deploy/installers/nfpm.yaml" --target "$target"
   )
@@ -76,6 +85,20 @@ if command -v dpkg-deb >/dev/null 2>&1; then
     echo "Debian prerelease metadata lost rc.1: $prerelease_version" >&2
     exit 1
   }
+  prerelease_deb_root="$tmp_root/prerelease-deb"
+  dpkg-deb --extract "$tmp_root/packages/bitriver-live_v1.2.3-rc.1_amd64.deb" "$prerelease_deb_root"
+  prerelease_env="$prerelease_deb_root/usr/local/share/bitriver-live/deploy/.env.example"
+  for key in \
+    BITRIVER_LIVE_IMAGE_TAG \
+    BITRIVER_VIEWER_IMAGE_TAG \
+    BITRIVER_SRS_CONTROLLER_IMAGE_TAG \
+    BITRIVER_TRANSCODER_IMAGE_TAG \
+    BITRIVER_OME_CONFIG_IMAGE_TAG; do
+    [[ $(grep -c "^${key}=v1.2.3-rc.1" "$prerelease_env") -eq 1 ]] || {
+      echo "prerelease Debian payload does not contain exactly one ${key}=v1.2.3-rc.1" >&2
+      exit 1
+    }
+  done
 fi
 
-echo "PASS: nfpm built stable and prerelease amd64/arm64 deb/rpm packages from the canonical release bundle"
+echo "PASS: nfpm built stable and tag-correct prerelease amd64/arm64 deb/rpm packages from the canonical release bundle"

@@ -1,6 +1,42 @@
 # PLAN
 
-## Current scope - ancestry-safe remote branch cleanup (2026-07-31)
+## Current scope - stamp exact image tags into release artifacts (2026-07-31)
+
+- Preserve immutable published prerelease `v1.2.3-rc.11` at commit
+  `96e99fd6`. Its workflow, checksums, images, pull-only product gate, and
+  publication evidence passed, but a direct download/extraction audit found a
+  release-blocking installer defect: the Linux `.deb` and launcher archive
+  both seed all five first-party image tags as stable `v1.2.3`, while RC11
+  publishes only `v1.2.3-rc.11` images.
+- Keep the canonical root/development `deploy/.env.example` defaults at stable
+  `v1.2.3`. Add an explicit, validated release-tag input to the canonical
+  staging helper and rewrite only the staged copy's five
+  `BITRIVER_*_IMAGE_TAG` values. Require every release bundle, launcher,
+  Linux-package, and Windows-installer staging call to pass the immutable Git
+  tag.
+- Add focused regressions that prove prerelease-tagged staged payloads use the
+  exact tag for all five first-party images, the source env remains unchanged,
+  and release workflow packaging cannot omit the tag argument.
+- Do not present RC11 as a working first-time Ubuntu installation path. After
+  focused checks and literal `./scripts/verify.sh`, require complete PR CI and
+  exact merged-main CI before creating immutable `v1.2.3-rc.12`.
+
+### `rc.12` artifact-acceptance plan
+
+- Accept RC12 only after its complete release workflow and pull-only tagged
+  product gate pass, publication evidence is retained, and the GitHub
+  prerelease has a checksum-complete asset inventory.
+- Download the published RC12 Linux `.deb` and launcher archive, extract both
+  independently, and confirm that each installed/staged `.env.example` names
+  `v1.2.3-rc.12` for API, viewer, SRS controller, transcoder, and OME config.
+- Keep clean Ubuntu/XOA installation, Nginx Proxy Manager browser access,
+  reboot recovery, and repeated OME restart/media recovery as separate,
+  unproved promotion evidence until exercised on the target VM.
+- Resume the consumer README/docs refresh only after the published package
+  audit passes, so the documented first-install path is based on an artifact
+  users can actually run.
+
+## Previous scope - ancestry-safe remote branch cleanup (2026-07-31)
 
 - Preserve published prerelease `v1.2.3-rc.11`, every tag, `main`, and every
   branch whose tip is not an ancestor of current `origin/main`.

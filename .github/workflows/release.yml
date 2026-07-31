@@ -236,6 +236,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           targets=(
@@ -256,7 +257,7 @@ jobs:
             bin_ext=".exe"
           fi
 
-          bash ./scripts/stage-release-assets.sh --output "$out_dir"
+          bash ./scripts/stage-release-assets.sh --output "$out_dir" --release-tag "$RELEASE_TAG"
 
           declare -A bin_names=(
             ["server"]="bitriver-live"
@@ -475,7 +476,7 @@ jobs:
           launcher_root="dist/bitriver-launcher-${GOOS}-${GOARCH}"
           rm -rf "$launcher_root"
           mkdir -p "$launcher_root/bin" "$launcher_root/share/deploy"
-          bash ./scripts/stage-release-assets.sh --output "$launcher_root/share/bitriver-live"
+          bash ./scripts/stage-release-assets.sh --output "$launcher_root/share/bitriver-live" --release-tag "$RELEASE_TAG"
           host_goos="$(go env GOHOSTOS)"
           host_goarch="$(go env GOHOSTARCH)"
 
@@ -1090,13 +1091,16 @@ jobs:
 
       - name: Stage canonical Windows release assets
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           launcher_root="$(cygpath -u "$RUNNER_TEMP")/bitriver-launcher-windows-amd64"
           rm -rf "$launcher_root"
           mkdir -p "$launcher_root/bin"
           bash ./scripts/stage-release-assets.sh \
-            --output "$launcher_root/share/bitriver-live"
+            --output "$launcher_root/share/bitriver-live" \
+            --release-tag "$RELEASE_TAG"
           echo "BITRIVER_WINDOWS_LAUNCHER_ROOT=$(cygpath -w "$launcher_root")" >>"$GITHUB_ENV"
 
       - name: Install pinned WiX Toolset
