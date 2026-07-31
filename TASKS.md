@@ -613,7 +613,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       input and exceeded the hosted runner process argument limit. No RC10
       GitHub Release exists; the tag remains immutable and unpublished.
 
-- [-] Task 9e - File-back release notes and publish `v1.2.3-rc.11`
+- [x] Task 9e - File-back release notes and publish `v1.2.3-rc.11`
   - Acceptance criteria:
     - Generated release notes are written as UTF-8 under `RUNNER_TEMP`, and the
       publisher receives only the file path through its supported `body_path`
@@ -642,10 +642,23 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Cleanup leaves no BitRiver containers; the private root `.env` is
       restored byte-for-byte at SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
-    - PR CI, exact merged-main CI, RC11 publication, and release asset inventory
-      remain pending.
+    - PR #1351 run `30667406420` passed the complete Ubuntu gate, both image
+      gates, native arm64 viewer proof, macOS/Windows Go, all three quickstart
+      entrypoints, workflow policy, and committed-secret guard. The PR squash
+      merged as exact main commit `96e99fd6`.
+    - Exact-main CI run `30667801411` passed the same release-sensitive matrix.
+      Annotated immutable tag `v1.2.3-rc.11` points at that verified commit.
+    - Release run `30668214206` passed every producer, hosted MSI, native
+      multi-architecture viewer publication, Ubuntu/Debian/Rocky package
+      acceptance, Homebrew, all image/SBOM publishers, the pull-only OME-backed
+      product gate, the complete payload scan, retained evidence upload, and
+      file-backed GitHub Release publication.
+    - The public RC11 prerelease contains 33 uploaded assets. `CHECKSUMS.txt`
+      has 32 entries: every entry maps to a release asset and every other asset
+      is covered. Retained `release-scan-status.json` binds both passed scans to
+      tag `v1.2.3-rc.11` and commit `96e99fd6`.
 
-- [ ] Task 10 - Execute ancestry-safe remote branch cleanup
+- [x] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:
     - Immediately refetch/prune and recompute ancestry against current
       `origin/main` before deletion.
@@ -654,10 +667,80 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Use bounded batches, stop on any classification change/failure, and
       publish before/after counts plus the retained-branch inventory.
   - Check:
-    - The 2026-07-31 refresh contains 1,003 remote branches including `main`:
-      943 ancestry-merged non-default refs and 59 non-ancestor refs. The latter
-      include open PR heads `dependabot/github_actions/docker/login-action-4.5.2`
-      and `dependabot/npm_and_yarn/web/viewer/viewer-tooling-ca5479bf07`.
+    - The post-RC11 fetch/prune and GitHub API both report 1,002 real remote
+      branches including `main`: 942 ancestry-merged non-default refs and 59
+      non-ancestor refs. GitHub reports no protected branches.
+    - Open PR heads `dependabot/github_actions/docker/login-action-4.5.2` and
+      `dependabot/npm_and_yarn/web/viewer/viewer-tooling-4767752826` are in the
+      preserved non-ancestor set.
+    - All 942 ancestry-merged refs were deleted in 19 atomic batches: 18 batches
+      of 50 and one batch of 42. Each batch followed a fresh fetch and exact
+      object-ID, ancestry, and open-PR exclusion revalidation.
+    - During final reconciliation, PRs #1346 and #1344 merged independently as
+      `bf57dd8f` and `d3740828`; GitHub deleted their two heads and advanced
+      `main`. Neither head was in the cleanup candidate set.
+    - Final local refs and GitHub API agree on 58 branches: `main`, zero merged
+      non-default refs, and these 57 retained non-ancestor refs:
+
+      ```text
+      chore/close-1295-ledger
+      chore/runtime-supported-baselines
+      codex/add-hasrole-method-and-refactor-usage
+      codex/add-paths-filters-and-concurrency-to-workflows
+      codex/add-periodic-session-cleanup-in-server
+      codex/add-replace-directive-in-go.mod
+      codex/enforce-required-image-tags-in-deploy-script
+      codex/extend-navbar-with-routing-and-styles
+      codex/fix-extraction-process-failure
+      codex/fix-high-priority-bug-in-chat-api-client
+      codex/fix-high-priority-bug-in-ome-config-rendering
+      codex/fix-high-priority-bug-in-test-postgres.sh
+      codex/fix-high-priority-bug-in-upload-flow
+      codex/fix-metrics-protection-in-setup-wizard
+      codex/fix-missing-page-links-in-navbar
+      codex/fix-missing-variable-error-in-release-workflow
+      codex/fix-navbar-search-params-test-issues
+      codex/fix-path-filters-in-ci-workflows
+      codex/fix-pgx-stub-to-maintain-postgres-access
+      codex/fix-postgres-dsn-unreachable-host-issue
+      codex/fix-purge-worker-shutdown-blocking-issue
+      codex/fix-srs-ingest-hook-endpoint-issues
+      codex/fix-unauthenticated-profile-read-issue
+      codex/implement-setup-wizard-for-configurations
+      codex/issue-1221-browse-discovery
+      codex/issue-1222-following-focus
+      codex/issue-1223-channel-experience
+      codex/issue-1224-management-primitives
+      codex/issue-1225-mobile-viewer-layout
+      codex/issue-1226-split-viewer-css
+      codex/issue-1229-cleanup-tracking
+      codex/issue-1241-quickstart-shell-tests
+      codex/issue-1242-transcoder-test-stability
+      codex/issue-1243-auth-server-time-tests
+      codex/issue-1244-ingest-postgres-cancel
+      codex/issue-1245-legal-postgres-timeouts
+      codex/issue-1246-extract-upload-helpers
+      codex/mirror-postgres-service-to-release.yml
+      codex/move-stub-implementations-behind-build-constraint
+      codex/replace-text-inputs-with-drag-and-drop-file-upload
+      codex/update-authmiddleware-for-optional-get-requests
+      codex/update-chat-helpers-and-tests
+      codex/update-cross-platform-documentation-and-consistency
+      codex/update-cross-platform-documentation-and-consistency-pbwl9h
+      codex/update-healthcheck-auth-mode-normalization
+      codex/update-healthcheck-auth-mode-normalization-g5rchq
+      codex/update-healthcheck-auth-mode-normalization-iqu0ud
+      codex/update-healthcheck-auth-mode-normalization-nllxqe
+      codex/update-healthcheck-auth-mode-normalization-uivqm8
+      codex/update-health-check-to-probe-upstream-srs
+      codex/update-health-check-to-probe-upstream-srs-r6kswc
+      codex/update-server.xml-for-ome-bind-setting-pg8dxl
+      docs/roadmap-2026-07
+      feat/migration-ledger
+      feat/ubuntu-clean-host-installer
+      feat/windows-docker-readme
+      feat/windows-verify-wrapper
+      ```
 
 - [ ] Task 11 - Audit the repository as a first-time installer
   - Acceptance criteria:
