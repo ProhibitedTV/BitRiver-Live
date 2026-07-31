@@ -1,6 +1,38 @@
 # PLAN
 
-## Current scope - bound release payload scanning (2026-07-31)
+## Current scope - publish file-backed release notes (2026-07-31)
+
+- Preserve immutable `v1.2.3-rc.10` at verified main commit `48e4b878` and
+  failed release run `30665278361`. The failed-job rerun passed the pull-only
+  tagged product gate, scanned the complete publication payload in 31 seconds,
+  retained publication evidence, and generated release notes. No GitHub
+  prerelease exists. Do not rerun, move the tag, or publish it manually.
+- Repair only the final publication input boundary. Because this is the
+  repository's first GitHub Release, generated notes contain the full prior
+  history; passing that body inline to the Node action exceeded the runner's
+  process argument limit before the action started.
+- Write the generated body as UTF-8 under `RUNNER_TEMP`, expose only its short
+  path as a step output, and use the release action's supported `body_path`
+  input. Do not truncate the changelog, weaken the atomic finalizer, or bypass
+  its complete dependency/evidence gates.
+- Add a workflow contract regression that requires file-backed notes and
+  rejects the oversized inline-body form.
+
+### `rc.11` test and publication plan
+
+- Run the focused release-workflow regression, complete `go test ./scripts`,
+  workflow/action YAML parsing, both CI policy checks, `git diff --check`, and
+  literal `./scripts/verify.sh` while preserving the private root `.env`
+  byte-for-byte.
+- Require complete PR CI and exact merged-main CI before creating annotated,
+  immutable `v1.2.3-rc.11`.
+- Accept RC11 only after every release job passes, the pull-only OME-backed
+  product gate succeeds, publication evidence is retained, the GitHub
+  prerelease exists, and its asset/checksum inventory is complete.
+- Clean Ubuntu/XOA installation, Nginx Proxy Manager browser access, reboot,
+  and repeated OME restart/media recovery remain separate promotion evidence.
+
+## Previous scope - bound release payload scanning (2026-07-31)
 
 - Preserve immutable `v1.2.3-rc.9` and failed release workflow `30655699977`.
   All application, package, image/SBOM, and pull-only tagged product gates

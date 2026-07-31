@@ -1252,6 +1252,8 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
             const tag = context.ref.replace('refs/tags/', '');
             const result = await github.rest.repos.generateReleaseNotes({
               owner: context.repo.owner,
@@ -1259,13 +1261,15 @@ jobs:
               tag_name: tag,
               target_commitish: context.sha,
             });
-            core.setOutput('body', result.data.body);
+            const notesPath = path.join(process.env.RUNNER_TEMP, 'bitriver-release-notes.md');
+            fs.writeFileSync(notesPath, result.data.body, { encoding: 'utf8', mode: 0o600 });
+            core.setOutput('path', notesPath);
 
       - name: Publish release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ github.ref_name }}
-          body: ${{ steps.notes.outputs.body }}
+          body_path: ${{ steps.notes.outputs.path }}
           prerelease: ${{ needs.verify-env.outputs.is_prerelease == 'true' }}
           files: |
             dist/*.tar.gz
