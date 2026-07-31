@@ -412,7 +412,18 @@ tree_known_secret_matches() {
       --files-with-matches --text --fixed-strings \
       --file "$sentinel_patterns" -- .)
   else
-    (cd "$tree" && LC_ALL=C grep -rlaFZ -f "$sentinel_patterns" -- .)
+    (
+      cd "$tree"
+      local file status
+      while IFS= read -r -d '' file; do
+        if LC_ALL=C grep -aqF -f "$sentinel_patterns" -- "$file"; then
+          printf '%s\0' "$file"
+        else
+          status=$?
+          ((status == 1)) || exit "$status"
+        fi
+      done < <(find . -type f -print0)
+    )
   fi
 }
 
@@ -423,14 +434,36 @@ tree_private_key_matches() {
       --files-with-matches --text \
       --regexp '-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----' -- .)
   else
-    (cd "$tree" && LC_ALL=C grep -rlaEZ -- \
-      '-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----' .)
+    (
+      cd "$tree"
+      local file status
+      while IFS= read -r -d '' file; do
+        if LC_ALL=C grep -aEq -- \
+          '-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----' "$file"; then
+          printf '%s\0' "$file"
+        else
+          status=$?
+          ((status == 1)) || exit "$status"
+        fi
+      done < <(find . -type f -print0)
+    )
   fi
 }
 
 tree_text_files() {
   local tree="$1"
-  (cd "$tree" && LC_ALL=C grep -rIlZ . -- .)
+  (
+    cd "$tree"
+    local file status
+    while IFS= read -r -d '' file; do
+      if LC_ALL=C grep -Iq . -- "$file"; then
+        printf '%s\0' "$file"
+      else
+        status=$?
+        ((status == 1)) || exit "$status"
+      fi
+    done < <(find . -type f -print0)
+  )
 }
 
 scan_tree() {
@@ -529,7 +562,7 @@ scan_tree() {
       relative="${relative#./}"
       printf '%s/%s\0' "$tree" "$relative" >>"$absolute_text_files"
     done <"$text_files"
-    xargs -0 -r awk -v include_filename=1 "$TEXT_SHAPE_AWK" \
+    xargs -0 awk -v include_filename=1 "$TEXT_SHAPE_AWK" \
       <"$absolute_text_files" >"$shape_matches"
   fi
 

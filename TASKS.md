@@ -596,6 +596,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Bash 4-only lowercase expansion in the scanner on the platform's Bash
       3.2; filename matching now uses portable `nocasematch`, and a static
       regression rejects reintroduction of the unsupported expansion.
+    - Replacement run `30663742226` passed those gates and all quickstart
+      entrypoints, then proved macOS lacks the GNU grep NUL-output behavior used
+      by the no-ripgrep fallback. The fallback now uses portable `find -print0`
+      plus per-file grep and avoids GNU-only `xargs -r`; an actual Bash 3.2
+      container passed allowed-example and known-sentinel scans, and a
+      disposable Debian ShellCheck run passed.
     - PR/main CI, RC10 publication, and published release asset inventory remain
       pending.
 

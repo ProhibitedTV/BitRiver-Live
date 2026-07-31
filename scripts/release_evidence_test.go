@@ -151,6 +151,11 @@ func TestReleaseEvidenceScannerKeepsMacOSBashCompatibility(t *testing.T) {
 	if strings.Contains(string(script), ",,") {
 		t.Fatal("scanner must not use Bash 4 lowercase expansion; macOS ships Bash 3.2")
 	}
+	for _, unsupported := range []string{"grep -rlaFZ", "grep -rlaEZ", "grep -rIlZ", "xargs -0 -r"} {
+		if strings.Contains(string(script), unsupported) {
+			t.Fatalf("scanner fallback must not use GNU-only macOS-incompatible form %q", unsupported)
+		}
+	}
 }
 
 func runReleaseEvidenceScanner(t *testing.T, root, sentinel, inventory string) (string, error) {
