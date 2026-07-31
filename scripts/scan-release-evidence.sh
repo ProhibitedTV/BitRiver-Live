@@ -99,6 +99,8 @@ is_allowed_example() {
   [[ "$name" == ".env.example" || "$name" == *.example.env ]]
 }
 
+# This is literal awk source, not a shell expression.
+# shellcheck disable=SC2016
 readonly TEXT_SHAPE_AWK='
     function base_name(path, parts, count) {
       gsub(/\\/, "/", path)
@@ -219,6 +221,8 @@ readonly RG_CREDENTIAL_PATTERN='://[^[:space:]/:@]+:[^[:space:]@/]+@'
 readonly RG_ASSIGNMENT_PATTERN="(^|[^a-z0-9_-])[\"']?[a-z_][a-z0-9_]*(password|token|secret|private_key|dsn)[a-z0-9_]*[\"']?[[:space:]]*[:=][[:space:]]*(\"[^\"\\r\\n]*\"|'[^'\\r\\n]*'|[^[:space:],};]+)"
 readonly RG_XML_PATTERN='<(accesstoken|password|privatekey|secret|token)>[^<]+</(accesstoken|password|privatekey|secret|token)>'
 
+# This is literal awk source, not a shell expression.
+# shellcheck disable=SC2016
 readonly RG_MATCH_AWK='
     function code_path(path) {
       path = tolower(path)
