@@ -1,6 +1,40 @@
 # PLAN
 
-## Current scope - repair the `rc.7` viewer-auth race and publish `rc.8` (2026-07-31)
+## Current scope - repair the `rc.8` image publisher and publish `rc.9` (2026-07-31)
+
+- Preserve immutable `v1.2.3-rc.8` at verified main commit `5295c1e4`.
+  Release run `30653362368` proved production configuration, migrated
+  Postgres, repository verification, every CLI/release/launcher build, the
+  hosted MSI, Linux packages and package acceptance, Homebrew, the viewer
+  bundle, native viewer images, and its assembled multi-architecture manifest.
+  It did not create a GitHub prerelease.
+- Repair the shared tag-only image publication boundary. The srs-controller,
+  ome-config, and transcoder multi-architecture builds invoked their
+  Dockerfiles without build arguments, so all three used the offline-oriented
+  defaults `GOPROXY=direct` and `GOSUMDB=off`. Both `gopkg.in/check.v1` and
+  `gopkg.in/yaml.v3` then returned HTTP 502 during the arm64 dependency fetch;
+  the pull-only product gate and GitHub Release correctly skipped.
+- Pass `https://proxy.golang.org,direct` and `sum.golang.org` only to the
+  release image Buildx step, matching the already-proven quickstart and image
+  scan build boundary. Keep host Go verification offline and leave runtime
+  network, image names, Dockerfiles, and the deployment contract unchanged.
+- Add a release-workflow contract regression so a future refactor cannot
+  silently return tag-only builders to direct-only dependency resolution.
+
+### `rc.9` test and publication plan
+
+- Run the focused release workflow regression, complete Go `./scripts` suite,
+  workflow/action YAML parsing, CI policy checks, and `git diff --check`.
+- Run literal `./scripts/verify.sh --viewer` while preserving the private root
+  `.env` byte-for-byte; require full PR CI and exact merged-main CI before
+  creating annotated immutable `v1.2.3-rc.9`.
+- Accept `rc.9` only after every release job passes, including all image/SBOM
+  publishers, the pull-only tagged product gate, complete assets/checksums, and
+  GitHub prerelease creation. Never move or reuse the failed `rc.8` tag.
+- Clean Ubuntu/XOA installation, Nginx Proxy Manager browser access, reboot,
+  and repeated OME restart/media recovery remain separate promotion evidence.
+
+## Previous scope - repair the `rc.7` viewer-auth race and publish `rc.8` (2026-07-31)
 
 - Preserve immutable `v1.2.3-rc.7` at verified main commit `2dfa77d0`.
   Release run `30648508975` proved the hosted MSI, both native viewer image

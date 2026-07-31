@@ -501,6 +501,49 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       build/scan, native arm64 viewer build/runtime, shellcheck, docs
       consistency, macOS/Windows Go, viewer integration/build/audit, and all
       quickstart entrypoint matrices.
+    - Final PR run `30652301783`, squash merge `5295c1e4`, and exact
+      merged-main run `30652845968` passed before annotated immutable
+      `v1.2.3-rc.8` was pushed.
+    - Release run `30653362368` passed production validation, migrated
+      Postgres, repository verification, every binary/launcher/package build,
+      the hosted MSI, Linux package acceptance, Homebrew, the viewer bundle,
+      native viewer images, and the viewer multi-architecture manifest.
+      The srs-controller, ome-config, and transcoder multi-architecture image
+      jobs all entered their Dockerfiles with `GOPROXY=direct` and
+      `GOSUMDB=off`; `gopkg.in` returned HTTP 502 during dependency download.
+      The pull-only product gate and GitHub prerelease therefore skipped, and
+      `rc.8` remains immutable and unpublished.
+
+- [-] Task 9c - Repair tag-only image dependency resolution and publish `v1.2.3-rc.9`
+  - Acceptance criteria:
+    - The release multi-architecture image publisher passes the public Go
+      module proxy with direct fallback and checksum verification to every
+      first-party Go Dockerfile.
+    - Host Go verification remains offline; Dockerfile defaults, runtime
+      networking, image names, and the deployment contract remain unchanged.
+    - A workflow contract regression covers the tag-only publisher; focused
+      tests, full scripts tests, YAML/policy checks, literal verification, PR
+      CI, and exact merged-main CI pass before tagging.
+    - The immutable `rc.9` workflow publishes every artifact, checksum, image,
+      SBOM, package, pull-only product result, and GitHub prerelease.
+  - Check:
+    - `PLAN.md` records the exact three-job `rc.8` failure, bounded fix,
+      immutable-tag rule, evidence plan, and remaining clean-host boundary
+      before implementation.
+    - The release Buildx matrix now passes
+      `GOPROXY=https://proxy.golang.org,direct` and
+      `GOSUMDB=sum.golang.org` to all four first-party Go image Dockerfiles;
+      Dockerfile defaults and runtime configuration are unchanged.
+    - The focused publisher regression and complete pinned Go 1.26.5
+      `./scripts` suite pass. Both CI policy scripts pass, all 19 GitHub
+      workflow/action/template YAML files parse, and `git diff --check` passes.
+    - Literal `./scripts/verify.sh --viewer` passes with pinned Go 1.26.5:
+      release bundle, all Go packages, migrated Postgres, production-module
+      Compose builds, healthy Postgres/Redis/SRS/SRS controller/OME/
+      transcoder/API/viewer, lint, and 26 Jest suites/218 tests/four snapshots.
+      Cleanup left no `deploy` project containers, and the private `.env`
+      retains SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:
