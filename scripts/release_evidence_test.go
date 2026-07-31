@@ -142,6 +142,17 @@ func TestReleaseEvidenceScannerKeepsRPMExtractionInsideScratchDirectory(t *testi
 	}
 }
 
+func TestReleaseEvidenceScannerKeepsMacOSBashCompatibility(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	script, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "scan-release-evidence.sh"))
+	if err != nil {
+		t.Fatalf("read scanner: %v", err)
+	}
+	if strings.Contains(string(script), ",,") {
+		t.Fatal("scanner must not use Bash 4 lowercase expansion; macOS ships Bash 3.2")
+	}
+}
+
 func runReleaseEvidenceScanner(t *testing.T, root, sentinel, inventory string) (string, error) {
 	t.Helper()
 	return runReleaseEvidenceScannerWithEnv(t, root, sentinel, inventory)

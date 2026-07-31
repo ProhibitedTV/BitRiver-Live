@@ -591,6 +591,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       BitRiver containers; the private root `.env` is restored byte-for-byte at
       SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR #1350 run `30663196812` passed the complete Ubuntu gate, both image
+      gates, shellcheck, and all quickstart entrypoints. Its macOS Go job caught
+      Bash 4-only lowercase expansion in the scanner on the platform's Bash
+      3.2; filename matching now uses portable `nocasematch`, and a static
+      regression rejects reintroduction of the unsupported expansion.
     - PR/main CI, RC10 publication, and published release asset inventory remain
       pending.
 

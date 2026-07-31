@@ -6,6 +6,10 @@ if [[ -d /usr/bin ]]; then
   PATH="/usr/bin:/bin:$PATH"
 fi
 
+# macOS still ships Bash 3.2, so use case-insensitive matching instead of the
+# Bash 4-only lowercase parameter expansion for filenames and extensions.
+shopt -s nocasematch
+
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/scan-release-evidence.sh --root DIR [--sentinel-file FILE] [--inventory FILE]
@@ -94,8 +98,7 @@ display_path() {
 }
 
 is_allowed_example() {
-  local name
-  name="${1,,}"
+  local name="$1"
   [[ "$name" == ".env.example" || "$name" == *.example.env ]]
 }
 
@@ -377,11 +380,9 @@ scan_file() {
   local file="$1"
   local label="$2"
   local base="${file##*/}"
-  local lower_base
-  lower_base="${base,,}"
 
   if ! is_allowed_example "$base"; then
-    case "$lower_base" in
+    case "$base" in
       .env|*.env|.env.*|*.env.local|*.secret|*.secrets|*.pem|*.key|*.p12|*.pfx|id_rsa|id_ed25519)
         report_violation "forbidden-file" "$label"
         ;;
@@ -435,7 +436,7 @@ tree_text_files() {
 scan_tree() {
   local tree="$1"
   local prefix="${2:-}"
-  local file label base lower_base finding rule relative status
+  local file label base finding rule relative status
   local sentinel_matches private_matches shape_matches text_files absolute_text_files
   scan_counter=$((scan_counter + 1))
   sentinel_matches="$work_dir/sentinel-matches-$scan_counter.bin"
@@ -449,11 +450,10 @@ scan_tree() {
       continue
     fi
     base="${file##*/}"
-    lower_base="${base,,}"
     if is_allowed_example "$base"; then
       continue
     fi
-    case "$lower_base" in
+    case "$base" in
       .env|*.env|.env.*|*.env.local|*.secret|*.secrets|*.pem|*.key|*.p12|*.pfx|id_rsa|id_ed25519)
         if [[ -n "$prefix" ]]; then
           label="$prefix!${file#"$tree"/}"
@@ -548,9 +548,7 @@ scan_tree() {
 }
 
 archive_kind() {
-  local lower
-  lower="${1,,}"
-  case "$lower" in
+  case "$1" in
     *.tar.gz|*.tgz) printf 'targz' ;;
     *.tar.xz|*.txz) printf 'tarxz' ;;
     *.tar) printf 'tar' ;;
