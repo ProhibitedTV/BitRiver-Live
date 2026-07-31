@@ -55,6 +55,7 @@ func TestReleaseWorkflowScansAndRetainsEveryArtifactSafely(t *testing.T) {
 		t.Fatalf("expected validation output, redacted evidence, downloaded artifacts, and publication payload scans")
 	}
 	for _, required := range []string{
+		`pattern: "!*.dockerbuild"`,
 		"--env-file deploy/.env.example",
 		`--output "$rendered"`,
 		"--inventory \"$evidence_dir/artifact-inventory.tsv\"",
@@ -65,6 +66,15 @@ func TestReleaseWorkflowScansAndRetainsEveryArtifactSafely(t *testing.T) {
 		if !strings.Contains(workflow, required) {
 			t.Fatalf("release workflow missing artifact safety invariant %q", required)
 		}
+	}
+
+	scanStart := strings.Index(workflow, "- name: Scan and inventory release payload")
+	uploadStart := strings.Index(workflow, "- name: Upload release publication evidence")
+	if scanStart == -1 || uploadStart <= scanStart {
+		t.Fatal("release payload scan step boundaries not found")
+	}
+	if !strings.Contains(workflow[scanStart:uploadStart], "timeout-minutes: 10") {
+		t.Fatal("release payload scan must fail closed within an explicit timeout")
 	}
 }
 
