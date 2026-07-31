@@ -554,7 +554,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       exited before notes/publication. No GitHub prerelease exists; RC9 remains
       immutable and was not rerun or bypassed.
 
-- [-] Task 9d - Bound release scanning and publish `v1.2.3-rc.10`
+- [x] Task 9d - Bound release scanning and evaluate `v1.2.3-rc.10`
   - Acceptance criteria:
     - Exclude Buildx `.dockerbuild` diagnostics from the release download while
       retaining all release assets, SBOMs, checksums, and product evidence.
@@ -565,8 +565,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       archive errors. Bound the workflow scan step to ten minutes.
     - Focused/full tests, literal verification, PR CI, and exact merged-main CI
       pass before creating immutable `v1.2.3-rc.10`.
-    - RC10 publishes the complete GitHub prerelease with all release assets and
-      retained publication evidence after the pull-only product gate passes.
+    - RC10 either publishes the complete GitHub prerelease or fails closed
+      without moving/reusing the tag or bypassing publication.
   - Check:
     - The real 8.3 MB RC9 viewer subset, including its 34.6 MB expanded bundle,
       passes deep scanning in about 35 seconds instead of exceeding five
@@ -602,8 +602,48 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       plus per-file grep and avoids GNU-only `xargs -r`; an actual Bash 3.2
       container passed allowed-example and known-sentinel scans, and a
       disposable Debian ShellCheck run passed.
-    - PR/main CI, RC10 publication, and published release asset inventory remain
-      pending.
+    - PR #1350 merged as `48e4b878`; exact-main CI run `30664862234` passed.
+      Immutable RC10 release run `30665278361` first hit a transient BuildKit
+      pull timeout, then its failed-job rerun passed the pull-only OME-backed
+      product gate, downloaded the non-Buildx artifacts, scanned the complete
+      publication payload in 31 seconds, uploaded retained evidence, and
+      generated release notes.
+    - Final publication failed closed before the release action started:
+      GitHub's generated first-release history was passed as an inline action
+      input and exceeded the hosted runner process argument limit. No RC10
+      GitHub Release exists; the tag remains immutable and unpublished.
+
+- [-] Task 9e - File-back release notes and publish `v1.2.3-rc.11`
+  - Acceptance criteria:
+    - Generated release notes are written as UTF-8 under `RUNNER_TEMP`, and the
+      publisher receives only the file path through its supported `body_path`
+      input.
+    - The complete generated history is retained; finalizer dependencies,
+      evidence, asset selection, and fail-closed publication stay unchanged.
+    - A regression requires file-backed notes and rejects inline note bodies.
+    - Focused/full tests, literal verification, PR CI, and exact merged-main CI
+      pass before creating immutable `v1.2.3-rc.11`.
+    - RC11 publishes only after every producer and pull-only product gate
+      succeeds; its release assets and checksums are inventoried afterward.
+  - Check:
+    - `PLAN.md` records the exact RC10 failure, bounded repair, immutable-tag
+      rule, evidence plan, and remaining clean-host boundary before workflow
+      implementation.
+    - The notes step writes the complete generated body as mode-0600 UTF-8
+      under `RUNNER_TEMP`, exposes only that path, and the pinned release action
+      consumes `body_path`. A focused regression rejects the RC10 inline-body
+      form.
+    - The focused regression and complete pinned Go 1.26.5 `./scripts` suite
+      pass. Both CI policy scripts pass, all 19 GitHub YAML files parse, and
+      `git diff --check` passes.
+    - Literal `./scripts/verify.sh` passes in 146 seconds: release bundle, all
+      Go packages, contract invariants, migrated Postgres, Compose rendering
+      and builds, and healthy SRS/controller/OME/transcoder/API/viewer all pass.
+      Cleanup leaves no BitRiver containers; the private root `.env` is
+      restored byte-for-byte at SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR CI, exact merged-main CI, RC11 publication, and release asset inventory
+      remain pending.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:

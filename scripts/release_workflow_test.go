@@ -158,6 +158,29 @@ func TestReleaseWorkflowHandlesPrereleasesWithoutMovingLatest(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowUsesFileBackedReleaseNotes(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	for _, required := range []string{
+		"const fs = require('fs');",
+		"path.join(process.env.RUNNER_TEMP, 'bitriver-release-notes.md')",
+		"fs.writeFileSync(notesPath, result.data.body, { encoding: 'utf8', mode: 0o600 });",
+		"core.setOutput('path', notesPath);",
+		"body_path: ${{ steps.notes.outputs.path }}",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release workflow missing file-backed notes invariant %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"core.setOutput('body', result.data.body);",
+		"body: ${{ steps.notes.outputs.body }}",
+	} {
+		if strings.Contains(workflow, forbidden) {
+			t.Fatalf("release workflow passes oversized notes inline through %q", forbidden)
+		}
+	}
+}
+
 func TestWorkflowOwnedPostgresServicesApplyMigrations(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	postgresPath := filepath.Join(".github", "workflows", "postgres-tests.yml")
