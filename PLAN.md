@@ -1,6 +1,34 @@
 # PLAN
 
-## Current scope - publish file-backed release notes (2026-07-31)
+## Current scope - ancestry-safe remote branch cleanup (2026-07-31)
+
+- Preserve published prerelease `v1.2.3-rc.11`, every tag, `main`, and every
+  branch whose tip is not an ancestor of current `origin/main`.
+- The immediate post-release fetch/prune and GitHub API inventory agreed on
+  1,002 real remote branches: `main`, 942 ancestry-merged non-default tips, and
+  59 non-ancestor tips. GitHub reported no protected branches.
+- Delete only those 942 ancestry-merged refs. Every 50-ref atomic batch must
+  follow a fresh fetch and confirm exact object IDs, ancestry, and the current
+  open-PR exclusions; stop on drift or a failed remote update.
+- During the final reconciliation, Dependabot PRs #1346 and #1344 merged and
+  GitHub deleted their two previously preserved heads while advancing `main`
+  from `96e99fd6` to `d3740828`. Those heads were not members of the deletion
+  set. The resulting authoritative inventory is `main` plus 57 non-ancestor
+  branches, with zero merged non-default branches remaining.
+
+### Branch-cleanup verification outcome
+
+- All 942 candidate names and object IDs were classified before mutation and
+  revalidated across 19 atomic batches (18 of 50 refs and one of 42).
+- The final local remote-ref inventory and GitHub API both report 58 branches;
+  ancestry classification reports zero merged non-default tips and 57 retained
+  non-ancestor tips.
+- The two-branch difference from the expected 60 was classified as concurrent,
+  successful PR merges with normal head deletion, not accidental cleanup.
+- Keep the six user-owned untracked deployment paths and the private root
+  `.env` untouched.
+
+## Previous scope - publish file-backed release notes (2026-07-31)
 
 - Preserve immutable `v1.2.3-rc.10` at verified main commit `48e4b878` and
   failed release run `30665278361`. The failed-job rerun passed the pull-only
