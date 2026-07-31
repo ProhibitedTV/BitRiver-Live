@@ -158,6 +158,21 @@ func TestReleaseWorkflowHandlesPrereleasesWithoutMovingLatest(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowStampsExactTagIntoEveryInstallerPayload(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	if count := strings.Count(workflow, `--release-tag "$RELEASE_TAG"`); count != 3 {
+		t.Fatalf("every release-asset staging path must receive the immutable tag; got %d tagged calls, want 3", count)
+	}
+	for _, required := range []string{
+		"GOOS: ${{ matrix.goos }}\n          GOARCH: ${{ matrix.goarch }}\n          RELEASE_TAG: ${{ github.ref_name }}",
+		"name: Stage canonical Windows release assets\n        shell: bash\n        env:\n          RELEASE_TAG: ${{ github.ref_name }}",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("release workflow missing tag-stamping environment %q", required)
+		}
+	}
+}
+
 func TestReleaseWorkflowUsesFileBackedReleaseNotes(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	for _, required := range []string{
@@ -284,6 +299,7 @@ func TestWindowsMSIUsesCanonicalReleaseAssets(t *testing.T) {
 		"name: Stage canonical Windows release assets",
 		"stage-release-assets.sh",
 		`--output "$launcher_root/share/bitriver-live"`,
+		`--release-tag "$RELEASE_TAG"`,
 		"name: Install pinned WiX Toolset",
 		"https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip",
 		"WIX_ARCHIVE_SHA256: 6ac824e1642d6f7277d0ed7ea09411a508f6116ba6fae0aa5f2c7daa2ff43d31",

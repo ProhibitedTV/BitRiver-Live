@@ -742,7 +742,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       feat/windows-verify-wrapper
       ```
 
-- [ ] Task 11 - Audit the repository as a first-time installer
+- [x] Task 11 - Audit the repository as a first-time installer
   - Acceptance criteria:
     - Inventory README claims, screenshots, release/download links, install
       commands, supported hosts, reverse-proxy/media ports, first-stream flow,
@@ -752,6 +752,65 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       before rewriting public docs.
     - Record a bounded screenshot plan using only current product/runtime
       captures with known provenance.
+  - Check:
+    - README, quickstart, Ubuntu-install, viewer-deployment, release-note,
+      production-status, and production-release guidance were compared with
+      the current code, workflow, and public RC11 assets. Stale claims include
+      "no GitHub Release", a planned `rc.1`, source-only installation, and an
+      unimplemented GitHub Pages workflow.
+    - The two committed README screenshots are real captures of the shipped
+      viewer, not generated promotional art. They remain usable as honest
+      workflow evidence, although stronger post-broadcast captures are a
+      future presentation improvement.
+    - The reverse-proxy runbook correctly separates same-origin app/API,
+      `/hls`, RTMP, private management ports, authenticated OME control, and
+      real media-decode acceptance. The first-stream labels were confirmed
+      against the current viewer.
+    - RC11 published 33 checksum-complete assets and passed its pull-only
+      product gate, but its generated release description is an uncurated
+      124,999-character history dump and needs a concise operator-facing
+      replacement in the next candidate.
+    - Directly downloaded RC11 Linux `.deb` and launcher payloads both contain
+      stable `v1.2.3` for all five first-party image tags. Because RC11
+      publishes only `v1.2.3-rc.11`, its first-install path is blocked before
+      activation; documentation refresh is paused until a corrected immutable
+      candidate is published and re-downloaded.
+
+- [-] Task 11a - Stamp and prove exact image tags in release artifacts
+  - Acceptance criteria:
+    - The canonical staging helper accepts and validates an optional release
+      tag, then changes only the staged `.env.example` image-tag values.
+    - Every GitHub release packaging path supplies the exact immutable tag;
+      focused tests cover all five values and preserve the canonical source.
+    - Focused checks, literal repository verification, PR CI, and exact-main
+      CI pass before `v1.2.3-rc.12` is tagged.
+    - The published RC12 `.deb` and launcher archive are downloaded and
+      independently inspected before the Ubuntu path is documented as usable.
+  - Check:
+    - `stage-release-assets.sh --release-tag` now validates the same supported
+      SemVer tag shape as release preparation, rejects numeric prerelease
+      identifiers with leading zeroes, and rewrites exactly one copy of each
+      first-party tag assignment in only the staged env.
+    - All three release staging paths pass `${{ github.ref_name }}` explicitly:
+      cross-platform release binaries, launcher/Linux packages, and the hosted
+      Windows MSI. A Go workflow regression requires exactly three tagged
+      calls and their job/step environment boundaries.
+    - The release-bundle regression passed with a path containing spaces,
+      exact `v1.2.3-rc.12` values for all five images, invalid-tag rejection
+      before output creation, and byte-identical source env preservation.
+    - The pinned nFPM v2.47.0 acceptance built stable amd64/arm64 and separate
+      tag-correct prerelease amd64 `.deb`/`.rpm` payloads. The Linux path now
+      extracts the prerelease Debian payload and checks all five installed
+      values; that extraction awaits CI because the local host is Windows.
+    - Complete pinned Go 1.26.5 `go test ./scripts`, both CI configuration
+      checks, shell syntax, all 19 GitHub YAML parses, and `git diff --check`
+      pass.
+    - Literal `./scripts/verify.sh` passed in 161.3 seconds, including all Go
+      packages, release contracts, migrated Postgres, Compose rendering/build,
+      and healthy SRS/controller/OME/transcoder/API/viewer. Teardown left no
+      BitRiver containers, generated configs have no diff, and the private
+      root `.env` was restored byte-for-byte at SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
 
 - [ ] Task 12 - Rewrite README around the consumer golden path
   - Acceptance criteria:
