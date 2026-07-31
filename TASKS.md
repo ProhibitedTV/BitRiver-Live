@@ -514,7 +514,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       The pull-only product gate and GitHub prerelease therefore skipped, and
       `rc.8` remains immutable and unpublished.
 
-- [-] Task 9c - Repair tag-only image dependency resolution and publish `v1.2.3-rc.9`
+- [x] Task 9c - Repair tag-only image dependency resolution and evaluate `v1.2.3-rc.9`
   - Acceptance criteria:
     - The release multi-architecture image publisher passes the public Go
       module proxy with direct fallback and checksum verification to every
@@ -524,8 +524,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - A workflow contract regression covers the tag-only publisher; focused
       tests, full scripts tests, YAML/policy checks, literal verification, PR
       CI, and exact merged-main CI pass before tagging.
-    - The immutable `rc.9` workflow publishes every artifact, checksum, image,
-      SBOM, package, pull-only product result, and GitHub prerelease.
+    - The immutable `rc.9` workflow either publishes the complete release or
+      fails closed without moving/reusing the tag or bypassing publication.
   - Check:
     - `PLAN.md` records the exact three-job `rc.8` failure, bounded fix,
       immutable-tag rule, evidence plan, and remaining clean-host boundary
@@ -544,6 +544,66 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Cleanup left no `deploy` project containers, and the private `.env`
       retains SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR #1349 run `30654775807`, squash merge `e92240bd`, and exact
+      merged-main run `30655235823` passed before annotated immutable
+      `v1.2.3-rc.9` was pushed.
+    - Release run `30655699977` passed every application, package,
+      multi-architecture image/SBOM, and pull-only tagged production gate. Its
+      final payload scan ran for 59 minutes, reported 224 false-positive
+      assignments plus unsafe absolute-path RPM extraction failures, and
+      exited before notes/publication. No GitHub prerelease exists; RC9 remains
+      immutable and was not rerun or bypassed.
+
+- [-] Task 9d - Bound release scanning and publish `v1.2.3-rc.10`
+  - Acceptance criteria:
+    - Exclude Buildx `.dockerbuild` diagnostics from the release download while
+      retaining all release assets, SBOMs, checksums, and product evidence.
+    - Scan credential-shaped matches in batches, preserve a tested fallback,
+      reject real secret classes without printing values, and allow known
+      package/framework/code false positives.
+    - Keep RPM extraction inside scratch storage and fail closed on scanner or
+      archive errors. Bound the workflow scan step to ten minutes.
+    - Focused/full tests, literal verification, PR CI, and exact merged-main CI
+      pass before creating immutable `v1.2.3-rc.10`.
+    - RC10 publishes the complete GitHub prerelease with all release assets and
+      retained publication evidence after the pull-only product gate passes.
+  - Check:
+    - The real 8.3 MB RC9 viewer subset, including its 34.6 MB expanded bundle,
+      passes deep scanning in about 35 seconds instead of exceeding five
+      minutes. The complete non-Buildx RC9 payload (32 artifact groups, 36
+      files, 274,928,685 bytes) passes inside Debian 12 in 30 seconds, including
+      nested archives and both real Linux package formats.
+    - Literal JavaScript credentials, JSON credentials, sentinels, private
+      keys, credential URLs, XML credentials, and forbidden filenames remain
+      covered without printing values. Package hashes, framework/parser token
+      constants, source references, `.env.example`, and compiled binaries are
+      regression-covered; the no-ripgrep fallback is also tested.
+    - RC9 terminal logs confirm the release failed closed before notes or
+      publication. They also exposed absolute-path RPM entries, now extracted
+      with `cpio --no-absolute-filenames`; the actual RC9 amd64 `.deb` and `.rpm`
+      both pass full extraction and scanning in a disposable Debian container.
+    - The focused scanner/workflow suite and complete pinned Go 1.26.5
+      `./scripts` suite pass. Shell syntax, both CI policy scripts, all 19
+      GitHub YAML files, and `git diff --check` pass.
+    - Literal `./scripts/verify.sh` passes: release bundle, all Go packages,
+      migrated Postgres, Compose rendering/builds, and healthy Postgres/Redis/
+      SRS/controller/OME/transcoder/API/viewer smoke all pass. Cleanup leaves no
+      BitRiver containers; the private root `.env` is restored byte-for-byte at
+      SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - PR #1350 run `30663196812` passed the complete Ubuntu gate, both image
+      gates, shellcheck, and all quickstart entrypoints. Its macOS Go job caught
+      Bash 4-only lowercase expansion in the scanner on the platform's Bash
+      3.2; filename matching now uses portable `nocasematch`, and a static
+      regression rejects reintroduction of the unsupported expansion.
+    - Replacement run `30663742226` passed those gates and all quickstart
+      entrypoints, then proved macOS lacks the GNU grep NUL-output behavior used
+      by the no-ripgrep fallback. The fallback now uses portable `find -print0`
+      plus per-file grep and avoids GNU-only `xargs -r`; an actual Bash 3.2
+      container passed allowed-example and known-sentinel scans, and a
+      disposable Debian ShellCheck run passed.
+    - PR/main CI, RC10 publication, and published release asset inventory remain
+      pending.
 
 - [ ] Task 10 - Execute ancestry-safe remote branch cleanup
   - Acceptance criteria:

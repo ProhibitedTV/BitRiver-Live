@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReleaseEvidenceScannerAllowsRedactedEvidence(t *testing.T) {
@@ -43,6 +44,7 @@ func TestReleaseEvidenceScannerRejectsSecretMaterialWithoutEchoingValues(t *test
 		{name: "credential url bypass", path: "diagnostics.log", content: "postgres://release-user:not-printed-pass@db.internal/live example follows\n", rule: "credential-url"},
 		{name: "secret assignment", path: "report.json", content: `{"admin_password":"not-printed-password"}`, rule: "secret-assignment"},
 		{name: "secret assignment bypass", path: "report.json", content: `{"admin_password":"not-printed-password","note":"redacted output"}`, rule: "secret-assignment"},
+		{name: "literal javascript secret", path: "bundle.js", content: `const api_token = "not-printed-token";`, rule: "secret-assignment"},
 		{name: "xml credential", path: "Server.generated.xml", content: `<AccessToken>not-printed-token</AccessToken>`, rule: "xml-credential"},
 		{name: "known value", path: "runner.log", content: "prefix sentinel-not-printed-987 suffix\n", sentinel: "sentinel-not-printed-987", rule: "known-secret-value"},
 	}
@@ -67,6 +69,36 @@ func TestReleaseEvidenceScannerRejectsSecretMaterialWithoutEchoingValues(t *test
 	}
 }
 
+func TestReleaseEvidenceScannerAllowsCodeReferencesAndPackageNames(t *testing.T) {
+	root := releaseEvidenceTempDir(t)
+	writeReleaseEvidenceFixture(t, filepath.Join(root, "bundle.js"), "const token = request.token;\nconst secret = state.secret;\n")
+	writeReleaseEvidenceFixture(t, filepath.Join(root, "framework.js"), `const NEXT_IMMUTABLE_ASSET_TOKEN = "__next_page__";`)
+	writeReleaseEvidenceFixture(t, filepath.Join(root, "package-lock.json"), `{"packages":{"node_modules/js-tokens":{"version":"9.0.1","integrity":"sha512-1NoLDsnQW41410oQBXiyXDMYH5z505juWa4KUE1LqxRC7DgOgZDbKLxHIwm27hA=="}}}`)
+	writeReleaseEvidenceFixture(t, filepath.Join(root, "viewer.spdx.json"), `{"name":"js-tokens","downloadLocation":"NOASSERTION"}`)
+
+	output, err := runReleaseEvidenceScanner(t, root, "", "")
+	if err != nil {
+		t.Fatalf("expected code references and package names to pass: %v\n%s", err, output)
+	}
+}
+
+func TestReleaseEvidenceScannerFallbackWithoutRipgrepRejectsLiteralSecret(t *testing.T) {
+	root := releaseEvidenceTempDir(t)
+	secret := "fallback-not-printed-token"
+	writeReleaseEvidenceFixture(t, filepath.Join(root, "bundle.js"), `const api_token = "`+secret+`";`)
+
+	output, err := runReleaseEvidenceScannerWithEnv(t, root, "", "", "BITRIVER_SCAN_DISABLE_RG=1")
+	if err == nil {
+		t.Fatalf("expected fallback scanner to reject a literal secret: %s", output)
+	}
+	if !strings.Contains(output, "secret-assignment") {
+		t.Fatalf("expected fallback secret-assignment rule, got: %s", output)
+	}
+	if strings.Contains(output, secret) {
+		t.Fatalf("fallback scanner disclosed the matched value: %s", output)
+	}
+}
+
 func TestReleaseEvidenceScannerInspectsArchives(t *testing.T) {
 	root := releaseEvidenceTempDir(t)
 	archivePath := filepath.Join(root, "release.tar.gz")
@@ -84,7 +116,54 @@ func TestReleaseEvidenceScannerInspectsArchives(t *testing.T) {
 	}
 }
 
+func TestReleaseEvidenceScannerHandlesHighLineCountWithinBound(t *testing.T) {
+	root := releaseEvidenceTempDir(t)
+	writeReleaseEvidenceFixture(t, filepath.Join(root, "high-line-count.log"), strings.Repeat("service_status=healthy\n", 20_000))
+
+	started := time.Now()
+	output, err := runReleaseEvidenceScanner(t, root, "", "")
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("expected benign high-line-count evidence to pass: %v\n%s", err, output)
+	}
+	if elapsed > 15*time.Second {
+		t.Fatalf("high-line-count evidence scan took %s, want at most 15s", elapsed)
+	}
+}
+
+func TestReleaseEvidenceScannerKeepsRPMExtractionInsideScratchDirectory(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	script, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "scan-release-evidence.sh"))
+	if err != nil {
+		t.Fatalf("read scanner: %v", err)
+	}
+	if !strings.Contains(string(script), "cpio -idm --quiet --no-absolute-filenames") {
+		t.Fatal("RPM extraction must strip absolute archive paths before deep scanning")
+	}
+}
+
+func TestReleaseEvidenceScannerKeepsMacOSBashCompatibility(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	script, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "scan-release-evidence.sh"))
+	if err != nil {
+		t.Fatalf("read scanner: %v", err)
+	}
+	if strings.Contains(string(script), ",,") {
+		t.Fatal("scanner must not use Bash 4 lowercase expansion; macOS ships Bash 3.2")
+	}
+	for _, unsupported := range []string{"grep -rlaFZ", "grep -rlaEZ", "grep -rIlZ", "xargs -0 -r"} {
+		if strings.Contains(string(script), unsupported) {
+			t.Fatalf("scanner fallback must not use GNU-only macOS-incompatible form %q", unsupported)
+		}
+	}
+}
+
 func runReleaseEvidenceScanner(t *testing.T, root, sentinel, inventory string) (string, error) {
+	t.Helper()
+	return runReleaseEvidenceScannerWithEnv(t, root, sentinel, inventory)
+}
+
+func runReleaseEvidenceScannerWithEnv(t *testing.T, root, sentinel, inventory string, env ...string) (string, error) {
 	t.Helper()
 	repoRoot := filepath.Dir(mustGetwd(t))
 	args := []string{shellPath(filepath.Join(repoRoot, "scripts", "scan-release-evidence.sh")), "--root", shellPath(root)}
@@ -97,6 +176,7 @@ func runReleaseEvidenceScanner(t *testing.T, root, sentinel, inventory string) (
 		args = append(args, "--inventory", inventory)
 	}
 	cmd := exec.Command(testBash(t), args...)
+	cmd.Env = append(os.Environ(), env...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }

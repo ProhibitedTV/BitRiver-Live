@@ -1194,6 +1194,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: release
+          pattern: "!*.dockerbuild"
 
       - name: Collect release assets
         run: |
@@ -1214,6 +1215,7 @@ jobs:
           sha256sum * > CHECKSUMS.txt
 
       - name: Scan and inventory release payload
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/release-publication-evidence"

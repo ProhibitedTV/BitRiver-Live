@@ -1,6 +1,51 @@
 # PLAN
 
-## Current scope - repair the `rc.8` image publisher and publish `rc.9` (2026-07-31)
+## Current scope - bound release payload scanning (2026-07-31)
+
+- Preserve immutable `v1.2.3-rc.9` and failed release workflow `30655699977`.
+  All application, package, image/SBOM, and pull-only tagged product gates
+  passed; the final scanner spent 59 minutes finding 224 false-positive
+  assignments plus RPM extraction errors, then failed before publication. No
+  GitHub prerelease exists. Do not rerun, move the tag, or publish manually.
+- Treat the finalizer duration as a release-engineering defect independent of
+  RC9's eventual terminal result. The scanner has processed a roughly 250 MB
+  mixed artifact set since 18:45 UTC without completing; a local 8.3 MB subset
+  containing the viewer bundle exceeded five minutes.
+- Preserve every covered secret class, archive-depth limit, path-only finding,
+  and no-secret-output property. Use ripgrep to prefilter credential-shaped
+  matches and classify only bounded matches in one awk process per rule; retain
+  a tested grep/awk fallback when ripgrep is absent. Distinguish real literal
+  credential keys from package hashes, framework cache tokens, parser tokens,
+  and ordinary code references without allowing literal `api_token` values.
+- Exclude Buildx `.dockerbuild` records from the final release artifact
+  download. They are workflow diagnostics, not publication payloads or SBOMs,
+  and GitHub CLI cannot reliably extract at least one RC9 record as a ZIP.
+- Give the payload-scan step an explicit timeout so a future pathological
+  artifact blocks publication promptly instead of consuming the default job
+  maximum. Do not weaken scan failures or publish on timeout.
+- Extract RPM payloads with absolute filenames disabled so deep inspection
+  remains inside the scanner scratch directory and valid packages do not fail
+  as unreadable archives.
+
+### Payload-scanner test plan
+
+- Retain all focused positive/negative secret-scanner tests, including nested
+  archives, sentinel values, forbidden filenames, assignments, credential
+  URLs, XML credentials, the no-ripgrep fallback, and non-disclosure of matched
+  values.
+- Add workflow contracts for excluding `.dockerbuild` records and bounding the
+  scan step. Add a high-line-count benign fixture with a practical elapsed-time
+  assertion so the external-process regression is reproducible without a large
+  binary artifact corpus.
+- Re-run the complete scanner/release-workflow Go suites, shell syntax,
+  workflow/action YAML parsing, CI policy checks, `git diff --check`, and the
+  repository verification gate before publication. Re-scan the real RC9 viewer
+  artifact subset and an actual RC9 RPM when available.
+- After PR and exact-main CI pass, publish the next immutable candidate
+  `v1.2.3-rc.10`; accept it only if the final scanner, retained evidence,
+  complete release asset set, and GitHub prerelease creation all pass.
+
+## Previous scope - repair the `rc.8` image publisher and publish `rc.9` (2026-07-31)
 
 - Preserve immutable `v1.2.3-rc.8` at verified main commit `5295c1e4`.
   Release run `30653362368` proved production configuration, migrated
