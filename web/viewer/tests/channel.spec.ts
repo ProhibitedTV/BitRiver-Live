@@ -437,7 +437,11 @@ test.describe("authentication controls", () => {
       });
     });
 
+    const authResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/viewer/me" && response.status() === 401,
+    );
     await page.goto("/");
+    await authResponse;
 
     await page.getByRole("group", { name: "Account and preferences" }).getByRole("button", { name: "Sign in" }).click();
 

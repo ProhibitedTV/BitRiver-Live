@@ -1,6 +1,38 @@
 # PLAN
 
-## Current scope - repair the `rc.6` hosted release failures and publish `rc.7` (2026-07-31)
+## Current scope - repair the `rc.7` viewer-auth race and publish `rc.8` (2026-07-31)
+
+- Preserve immutable `v1.2.3-rc.7` at verified main commit `2dfa77d0`.
+  Release run `30648508975` proved the hosted MSI, both native viewer image
+  architectures, the assembled viewer multi-architecture manifest, all other
+  first-party images, Linux packages and package acceptance, Homebrew, and the
+  pull-only tagged product gate. It did not create a GitHub prerelease.
+- Repair the only failed producer at the product boundary. The viewer bundle
+  passed install, audit, lint, Jest, and production build, then Playwright
+  clicked the navbar sign-in action before the initial `/api/viewer/me`
+  response had populated its configured `/login` URL. The UI opened the local
+  auth flow (`/?auth=signin&next=%2F`) instead of redirecting to
+  `/login?redirect=%2F`.
+- Keep authentication actions unavailable while initial auth discovery is in
+  progress, and make the configured-login browser regression wait for the
+  mocked auth response before clicking. This prevents the observed user-facing
+  misroute and proves the expected external-login contract deterministically.
+
+### `rc.8` test and publication plan
+
+- Add/adjust focused Navbar and Playwright regressions for initial auth loading
+  and configured-login navigation; keep the release workflow unchanged.
+- Run viewer lint, Jest, Playwright, and production build, the relevant Go
+  workflow contracts, workflow/action YAML parsing, `git diff --check`, and
+  literal `./scripts/verify.sh --viewer` while preserving the operator `.env`
+  hash.
+- Require complete PR CI and exact merged-main CI before annotated immutable
+  `v1.2.3-rc.8`. Accept the candidate only after every release job passes and
+  GitHub publishes the prerelease with complete assets/checksums.
+- Clean Ubuntu/XOA installation, Nginx Proxy Manager browser access, reboot,
+  and repeated OME restart/media recovery remain separate promotion evidence.
+
+## Previous scope - repair the `rc.6` hosted release failures and publish `rc.7` (2026-07-31)
 
 - Preserve immutable `v1.2.3-rc.6` at verified main commit `d94ac432`.
   Release run `30643868431` proved the restored viewer baseline, Go/Postgres,

@@ -480,6 +480,22 @@ describe("Navbar", () => {
     expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
   });
 
+  test("keeps authentication actions disabled until viewer auth discovery completes", () => {
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      loading: true,
+    });
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /create account/i })).toBeDisabled();
+    expect(screen.getByRole("group", { name: /account and preferences/i }).querySelector(".auth-buttons")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+  });
+
   test("sign in CTA calls the auth handler with a redirect target", async () => {
     const signIn = jest.fn();
     mockUseAuth.mockReturnValue({
