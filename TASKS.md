@@ -913,8 +913,16 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       no BitRiver containers, and the private root `.env` was restored to SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
     - Both README images were visually inspected at original resolution and are
-      real shipped-viewer captures. GitHub branch rendering and remote gates
-      remain pending publication.
+      real shipped-viewer captures.
+    - GitHub rendered the branch README successfully with all three badges, both
+      real screenshots, the install table and code blocks, the Mermaid media
+      flow, and repository-relative navigation intact. The public repository
+      About description and topics now match the one-host Compose/Ubuntu support
+      boundary.
+    - PR #1354 CI run `30674183171` passed the Ubuntu `test-all` gate, Windows
+      and macOS Go tests, macOS/Windows/Ubuntu quickstart entrypoint checks,
+      Docs consistency, ShellCheck, changed-file detection, and the committed
+      secret guard. Exact merged-main CI remains pending merge.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 
