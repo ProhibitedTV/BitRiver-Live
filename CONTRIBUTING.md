@@ -86,6 +86,15 @@ If Docker-dependent checks are blocked on your machine, note that clearly in the
 - Mention the commands you ran.
 - Link the issue being fixed, if there is one.
 - Keep claims tight and source-backed; if a limitation remains, document it instead of hand-waving around it.
+- Complete the release scorecard in the pull request template. Missing or
+  inconsistent scorecards are advisory for docs-only changes and blocking when
+  code, CI, dependencies, deployment, packaging, or operator paths change.
+
+GitHub may correctly show individual jobs as skipped when their paths are not
+affected. The stable required result is `Merge gate`: it compares those skips
+with the changed-file selectors and fails when required work was skipped,
+failed, or cancelled. Do not merge by interpreting child jobs individually.
+See [`docs/release-gates.md`](docs/release-gates.md) for the enforced boundary.
 
 ## Commit and release expectations
 

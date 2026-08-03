@@ -104,6 +104,78 @@ func TestCIPathFiltersUseCompleteGitDiff(t *testing.T) {
 	}
 }
 
+func TestCIAggregateMergeGateOwnsEveryChildResult(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	ci := strings.ReplaceAll(
+		readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml")),
+		"\r\n",
+		"\n",
+	)
+	gateStart := strings.Index(ci, "  merge-gate:\n")
+	if gateStart < 0 {
+		t.Fatal("CI workflow is missing the aggregate merge-gate job")
+	}
+	gate := ci[gateStart:]
+
+	for _, required := range []string{
+		"    name: Merge gate\n",
+		"    if: always()\n",
+		"          fetch-depth: 0\n",
+		"        continue-on-error: true\n",
+		`jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH"`,
+		"            --strict-if-risky | tee \"$RUNNER_TEMP/pr-release-scorecard.txt\"",
+		"        run: ./scripts/check-ci-merge-gate.sh\n",
+		"uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+		"${{ runner.temp }}/merge-gate-summary.md",
+		"          if-no-files-found: error\n",
+	} {
+		if !strings.Contains(gate, required) {
+			t.Errorf("aggregate merge gate missing %q", required)
+		}
+	}
+
+	jobs := []string{
+		"secret-guard",
+		"changed-files",
+		"verify",
+		"go-verify",
+		"quickstart-smoke",
+		"viewer-ci",
+		"shellcheck",
+		"docs-consistency",
+		"monitoring-config",
+		"go-workflow-consistency",
+		"wizard-release",
+		"image-scan",
+	}
+	for _, job := range jobs {
+		if !strings.Contains(gate, "      - "+job+"\n") {
+			t.Errorf("aggregate merge gate needs list is missing %s", job)
+		}
+		if !strings.Contains(gate, "${{ needs."+job+".result }}") {
+			t.Errorf("aggregate merge gate does not evaluate %s result", job)
+		}
+	}
+
+	for _, output := range []string{
+		"verify_changed",
+		"go_changed",
+		"deploy_changed",
+		"viewer_changed",
+		"monitoring_changed",
+		"docs_changed",
+		"shell_changed",
+		"image_scan_changed",
+		"quickstart_changed",
+		"wizard_release_changed",
+		"go_workflow_changed",
+	} {
+		if !strings.Contains(gate, "needs.changed-files.outputs."+output) {
+			t.Errorf("aggregate merge gate does not consume %s", output)
+		}
+	}
+}
+
 func TestQuickstartEntrypointMatrixUsesRepositoryGoToolchain(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "quickstart-smoke.yml"))

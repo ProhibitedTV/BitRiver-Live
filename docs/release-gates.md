@@ -8,15 +8,31 @@ These gates do not promise a Kubernetes-first platform, managed hosting, multi-h
 
 | Gate | Risk caught | When it runs | Status | Command or workflow | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Blocking | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, `Go unit tests`, viewer jobs when paths match | Test logs, verifier phase output, viewer lint/test output |
+| 1. Static repo hygiene | Formatting drift, broken unit tests, stale generated contract checks, obvious viewer regressions | Every PR when relevant files change; locally before merge | Path-selective children; blocking aggregate | `./scripts/verify.sh`; GitHub Actions `Ubuntu test-all gate`, cross-platform Go, viewer jobs when paths match; required `Merge gate` | Test logs, verifier phase output, viewer output, aggregate job summary/artifact |
 | 2. Contract and schema drift | Accidental changes to Compose, env, API health shape, migrations, generated OME config, or release artifact inputs | PRs that touch deployment, API, migrations, env templates, release packaging, or health surfaces | Blocking for breaking/security-sensitive drift | Current: `go run ./cmd/bitriver release contract-snapshot`, `go run ./cmd/bitriver release contract-diff`, `./scripts/verify.sh`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/render-ome-config.sh --check` | Contract snapshot JSON, drift report, Compose config output, contract invariant output, generated OME check |
 | 3. Golden-path quickstart and smoke | A checkout or release candidate compiles but cannot start or pass operator smoke checks | Release candidates; PRs that change quickstart, deploy, smoke, Docker, or runtime startup paths | Blocking for release candidates; path-gated in PR CI | `./scripts/release-gate-smoke.sh --tier fast`; `./scripts/release-gate-smoke.sh --tier full`; `./scripts/test-quickstart.sh`; `go run ./cmd/bitriver smoke --env-file ./.env` | Release-gate report JSON, contract snapshot, redacted env summary, Compose config output, quickstart/smoke logs, Compose state/log diagnostics |
 | 4. Production media and workflow acceptance | Healthy containers hide broken RTMP mapping, OME/transcoder output, chat/moderation, VOD processing, or aggregate status | Runtime/media changes; every release candidate; repeated after installing tagged artifacts | Blocking | `./scripts/test-production-golden-path.sh --stack quickstart --client docker`; `.github/workflows/ingest-e2e.yml`; release workflow `pull-only-product-gate`; `--stack running` on a prepared candidate host | Scanner-approved `production-golden-path.json` with stage timing, advancing playlist evidence, 1080p probes, workflow results, image-manifest evidence, and final status |
-| 5. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | PR review for Codex/AI-authored or high-risk changes | Advisory by default; reviewer-blocking by policy when risk is unresolved | PR template plus `./scripts/check-pr-release-scorecard.sh`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, docs/release note decisions |
+| 5. AI-authored PR risk scorecard | Large or automated changes landing without clear risk classification, evidence, docs impact, or rollback notes | Every PR; strict when declared or automatically classified as risky | Advisory for docs/planning-only; blocking for risky paths | PR template plus `./scripts/check-pr-release-scorecard.sh --strict-if-risky`; required `Merge gate`; see `docs/pr-release-scorecard.md` | PR summary, changed-area classification, verification commands, skipped-check disclosure, scorecard report artifact |
 | 6. Release readiness | Tags published with stale changelog, missing release notes, unpinned or secret-bearing artifacts, or unverifiable Postgres/storage support | Before tagging and while release workflow runs | Blocking | `docs/production-release.md`; `.github/workflows/release.yml`; `.github/RELEASE_NOTES_TEMPLATE.md`; `./scripts/check-postgres-pgx.sh postgres`; `./scripts/require-image-digests.sh`; `./scripts/scan-release-evidence.sh` | Redacted contract status, release artifact inventory and scan status, release notes, image digest status, pgx guard output |
 | 7. Canary, observability, and rollback | A production rollout succeeds mechanically but cannot be observed, canaried, or rolled back safely | Staging and production rollout windows | Blocking for production change approval; non-mutating command plus operator evidence | `./scripts/release-canary.sh`; `go run ./cmd/bitriver release canary`; `docs/operations.md`; `/readyz`, `/healthz`, `/api/status` | Canary report JSON, redacted health snapshots, log scan summary, version metadata, rollback readiness notes |
 
 ## Gate details
+
+### Pull-request aggregate enforcement
+
+`Merge gate` is the single stable required check for `main`. It runs with
+`if: always()` after every CI child and compares each result with the
+changed-file outputs. Required jobs must succeed. Correctly unrelated jobs may
+be skipped; unexpected skips, failures, and cancellations block the aggregate.
+The job publishes a Markdown result table and the PR scorecard report as a
+14-day Actions artifact.
+
+Branch protection requires a pull request, a current successful `Merge gate`,
+resolved conversations, and admin compliance; force pushes and deletion are
+disabled. Emergency changes follow the audited break-glass procedure in
+[`SECURITY.md`](../SECURITY.md). This protects merges only. Stable promotion of
+an existing immutable candidate remains a separate open release-engineering
+boundary and must not be inferred from a green merge gate.
 
 ### 1. Static repo hygiene
 
@@ -169,7 +185,10 @@ Run the advisory validator locally against a PR body draft:
 ./scripts/check-pr-release-scorecard.sh --body pr-body.md
 ```
 
-Pass `--changed-files` to catch obvious mismatches between the diff and selected scorecard fields, and use `--strict` when release management or a future workflow should fail on warnings. See `docs/pr-release-scorecard.md` for examples and Codex-authored PR expectations.
+Pass `--changed-files` to catch obvious mismatches between the diff and selected
+scorecard fields. Pull-request CI uses `--strict-if-risky`; `--strict` remains
+available when release management wants every warning to fail. See
+`docs/pr-release-scorecard.md` for examples and Codex-authored PR expectations.
 
 Treat missing evidence as advisory for small docs-only changes and blocking for runtime, deployment, auth, data, migration, or release workflow changes.
 
