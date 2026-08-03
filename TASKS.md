@@ -127,7 +127,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Installer wording, Markdown-link unit fixtures, focused links for every
       changed/new document, JSON parsing, and `git diff --check` pass.
 
-- [-] Task 6 - Verify, merge, configure, and negatively prove enforcement
+- [x] Task 6 - Verify, merge, configure, and negatively prove enforcement
   - Acceptance criteria:
     - Focused checks, literal verifier, complete PR CI, and exact-main CI pass
       with private/operator state excluded.
@@ -136,7 +136,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - An unverified promotion dispatch fails in the read-only stable gate before
       approval/mutation; issue evidence distinguishes implementation from the
       later candidate publication and external stable qualification.
-  - Check (in progress):
+  - Check:
     - Literal `./scripts/verify.sh` passed with Go 1.26.5, containerized Python
       3.13, sanitized immutable RC12 dependency/image evidence, and a disposable
       production-shaped environment. It covered all Go/Python/docs/contracts,
@@ -149,8 +149,94 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       the env later reintroduced remote digests for locally built services.
       One tested override function now clears only buildable digests in build
       mode and reapplies after sourcing; pull/production pins remain enforced.
-    - Pending: PR CI, exact-main CI, live environment configuration/readback,
-      and a negative unverified promotion dispatch before issue updates.
+    - PR #1366 squash-merged as `38cfeb13` after all PR checks and protected
+      `Merge gate` passed in run `30793307725`. Exact-main run `30793780301`
+      also passed the unified Ubuntu verifier, cross-platform jobs, scans, and
+      aggregate gate.
+    - Environment `stable-promotion` readback shows required reviewer
+      `ProhibitedTV`, self-review allowed for the single-owner project, and
+      protected-branch-only deployment.
+    - Deliberate negative run `30794248391` failed in the unprivileged `Stable
+      promotion gate` because `docs/releases/promotions/v1.2.3.json` is not a
+      tracked approval record. Both mutation jobs were skipped and direct
+      release/tag inspection confirmed that `v1.2.3` was not created.
+    - Evidence comments were posted to #1271, #1301, and already-closed #1302.
+      #1271/#1301 and external gates remain open for actual candidate/stable
+      outcomes; implementation enforcement is not presented as qualification.
+
+## Scoped change: first signed release-set candidate (#1271, #1301)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the next candidate identity and publication boundary
+  - Acceptance criteria:
+    - Existing public candidate tags/releases and RC12 assets are inspected.
+    - `PLAN.md` identifies the next unused tag, immutable tag boundary, public
+      verification requirements, and external stable blockers before tagging.
+  - Check:
+    - Remote annotated tags exist through `v1.2.3-rc.12`; no RC13 tag/release
+      exists, so `v1.2.3-rc.13` is the next unused candidate identity.
+    - RC12 has 33 checksum-covered assets but no `release-set.json` or signing
+      bundle, matching the documented pre-contract boundary.
+    - The plan requires exact green main, candidate-only publication, signed
+      public-root inspection, no stable/latest mutation, and fix-forward tags.
+
+- [-] Task 2 - Land the rollout ledger through protected main
+  - Acceptance criteria:
+    - PLAN/TASKS accurately record the completed promotion rollout and bounded
+      RC13 plan without touching runtime/deployment contracts.
+    - Focused docs/diff checks, PR CI, protected `Merge gate`, and exact-main CI
+      pass with operator-owned paths excluded.
+  - Check (in progress):
+    - PLAN was updated first, followed by this task ledger.
+    - The first literal `./scripts/verify.sh` attempt stopped at the Go gate
+      because Git Bash resolved host Go 1.25.6 while `go.mod` requires 1.26.0+;
+      earlier repository/CI/hygiene/bundle checks passed. This is a local PATH
+      mismatch, so the unchanged verifier must be rerun with Go 1.26.5 first.
+    - The Go 1.26.5 rerun passed all Go, architecture, release-set Python, link,
+      hygiene, and bundle checks, then stopped at Compose interpolation because
+      the private root `.env` lacks required `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`.
+      Verification will use environment-only synthetic contract values; the
+      private file remains untouched and its hash must be rechecked afterward.
+    - Exporting those missing values at process scope was rejected as an
+      approach: Go environment-precedence fixtures correctly failed because the
+      overrides leaked into isolated test cases. The next run must use a
+      supported alternate env file or a safely restored disposable root file,
+      never global process overrides or weakened tests.
+    - Literal `./scripts/verify.sh` then passed with Go 1.26.5 and a generated,
+      application-validated, non-secret production-shaped environment bridged
+      under `try/finally`. It covered all Go/Python/docs/contracts, digest
+      enforcement, Postgres migrations, Compose rendering, local image builds,
+      and healthy Postgres/Redis/SRS/OME/transcoder/API/viewer startup with API
+      and viewer endpoints reachable; viewer checks correctly skipped because
+      no viewer paths changed.
+    - The private `.env` was restored to SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+      Only this run's generated verifier env, RC12 evidence download, and
+      isolated external Go cache were removed; older `.tmp` evidence and all
+      six operator-owned untracked paths were preserved.
+
+- [ ] Task 3 - Publish `v1.2.3-rc.13` from exact green main
+  - Acceptance criteria:
+    - One annotated tag points to the exact protected-main commit and is pushed
+      without moving any prior tag or creating a stable tag.
+    - The candidate release workflow completes without bypassing any gate.
+  - Check: pending Task 2.
+
+- [ ] Task 4 - Verify the public signed candidate set
+  - Acceptance criteria:
+    - Public assets, checksums, signed release-set root, five exact image
+      signatures, SBOM/evidence coverage, tag/commit/run binding, and anonymous
+      GHCR pulls are verified.
+    - The release is a prerelease; stable and `latest` remain unchanged.
+  - Check: pending Task 3.
+
+- [ ] Task 5 - Record release evidence and update issue state truthfully
+  - Acceptance criteria:
+    - TASKS/PLAN and #1271/#1301 receive durable public evidence.
+    - #1271 closes only after provenance publication is proven; #1301 and all
+      external stable gates remain open until byte-identical promotion is real.
+  - Check: pending Task 4.
 
 ## Scoped change: aggregate merge gate and main protection (#1302, #1270)
 
