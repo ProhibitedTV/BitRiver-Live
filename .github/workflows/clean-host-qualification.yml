@@ -311,6 +311,7 @@ jobs:
           sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" env validate --env-file "$ENV_FILE"
           sudo bitriver-host doctor
           sudo -u "$USER" docker compose \
+            --profile '*' \
             --file "$COMPOSE_FILE" \
             --env-file "$ENV_FILE" \
             config --images >"$QUALIFICATION_ROOT/compose-images.txt"

@@ -159,6 +159,26 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       healthy OME and dependent services, API/viewer smoke, and cleanup. The
       isolated project leaves zero containers/volumes, the six operator paths
       remain present, and the private `.env` returns to its exact recorded hash.
+    - Cosign correction PR #1371 passed protected run `30823439715`, merged as
+      `e24ffe7cc07a90169825f8ded8c021281fc15bb3`, passed exact-main run
+      `30824059167`, and had its remote branch deleted.
+    - Live run `30824712866` passed signed provenance, public `.deb` install,
+      disabled systemd staging, env validation, and host doctor. It stopped
+      before activation because `config --images` excluded optional profiles,
+      so the audit could not see the signed Alpine images used only by
+      `postgres-host` and `srs-api`. Sanitized evidence and cleanup passed.
+      All-profile digest rendering, regression coverage, revalidation,
+      protected merge, and exact-input redispatch are in progress.
+    - The audit now renders `docker compose --profile '*' ... config --images`
+      without starting optional services. Exact RC13 reproduction shows the
+      default render misses only the two optional-profile digests, while the
+      all-profile render contains all 15 service references and all 13 unique
+      signed digests. Focused Go 1.26.5 contracts, js-yaml, CI policy,
+      committed-secret, and diff checks pass.
+    - The literal verifier passes again with the signed production pins and
+      healthy OME/dependency/API/viewer smoke. Cleanup leaves zero isolated
+      containers/volumes, preserves all six operator paths, and restores the
+      private `.env` to its exact recorded hash.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

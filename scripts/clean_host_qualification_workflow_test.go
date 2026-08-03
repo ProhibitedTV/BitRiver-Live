@@ -86,6 +86,7 @@ func TestCleanHostQualificationCoversLifecycleAndRecovery(t *testing.T) {
 		"systemctl is-enabled bitriver-live-compose.service",
 		"env validate --env-file \"$ENV_FILE\"",
 		"sudo bitriver-host doctor",
+		"docker compose \\\n            --profile '*' \\",
 		"config --images",
 		"sudo bitriver-host activate",
 		"$INSTALL_ROOT/bin/bitriver\" smoke",
