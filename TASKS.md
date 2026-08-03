@@ -959,14 +959,15 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `scripts/verify.sh`. Shell syntax, the focused fixture, cleaned-tree guard,
       committed-secret guard, and staged/unstaged diff checks pass.
 
-- [-] Task 17 - Verify and publish repository hygiene cleanup
+- [x] Task 17 - Verify and publish repository hygiene cleanup
   - Acceptance criteria:
     - Focused guard tests, deletion inventory, secret guard, `git diff --check`,
       literal `./scripts/verify.sh`, PR CI, and exact merged-main CI pass.
     - Large pull requests cannot truncate CI path routing before changed
       verification scripts are evaluated; a focused workflow regression locks
       the complete-checkout Git diff boundary.
-    - The remote branch count returns to its pre-PR value after merge.
+    - The cleanup head is deleted after merge; any concurrent branch-count
+      drift is classified before unrelated remote work is changed.
   - Check:
     - Docker Desktop initially stopped at a failed automatic-update recovery
       dialog because its staging check saw 348 MB free against a 3,394 MB
@@ -998,6 +999,22 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       ShellCheck passed, macOS/Windows Go tests passed, and Ubuntu/macOS/Windows
       quickstart entrypoint checks passed; unrelated viewer, docs, monitoring,
       image-scan, wizard, and Go-workflow jobs remained correctly skipped.
+    - Final PR-head run `30784972644` passed the same selected matrix. PR #1361
+      squash-merged as `5e736f2b`, its remote head was deleted, and exact
+      merged-main run `30785253246` passed Ubuntu `test-all` in 4m17s,
+      ShellCheck, macOS/Windows Go, and all three quickstart entrypoint checks.
+    - Post-merge pruning removed four stale local tracking refs. GitHub reports
+      64 current branches: the previous 58-branch baseline plus six separate
+      viewer dependency heads authored by `dependabot[bot]` at 02:36 UTC. They
+      were preserved as concurrent, non-audited work rather than blindly
+      deleted to force the old numeric count.
+    - The completion-ledger branch reran literal `./scripts/verify.sh` with the
+      existing pinned Windows Go 1.26.5 toolchain and a temporary copy upgraded
+      through the supported `bitriver env init` path. It passed in 150.9 seconds
+      through Go, Postgres, Compose, SRS, authenticated OME health, transcoder,
+      API, and viewer smoke. The private `.env` was restored to its original
+      SHA-256, both temporary env files were removed, and zero Compose-labeled
+      containers or volumes remained.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 
