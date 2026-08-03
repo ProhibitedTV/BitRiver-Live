@@ -100,6 +100,20 @@
   literal gates, protected PR/main validation, and redispatch exact RC13. Treat
   `30824712866` as package/preflight evidence only, not activation or lifecycle
   evidence; its failure artifact and successful cleanup remain diagnostic.
+- Run `30827018880` passed the no-checkout/provenance boundary, public `.deb`
+  installation, disabled-service staging, immutable environment validation,
+  doctor, and the complete all-profile digest audit. Activation then exposed a
+  real immutable RC13 package defect: the rendered systemd unit retained quotes
+  around `WorkingDirectory=/opt/bitriver-live`, which systemd rejects as a
+  non-absolute path. Do not patch the installed candidate in qualification or
+  weaken the activation gate; RC13 is rejected for clean-host qualification.
+- Fix the canonical packaged Compose unit and add rendered-unit regression
+  assertions at the installer boundary. Run focused installer/unit checks plus
+  the literal repository verifier, then land the correction through a protected
+  PR and exact-main CI. Publish the next unused immutable candidate, RC14, only
+  from that exact green main commit and rerun the artifact-only qualification
+  against RC14's signed release-set hash. RC13 and run `30827018880` remain
+  bounded failure evidence; stable promotion and #1297/#1304 remain open.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 
