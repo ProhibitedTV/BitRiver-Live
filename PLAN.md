@@ -52,6 +52,16 @@
 - Run literal `./scripts/verify.sh`, PR CI, and exact merged-main CI before
   considering the cleanup complete.
 
+### Completion outcome
+
+- PR #1361 squash-merged as `5e736f2b`; exact merged-main CI run
+  `30785253246` passed the complete selected matrix.
+- The PR head was deleted and stale local tracking refs were pruned. The remote
+  now has 64 branches rather than the earlier 58 because Dependabot created six
+  separate viewer dependency heads during the documentation/cleanup window.
+  Those bot-authored, non-audited heads are preserved as concurrent work; they
+  are not residue from the cleanup branch or justification for blind deletion.
+
 ## Current scope - first-time installer documentation refresh (2026-07-31)
 
 - Treat published prerelease `v1.2.3-rc.12` as the current consumer artifact
