@@ -61,6 +61,20 @@
   Do not close either issue or enable stable promotion until the XOA/NPM/reboot
   and remaining production gates genuinely pass.
 
+### Live rollout correction
+
+- The first post-merge dispatch was rejected by GitHub before a run existed:
+  `runner.temp` is not an available expression context in job-level `env`.
+  Move qualification path construction into the first Bash step using the
+  runner-provided `$RUNNER_TEMP`, append only those non-secret paths to
+  `$GITHUB_ENV`, and keep every later step on the same isolated directories.
+- Add a contract assertion that the workflow never uses `${{ runner.* }}` in
+  job-level configuration and requires `$RUNNER_TEMP` initialization before
+  any path is consumed. Rerun focused/YAML/policy checks and the literal
+  verifier, then land the correction through PR and exact-main gates before
+  redispatching RC13. The rejected dispatch is parser evidence only and must
+  not be reported as a clean-host execution attempt.
+
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 
 - Use `v1.2.3-rc.13`, the next unused candidate tag after the public RC12, and

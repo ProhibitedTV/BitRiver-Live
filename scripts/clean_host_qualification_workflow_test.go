@@ -14,6 +14,12 @@ func TestCleanHostQualificationUsesOnlySignedReleaseArtifacts(t *testing.T) {
 		"permissions:\n  contents: read",
 		"runs-on: ubuntu-24.04",
 		"test ! -e \"$GITHUB_WORKSPACE/.git\"",
+		"qualification_root=\"$RUNNER_TEMP/bitriver-clean-host\"",
+		"echo \"QUALIFICATION_ROOT=$qualification_root\"",
+		"echo \"DOWNLOAD_ROOT=$download_root\"",
+		"echo \"EVIDENCE_ROOT=$evidence_root\"",
+		"rm -rf \"$qualification_root\"",
+		"mkdir -p \"$download_root\" \"$evidence_root\"",
 		"gh release download \"$CANDIDATE_TAG\"",
 		"actual_release_set_sha256",
 		"test \"$actual_release_set_sha256\" = \"$EXPECTED_RELEASE_SET_SHA256\"",
@@ -50,6 +56,7 @@ func TestCleanHostQualificationUsesOnlySignedReleaseArtifacts(t *testing.T) {
 		"git clone",
 		"go run ./",
 		"./scripts/",
+		"${{ runner.",
 	} {
 		if strings.Contains(workflow, forbidden) {
 			t.Fatalf("clean-host workflow crosses release-only boundary with %q", forbidden)

@@ -112,7 +112,29 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       hash; its public artifact is independently inspected and retained durably.
     - #1297/#1304 receive bounded evidence without closing external gates or
       enabling stable promotion prematurely.
-  - Check: pending
+  - Check:
+    - Local focused checks, the literal verifier, PR #1369 CI, its protected
+      merge gate, and exact-main run `30819170684` passed. PR #1369 merged as
+      `2c8dc599541f1879b9415ff008d992a3487da71c` without touching the private
+      root `.env` or the six retained operator-owned paths.
+    - The first RC13 dispatch was rejected before GitHub created a run because
+      job-level `env` cannot evaluate the `runner.temp` expression context.
+      This is parser evidence only: no package, container, release, or evidence
+      mutation occurred. Runtime `$RUNNER_TEMP` initialization, a regression
+      contract, full revalidation, protected merge, and redispatch are in
+      progress.
+    - The correction removes all `${{ runner.* }}` expressions, derives the
+      three isolated paths from `$RUNNER_TEMP` in the first Bash step, and
+      exports them through `$GITHUB_ENV` only for later steps. Focused Go 1.26.5
+      workflow contracts, js-yaml parsing, the repository CI-contract check,
+      and `git diff --check` pass.
+    - The literal `./scripts/verify.sh` gate passes against a temporary RC13
+      production env with the signed five first-party and eight dependency
+      digests: Go/tests/contracts/docs/migrations, Compose render, image builds,
+      healthy Postgres/Redis/SRS/OME/transcoder/API/viewer, and quickstart all
+      pass. Its isolated Compose project leaves zero containers/volumes; the
+      private `.env` is restored to SHA-256 `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
+      and all six operator-owned paths remain present.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
