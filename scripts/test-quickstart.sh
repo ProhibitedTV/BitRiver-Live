@@ -42,15 +42,19 @@ case "$SMOKE_IMAGE_SOURCE" in
     ;;
 esac
 
-export BITRIVER_DEPLOY_IMAGE_SOURCE="$SMOKE_IMAGE_SOURCE"
-export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"
-if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
-  export BITRIVER_LIVE_IMAGE_DIGEST=""
-  export BITRIVER_VIEWER_IMAGE_DIGEST=""
-  export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
-  export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
-  export BITRIVER_OME_CONFIG_IMAGE_DIGEST=""
-fi
+apply_smoke_mode_overrides() {
+  export BITRIVER_DEPLOY_IMAGE_SOURCE="$SMOKE_IMAGE_SOURCE"
+  export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"
+  if [[ "$SMOKE_IMAGE_SOURCE" == "build" ]]; then
+    export BITRIVER_LIVE_IMAGE_DIGEST=""
+    export BITRIVER_VIEWER_IMAGE_DIGEST=""
+    export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
+    export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
+    export BITRIVER_OME_CONFIG_IMAGE_DIGEST=""
+    export BITRIVER_SRS_IMAGE_DIGEST=""
+  fi
+}
+apply_smoke_mode_overrides
 export BITRIVER_SRS_PUBLIC_RTMP_BASE_URL="${BITRIVER_SRS_PUBLIC_RTMP_BASE_URL:-rtmp://localhost:1935/live}"
 export BITRIVER_OME_PUBLIC_LLHLS_BASE_URL="${BITRIVER_OME_PUBLIC_LLHLS_BASE_URL:-http://localhost:18080/live}"
 export BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://localhost:9080/hls}"
@@ -498,6 +502,7 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+apply_smoke_mode_overrides
 
 if [[ "${BITRIVER_TEST_GOLDEN_PATH:-}" == "1" ]]; then
   # The production product exercise needs public account creation and media URLs

@@ -617,6 +617,7 @@ func TestQuickstartSmokeSupportsExplicitPullProductionMode(t *testing.T) {
 		`docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull ome-config`,
 		`Pull-only smoke selected; no Compose image builds are permitted.`,
 		`export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"`,
+		`export BITRIVER_SRS_IMAGE_DIGEST=""`,
 	} {
 		if !strings.Contains(script, required) {
 			t.Fatalf("pull-mode quickstart contract missing %q", required)
@@ -624,6 +625,17 @@ func TestQuickstartSmokeSupportsExplicitPullProductionMode(t *testing.T) {
 	}
 	if strings.Contains(script, "SMOKE_IMAGE_SOURCE=pull") || strings.Contains(script, "SMOKE_LIVE_MODE=production") {
 		t.Fatal("source quickstart must retain build/development defaults unless release validation opts into pull/production")
+	}
+	buildStart := strings.Index(script, `apply_smoke_mode_overrides() {`)
+	if buildStart == -1 {
+		t.Fatal("smoke-mode override function not found")
+	}
+	buildEnd := strings.Index(script[buildStart:], "\n}")
+	if buildEnd == -1 || !strings.Contains(script[buildStart:buildStart+buildEnd], `export BITRIVER_SRS_IMAGE_DIGEST=""`) {
+		t.Fatal("build-mode smoke must clear the digest from its buildable SRS output tag without weakening pull mode")
+	}
+	if count := strings.Count(script, "apply_smoke_mode_overrides"); count != 3 {
+		t.Fatalf("smoke-mode overrides must be defined once and applied before rendering plus after env sourcing; got %d references", count)
 	}
 }
 

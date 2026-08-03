@@ -31,8 +31,10 @@ Branch protection requires a pull request, a current successful `Merge gate`,
 resolved conversations, and admin compliance; force pushes and deletion are
 disabled. Emergency changes follow the audited break-glass procedure in
 [`SECURITY.md`](../SECURITY.md). This protects merges only. Stable promotion of
-an existing immutable candidate remains a separate open release-engineering
-boundary and must not be inferred from a green merge gate.
+an existing immutable candidate is separately enforced by the read-only
+`Stable promotion gate`, the `stable-promotion` environment, and
+[`docs/release-promotion.md`](release-promotion.md); it must not be inferred
+from a green merge gate.
 
 ### 1. Static repo hygiene
 
@@ -208,6 +210,9 @@ Before tagging, follow `docs/production-release.md`. A release candidate should 
 - `release-product-evidence` proves the pulled, digest-pinned image set passed
   the production media/API golden path
 - `release-publication-evidence` inventories and passes scans for downloaded artifacts and the final publication payload
+- a signed `release-set.json` binds every public candidate asset, five image
+  digests/signatures, dependency pins, and fixed-schema evidence; complete
+  `CHECKSUMS.txt` coverage re-verifies before publication
 - Postgres-aware binaries/images include the real pgx-backed implementation when required
 - production image digests and third-party digests are recorded
 - tracked and packaged OME config matches the placeholder contract; deployment-time credential renders remain local to the deployment host
@@ -215,7 +220,10 @@ Before tagging, follow `docs/production-release.md`. A release candidate should 
 Failures before tagging mean the tag should wait. A failed tag is immutable:
 fix the source, increment the RC number, and rerun rather than force-moving the
 existing tag. RC tags are prereleases and do not update `latest`; stable tags
-may update it only after all promotion evidence is accepted.
+never enter the build workflow. The guarded promotion workflow may move stable
+and optional `latest` aliases only after one tracked record binds all required
+gate evidence to the same signed candidate root. A revocation marker blocks
+promotion before environment approval.
 
 ### 7. Canary, observability, and rollback
 

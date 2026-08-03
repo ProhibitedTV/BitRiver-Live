@@ -41,6 +41,22 @@ GitHub writes the result table to the job summary and retains
 or authorize stable release promotion; immutable promotion remains a separate
 release gate.
 
+The release-focused workflow contracts and deterministic metadata fixtures run
+inside the Go/Python portions of `./scripts/verify.sh`. For a focused rerun:
+
+```bash
+python3 -m unittest scripts/release_set_test.py
+go test ./scripts -run 'TestReleaseWorkflow|TestStablePromotionWorkflow' -count=1
+```
+
+They cover complete checksum/artifact inventory, tampering, five image
+signature references, exact candidate/stable tag relationships, cross-candidate
+gate rejection, revocation, deterministic stable retry metadata, first-release
+rollback, workflow permissions, validation-before-environment ordering, no
+stable rebuild, draft publication, and conflicting-state refusal. These are
+contract fixtures; a new candidate run, live environment readback, and a
+negative manual dispatch remain required rollout evidence.
+
 ## Test taxonomy and single entrypoints
 
 Use these category entrypoints from the repository root:

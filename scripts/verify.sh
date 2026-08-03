@@ -263,6 +263,7 @@ run_step "Architecture dependency direction check" ./scripts/check-architecture-
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
 require_python_runner
+run_step "Release-set manifest tests" "${PYTHON_RUNNER[@]}" -m unittest scripts/release_set_test.py
 run_step "Markdown local-link checker tests" "${PYTHON_RUNNER[@]}" -m unittest scripts/check_doc_links_test.py
 run_step "Markdown local-link check" "${PYTHON_RUNNER[@]}" scripts/check_doc_links.py
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh

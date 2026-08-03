@@ -214,11 +214,11 @@ Before tagging production releases, prove backup/restore readiness:
 
 Keep this evidence attached to the release ticket/change request before maintenance begins.
 
-## 2. Tag the release and trigger the workflow
+## 2. Tag one immutable candidate and trigger the build workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.
 2. Create one annotated tag that follows
-   `vMAJOR.MINOR.PATCH[-PRERELEASE]`. Increment the numbered candidate for each
+   `vMAJOR.MINOR.PATCH-PRERELEASE`. Increment the numbered candidate for each
    immutable RC attempt:
    ```bash
    release_tag=v1.2.3-rc.N
@@ -228,13 +228,13 @@ Keep this evidence attached to the release ticket/change request before maintena
    Tags are immutable publication inputs. If a candidate fails, fix the source
    and increment the suffix; never force-move or overwrite an existing tag.
 3. The push triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml),
-   which rebuilds the Go binaries for every platform, packages the viewer
+   which builds the Go binaries for every platform, packages the viewer
    bundle, publishes version-matched first-party container images (including
    the OME config helper), builds amd64/arm64 launcher archives plus `.deb`/`.rpm`
    packages, signs each launcher binary into a Cosign `.sigstore.json` bundle,
-   and publishes the artefacts to the GitHub Release. A prerelease tag is marked
-   as a GitHub prerelease and does not move the `latest` image tag. Monitor the
-   workflow until every job completes successfully.
+   signs all five exact image digests, and publishes the artifacts to a GitHub
+   prerelease. Stable tags do not match this workflow and candidates never move
+   `latest`. Monitor the workflow until every job completes successfully.
 
 The release job is blocked on package acceptance that installs and removes the
 amd64 package in Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers. This is
@@ -282,6 +282,21 @@ freshness is checked separately by rendering `deploy/.env.example` to a
 temporary output and comparing it with `deploy/ome/Server.generated.xml`.
 Production credentials are rendered only on the deployment host; they are not
 needed by build or test jobs and never enter release packages.
+
+### Signed candidate release set
+
+After the pulled-image product gate, the release job flattens the approved
+payload, rejects duplicate or missing evidence, scans it, and generates
+`release-set.json`. The manifest binds the candidate tag and commit, workflow
+identity, every public artifact hash/size, five image digests with SBOM and
+signature references, pinned third-party digests, and gate evidence. The job
+keylessly signs that root, writes `CHECKSUMS.txt` over every other immutable
+asset, re-verifies the complete set, and only then creates the prerelease.
+
+The current public RC12 predates this root. Do not claim it has
+`release-set.json`; use its checksum and launcher-bundle verification path.
+Candidates produced by the current workflow follow the complete process in
+[`docs/release-promotion.md`](release-promotion.md).
 
 ### Record image digests for production
 
@@ -336,6 +351,30 @@ topology, timestamps, and redacted command results. Do not retain `.env`, OME
 tokens, generated `Server.generated.xml`, private keys, or raw secret-bearing
 logs. Ubuntu 24.04 amd64 is the only production installation claim until an
 equivalent tagged-host evidence set passes for another platform.
+
+### Promote the accepted candidate without rebuilding
+
+Do not create or push a stable tag manually. Commit a reviewed promotion record
+under `docs/releases/promotions/` that binds every required evidence URL and
+SHA-256 to the candidate `release-set.json` SHA-256. All required gate issues
+must also be closed. Then dispatch `.github/workflows/stable-promotion.yml` from
+protected `main` with `operation=promote`, the candidate tag, matching stable
+tag, and record path.
+
+`Stable promotion gate` is read-only and runs before the `stable-promotion`
+environment. It validates public GitHub asset digests, checksum coverage,
+candidate/tag/commit identity, Cosign roots and five image signatures,
+revocation state, tracked evidence, live issue state, rollback root, and
+existing stable state. The environment-approved job revalidates state, creates
+or resumes a draft release, retags exact digests, copies candidate files with
+their RC filenames/package metadata intact, signs deterministic stable and
+rollback metadata, verifies stored asset hashes, and publishes the draft.
+
+Set `publish_latest=true` only as an explicit convenience-alias decision.
+Production and rollback records always use a stable/candidate tag plus digest.
+The first stable release correctly records no previous stable rollback set.
+See [`docs/release-promotion.md`](release-promotion.md) for retry, revocation,
+environment, and negative-enforcement details.
 
 ## 3. Rotate credentials and validate environment files
 

@@ -52,6 +52,22 @@ change, restore protection immediately, and follow with a normal audited pull
 request and CI evidence. A failing test or urgent release is not by itself a
 reason to bypass the gate.
 
+## Release provenance and revocation
+
+Candidate builds are accepted only from prerelease tags. The release workflow
+keylessly signs the five first-party image digests and one deterministic
+`release-set.json` root; production consumers should verify the exact tag-ref
+workflow identity and compare selected artifact hashes with that signed root.
+`CHECKSUMS.txt` is complete coverage, but it is not a substitute for verifying
+the signed manifest.
+
+Stable tags are created only by the protected `stable-promotion` workflow after
+its read-only gate and environment approval. The workflow copies candidate
+bytes and retags digests without a build. It refuses conflicting existing state
+or a signed append-only revocation marker. `latest` is convenience-only and
+must not be used as security, provenance, or rollback identity. See
+[`docs/release-promotion.md`](docs/release-promotion.md).
+
 ## Supported versions
 
 Until the first public stable release is tagged, security fixes should be assumed to land on `main`.

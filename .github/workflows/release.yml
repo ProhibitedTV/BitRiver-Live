@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*-*'
 
 permissions:
   contents: write
@@ -16,10 +16,6 @@ jobs:
     name: Verify production environment configuration
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.release-metadata.outputs.version }}
-      prerelease: ${{ steps.release-metadata.outputs.prerelease }}
-      is_prerelease: ${{ steps.release-metadata.outputs.is_prerelease }}
-      publish_latest: ${{ steps.release-metadata.outputs.publish_latest }}
       msi_version: ${{ steps.release-metadata.outputs.msi_version }}
       nfpm_version: ${{ steps.release-metadata.outputs.nfpm_version }}
       nfpm_prerelease: ${{ steps.release-metadata.outputs.nfpm_prerelease }}
@@ -747,6 +743,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
+
       - name: Log in to GHCR
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
@@ -767,11 +768,26 @@ jobs:
             GOSUMDB=sum.golang.org
           tags: |
             ${{ steps.image-namespace.outputs.value }}/${{ matrix.image_name }}:${{ env.RELEASE_TAG }}
-            ${{ needs.verify-env.outputs.publish_latest == 'true' && format('{0}/{1}:latest', steps.image-namespace.outputs.value, matrix.image_name) || '' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Sign and verify ${{ matrix.component }} image digest
+        env:
+          IMAGE_NAMESPACE: ${{ steps.image-namespace.outputs.value }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ matrix.image_name }}
+        run: |
+          set -euo pipefail
+          image_ref="$IMAGE_NAMESPACE/$IMAGE_NAME@$IMAGE_DIGEST"
+          bundle="$IMAGE_NAME-$RELEASE_TAG.image.sigstore.json"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+          cosign sign --yes --bundle "$bundle" "$image_ref"
+          cosign verify "$image_ref" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            >"$RUNNER_TEMP/$IMAGE_NAME-image-verification.json"
 
       - name: Generate SBOM for ${{ matrix.component }} image
         id: sbom
@@ -785,6 +801,14 @@ jobs:
         with:
           name: container-sbom-${{ matrix.component }}
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload image signature bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: container-signature-${{ matrix.component }}
+          path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.image.sigstore.json
           if-no-files-found: error
           retention-days: 7
 
@@ -896,10 +920,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
+
       - name: Assemble viewer manifest
         id: manifest
-        env:
-          PUBLISH_LATEST: ${{ needs.verify-env.outputs.publish_latest }}
         run: |
           set -euo pipefail
           image="${{ steps.image-namespace.outputs.value }}/bitriver-viewer"
@@ -908,18 +935,27 @@ jobs:
             --tag "$release_ref" \
             "$release_ref-amd64" \
             "$release_ref-arm64"
-          if [[ "$PUBLISH_LATEST" == "true" ]]; then
-            docker buildx imagetools create \
-              --tag "$image:latest" \
-              "$release_ref-amd64" \
-              "$release_ref-arm64"
-          fi
           digest="$(docker buildx imagetools inspect "$release_ref" --format '{{.Manifest.Digest}}')"
           if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
             echo "Invalid viewer manifest digest: $digest" >&2
             exit 1
           fi
           echo "digest=$digest" >>"$GITHUB_OUTPUT"
+
+      - name: Sign and verify viewer image digest
+        env:
+          IMAGE_DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image="${{ steps.image-namespace.outputs.value }}/bitriver-viewer"
+          image_ref="$image@$IMAGE_DIGEST"
+          bundle="bitriver-viewer-$RELEASE_TAG.image.sigstore.json"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+          cosign sign --yes --bundle "$bundle" "$image_ref"
+          cosign verify "$image_ref" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            >"$RUNNER_TEMP/bitriver-viewer-image-verification.json"
 
       - name: Generate SBOM for viewer image
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -932,6 +968,14 @@ jobs:
         with:
           name: container-sbom-viewer
           path: bitriver-viewer-${{ env.RELEASE_TAG }}.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload image signature bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: container-signature-viewer
+          path: bitriver-viewer-${{ env.RELEASE_TAG }}.image.sigstore.json
           if-no-files-found: error
           retention-days: 7
 
@@ -949,6 +993,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
 
       - name: Download verified release dependency evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -989,6 +1038,20 @@ jobs:
             echo "BITRIVER_RELEASE_PRODUCT_ENV=$env_file"
             echo "BITRIVER_RELEASE_PRODUCT_SENTINELS=$sentinel_file"
           } >>"$GITHUB_ENV"
+
+      - name: Verify immutable first-party image signatures
+        run: |
+          set -euo pipefail
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+          jq -r --arg tag "$GITHUB_REF_NAME" \
+            '.images[] | "\(.reference | sub((":" + $tag + "$"); ""))@\(.digest)"' \
+            "$BITRIVER_RELEASE_PRODUCT_EVIDENCE/release-images.json" |
+            while IFS= read -r image_ref; do
+              cosign verify "$image_ref" \
+                --certificate-identity "$identity" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                >/dev/null
+            done
 
       - name: Run tagged production golden path
         env:
@@ -1204,19 +1267,41 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          find release -type f -name '*.tar.gz' -exec cp {} dist/ \;
-          find release -type f -name '*.zip' -exec cp {} dist/ \;
-          find release -type f -name '*.spdx.json' -exec cp {} dist/ \;
-          find release -type f -name '*.deb' -exec cp {} dist/ \;
-          find release -type f -name '*.rpm' -exec cp {} dist/ \;
-          find release -type f -name '*.msi' -exec cp {} dist/ \;
-          find release -type f -name '*.rb' -exec cp {} dist/ \;
-
-      - name: Generate checksums
-        run: |
-          set -euo pipefail
-          cd dist
-          sha256sum * > CHECKSUMS.txt
+          copy_unique() {
+            local source="$1"
+            local target="dist/$(basename "$source")"
+            if [[ -e "$target" ]]; then
+              echo "Duplicate release asset name: $(basename "$source")" >&2
+              exit 1
+            fi
+            cp "$source" "$target"
+          }
+          while IFS= read -r -d '' file; do
+            copy_unique "$file"
+          done < <(
+            find release -type f \( \
+              -name '*.tar.gz' -o \
+              -name '*.zip' -o \
+              -name '*.spdx.json' -o \
+              -name '*.image.sigstore.json' -o \
+              -name '*.deb' -o \
+              -name '*.rpm' -o \
+              -name '*.msi' -o \
+              -name '*.rb' \
+            \) -print0
+          )
+          for evidence in \
+            release-contract-evidence.json \
+            release-dependencies.json \
+            release-images.json \
+            production-golden-path.json; do
+            mapfile -d '' matches < <(find release -type f -name "$evidence" -print0)
+            if [[ ${#matches[@]} -ne 1 ]]; then
+              echo "Expected exactly one $evidence, found ${#matches[@]}" >&2
+              exit 1
+            fi
+            copy_unique "${matches[0]}"
+          done
 
       - name: Scan and inventory release payload
         timeout-minutes: 10
@@ -1241,7 +1326,56 @@ jobs:
           }
           EOF
           ./scripts/scan-release-evidence.sh --root "$evidence_dir"
+          cp "$evidence_dir/release-scan-status.json" dist/release-scan-status.json
           echo "BITRIVER_RELEASE_PUBLICATION_EVIDENCE=$evidence_dir" >>"$GITHUB_ENV"
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
+
+      - name: Create and sign immutable candidate release set
+        run: |
+          set -euo pipefail
+          created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go_version="go$(tr -d '\r\n' < .go-version)"
+          node_version="v$(tr -d '\r\n' < web/viewer/.nvmrc)"
+          workflow_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+
+          python3 ./scripts/release_set.py candidate \
+            --tag "$GITHUB_REF_NAME" \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --workflow-url "$workflow_url" \
+            --created-at "$created_at" \
+            --go-version "$go_version" \
+            --node-version "$node_version" \
+            --cosign-version v3.1.2 \
+            --assets-dir dist \
+            --output dist/release-set.json \
+            --markdown-output dist/release-set.md
+          cosign sign-blob --yes \
+            --bundle dist/release-set.sigstore.json \
+            dist/release-set.json
+          cosign verify-blob \
+            --bundle dist/release-set.sigstore.json \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            dist/release-set.json
+          python3 ./scripts/release_set.py checksums \
+            --assets-dir dist \
+            --output dist/CHECKSUMS.txt
+          python3 ./scripts/release_set.py verify-candidate \
+            --assets-dir dist \
+            --manifest dist/release-set.json \
+            --expected-tag "$GITHUB_REF_NAME" \
+            --expected-commit "$GITHUB_SHA"
+          ./scripts/scan-release-evidence.sh \
+            --root dist \
+            --inventory "$BITRIVER_RELEASE_PUBLICATION_EVIDENCE/artifact-inventory.tsv"
 
       - name: Upload release publication evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1274,15 +1408,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           body_path: ${{ steps.notes.outputs.path }}
-          prerelease: ${{ needs.verify-env.outputs.is_prerelease == 'true' }}
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/CHECKSUMS.txt
-            dist/*.spdx.json
-            dist/*.deb
-            dist/*.rpm
-            dist/*.msi
-            dist/*.rb
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

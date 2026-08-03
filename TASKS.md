@@ -1,5 +1,157 @@
 # TASKS
 
+## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit current publication, provenance, and live stable state
+  - Acceptance criteria:
+    - #1293/#1301/#1271 dependencies, release jobs/artifacts/tests/docs, current
+      candidate evidence schemas, GitHub environments, stable tags/releases,
+      and all public `latest` aliases are inspected read-only.
+    - `PLAN.md` records the immutable boundary, transaction/idempotence risks,
+      evidence contract, permissions, environment rollout, and test plan before
+      release workflow implementation.
+  - Check:
+    - `release.yml` currently builds on every `v*` tag, publishes stable aliases
+      and `latest` inside image build jobs, and has no release-set manifest or
+      separate promotion workflow. Stable tags therefore rebuild instead of
+      promoting candidate bytes.
+    - Public `v1.2.3-rc.12` has 33 checksum-covered assets and five anonymous
+      image digests, but its sanitized contract/product/publication evidence is
+      retained only as Actions artifacts and it has no signed provenance root.
+    - The repository has no GitHub environments, no `v1.2.3` tag/release, and
+      no public `latest` alias for any of the five first-party images. #1271,
+      #1301, and the promotion half of #1302 are open; #1294 and #1300 are
+      closed while required external production gates remain open.
+
+- [x] Task 2 - Add deterministic release-set and promotion-record fixtures
+  - Acceptance criteria:
+    - A standard-library generator emits deterministic JSON/Markdown release-
+      set manifests and verifies exact artifact/checksum/image/evidence content.
+    - Promotion records bind every required gate and durable evidence digest to
+      one candidate manifest hash and the matching base stable version.
+    - Fixtures reject tampering, missing/duplicate/path-traversal assets,
+      incomplete or cross-candidate gates, revoked candidates, tag/version
+      mismatch, and unsafe idempotence state.
+  - Check:
+    - Added standard-library `release_set.py` with deterministic candidate JSON/
+      Markdown generation, sorted complete checksums, full payload verification,
+      strict promotion records, stable/rollback metadata, revocation markers,
+      and existing-state classification.
+    - The contract requires the complete cross-platform archive/installer set,
+      five canonical SBOMs and image signature bundles, sanitized contract/
+      dependency/image/product/scan evidence, exact tag/commit/reference/digest
+      relationships, one signed provenance root, and eight external gates bound
+      to the same release-set SHA-256.
+    - Eight Python fixtures pass for deterministic output, complete verification,
+      tampering/uncovered assets, missing signatures, path traversal, incomplete
+      and cross-candidate promotion records, revocation, first-stable rollback,
+      safe resume/complete state, mismatched existing state, and tag contracts.
+    - Python compilation, Bash verification-entrypoint syntax, isolated-cache Go
+      1.26.5 `go test ./scripts`, and `git diff --check` pass.
+
+- [x] Task 3 - Publish signed candidate release sets without stable aliases
+  - Acceptance criteria:
+    - Candidate tags alone build; stable tags cannot enter the build workflow
+      and no candidate job creates `latest`.
+    - Exact image digests and the release-set root are keylessly signed and
+      verified against the exact release workflow identity.
+    - Candidate releases attach manifest JSON/Markdown, signature bundles,
+      evidence, SBOMs, and checksum coverage only after scanner-approved gates.
+  - Check:
+    - `release.yml` now accepts prerelease-shaped tags only, contains no
+      `:latest` or stable-tag publication path, and always marks the resulting
+      GitHub Release as a prerelease.
+    - Four generic images and the native multi-architecture viewer manifest are
+      keylessly signed at exact digests; the pull-only product gate verifies all
+      five against the exact tag-ref workflow identity before Compose starts.
+    - The release job fail-closes on duplicate/missing evidence, scans the
+      downloaded and flattened payload, attaches sanitized evidence and five
+      image bundles, signs `release-set.json`, creates sorted checksum coverage,
+      re-verifies the complete candidate set, and publishes only `dist/*`.
+    - Workflow YAML parsing, Git Bash syntax, isolated-cache Go 1.26.5
+      `go test ./scripts`, and `git diff --check` pass. The eight release-set
+      Python fixtures passed in Task 2; this host currently has no Python
+      interpreter on PATH, so the literal verifier/CI rerun remains in Task 6.
+
+- [x] Task 4 - Add guarded stable promotion and candidate revocation
+  - Acceptance criteria:
+    - A read-only stable gate validates tracked evidence, release assets,
+      signatures, digests, revocation, issue state, and idempotence before writes.
+    - The write job uses least privilege plus the `stable-promotion` environment,
+      performs no build, retags by digest, publishes through a draft release,
+      emits stable/rollback manifests, and rejects mismatched existing state.
+    - Revocation is signed, append-only, and cannot modify stable state.
+  - Check:
+    - Added manual `stable-promotion.yml` with an unprivileged `Stable promotion
+      gate` that downloads a public candidate, checks GitHub asset digests,
+      checksum/manifest coverage, exact candidate tag/commit, root and five
+      image signatures, tracked promotion-record binding, all eight live issue
+      states, revocation overlays, prior rollback root, and existing stable
+      state before an environment can be reached.
+    - The environment-approved promotion job revalidates live state, refuses
+      mismatched tags/assets/aliases, creates deterministic signed stable and
+      first/previous rollback metadata, creates a draft release, retags exact
+      image digests without build steps, uploads only missing byte-identical
+      assets, verifies server hashes, and publishes only after final checks.
+    - The separate least-privilege revocation job signs unique run-scoped
+      markers, refuses overwrite, appends them to the candidate, and has no
+      package permission or stable/image mutation path. Promotion rejects any
+      existing revocation marker before approval.
+    - YAML parsing, eight Python release-set fixtures (including deterministic
+      stable retry metadata), and focused Go 1.26.5 stable-workflow contracts
+      pass.
+
+- [x] Task 5 - Update operator, release, security, and verification guidance
+  - Acceptance criteria:
+    - Docs explain candidate versus stable identity, manifest/signature checking,
+      tracked promotion records, environment approval, revocation, rollback,
+      optional `latest`, and first-stable no-previous-release behavior.
+    - Public install examples use candidate/stable manifest digests as truth and
+      do not claim unresolved external gates have passed.
+  - Check:
+    - Added `docs/release-promotion.md`, a complete example record, and the
+      tracked promotion-record directory contract. They document signed-root
+      and selected-artifact verification, exact digest identity, environment
+      review, live gates, draft/resume behavior, optional non-authoritative
+      `latest`, append-only revocation, and first-stable rollback limits.
+    - Refreshed README, SPEC, production release/status/gates, Ubuntu install,
+      testing/versioning/security guidance, draft v1.2.3 notes, and the release
+      notes checklist. RC12 is accurately identified as predating the new root;
+      no unresolved target-host gate is presented as complete.
+    - The Ubuntu/XOA/NPM workflow keeps authenticated OME control, real ingest/
+      playback, reboot, and repeated OME recovery explicit. Stable packages
+      retaining RC filenames are explained as byte-identical promotion, not
+      stale rebuild output.
+    - Installer wording, Markdown-link unit fixtures, focused links for every
+      changed/new document, JSON parsing, and `git diff --check` pass.
+
+- [-] Task 6 - Verify, merge, configure, and negatively prove enforcement
+  - Acceptance criteria:
+    - Focused checks, literal verifier, complete PR CI, and exact-main CI pass
+      with private/operator state excluded.
+    - Live `stable-promotion` environment readback proves required review and
+      protected-branch deployment.
+    - An unverified promotion dispatch fails in the read-only stable gate before
+      approval/mutation; issue evidence distinguishes implementation from the
+      later candidate publication and external stable qualification.
+  - Check (in progress):
+    - Literal `./scripts/verify.sh` passed with Go 1.26.5, containerized Python
+      3.13, sanitized immutable RC12 dependency/image evidence, and a disposable
+      production-shaped environment. It covered all Go/Python/docs/contracts,
+      Postgres migration lifecycle, digest enforcement, Compose rendering,
+      first-party/SRS builds, and healthy Postgres/Redis/SRS/OME/transcoder/API/
+      viewer startup; the private `.env` was restored to its original SHA-256
+      and the `deploy` Compose project retained zero containers/volumes.
+    - The full gate first exposed and then proved a repair for build-mode smoke
+      digest suffixes: SRS could not build under an `@sha256` tag, and sourcing
+      the env later reintroduced remote digests for locally built services.
+      One tested override function now clears only buildable digests in build
+      mode and reapplies after sourcing; pull/production pins remain enforced.
+    - Pending: PR CI, exact-main CI, live environment configuration/readback,
+      and a negative unverified promotion dispatch before issue updates.
+
 ## Scoped change: aggregate merge gate and main protection (#1302, #1270)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

@@ -28,13 +28,14 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - Workflow docs remain short working artifacts.
 
 ## Current Change Success Criteria
-- A valid `vMAJOR.MINOR.PATCH[-PRERELEASE]` tag can run the release workflow without repository deployment secrets; all validation credentials are generated and destroyed inside one job.
-- Official first-party images publish to an owned, publicly consumable GHCR namespace while forks/mirrors can override the image namespace through the deployment contract.
-- Prerelease tags create GitHub prereleases and never update `latest`; stable tags retain the normal release/latest behavior.
-- The release workflow blocks GitHub Release creation until tagged, pull-only images boot the canonical production Compose stack and pass the scanner-approved full-stack golden path.
-- Linux package and Windows MSI versions are derived correctly from the tag, and every installer uses the canonical release asset manifest.
-- Published checksums/assets and anonymous GHCR manifests are verified after the candidate workflow succeeds.
-- A release candidate is not described as stable or clean-host approved until Ubuntu/XOA install, Nginx Proxy Manager/browser playback, and reboot/recovery evidence pass.
+- Only a valid `vMAJOR.MINOR.PATCH-PRERELEASE` tag can enter the build workflow; validation credentials remain generated, consumed, and destroyed inside one job.
+- The candidate publishes public first-party images by exact tag and digest, then blocks GitHub prerelease creation until the anonymous pull-only Compose stack passes the scanner-approved full product path.
+- Every public candidate artifact, SBOM, image signature, dependency/image manifest, and fixed-schema gate result is rooted in complete checksums plus a keylessly signed deterministic release-set manifest.
+- Stable publication is a manual, environment-reviewed promotion of one existing candidate manifest. It performs no build, copies candidate artifacts byte-for-byte, and retags the five exact image digests.
+- A tracked promotion record binds clean-host, backup/restore, upgrade/rollback, capacity, OME resilience, SLO, security, and viewer evidence to one candidate manifest hash; missing, open, revoked, or cross-candidate evidence fails before write approval.
+- Stable promotion is retry-safe, publishes through a draft release, refuses conflicting tag/asset/alias state, emits signed stable and rollback roots, and treats `latest` as optional and non-authoritative.
+- Candidate revocation is signed and append-only, cannot change stable state, and prevents later promotion.
+- A release candidate is not described as stable or clean-host approved until Ubuntu/XOA install, Nginx Proxy Manager/browser playback, reboot/recovery, and the other tracked production gates genuinely pass.
 
 ## Previous Change Success Criteria - production golden path
 - One release-blocking harness exercises the real canonical Compose services rather than mocked adapters or only the storage package.
