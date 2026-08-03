@@ -137,13 +137,21 @@ jobs:
           for entry in images:
               digest = entry.get("digest", "")
               immutable = entry.get("immutableReference", "")
-              bundle = entry.get("signature", {}).get("asset", "")
+              signature = entry.get("signature", {})
+              bundle = signature.get("asset", "")
               if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
                   raise SystemExit("invalid first-party image digest")
               if not immutable.endswith("@" + digest):
                   raise SystemExit("immutable image reference/digest mismatch")
               if not bundle.endswith(".image.sigstore.json") or not (root / bundle).is_file():
                   raise SystemExit("missing first-party image signature bundle")
+              bundle_sha = hashlib.sha256((root / bundle).read_bytes()).hexdigest()
+              if bundle_sha != signature.get("sha256"):
+                  raise SystemExit("image signature bundle does not match signed image entry")
+              if artifacts.get(bundle, {}).get("sha256") != bundle_sha:
+                  raise SystemExit("image signature bundle does not match signed artifact entry")
+              if checksum_entries.get(bundle) != bundle_sha:
+                  raise SystemExit("image signature bundle CHECKSUMS entry is missing or incorrect")
               image_lines.append(f"{immutable}\t{bundle}")
 
           dependencies = manifest.get("dependencies", [])
@@ -198,7 +206,6 @@ jobs:
 
           while IFS=$'\t' read -r immutable bundle; do
             "$cosign_root/cosign-linux-amd64" verify \
-              --bundle "$DOWNLOAD_ROOT/$bundle" \
               --certificate-identity "$RELEASE_WORKFLOW_IDENTITY" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               "$immutable" >/dev/null
