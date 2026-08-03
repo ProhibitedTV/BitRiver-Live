@@ -108,6 +108,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       both temporary env files were removed, and zero Compose-labeled containers
       or volumes remain. PR failure/pass, merge, protection, and canary evidence
       are still pending.
+    - Draft PR #1363 intentionally omitted its risky-path scorecard. Run
+      `30786811135` passed Ubuntu `test-all`, docs consistency, ShellCheck,
+      macOS/Windows Go, and all quickstart entrypoint checks; `Merge gate` then
+      failed only the required scorecard row and retained 956-byte artifact
+      `merge-gate-30786811135-1` (ID `8845612070`). Log review found a literal
+      newline escape in the failure list; the formatter and fixture now prevent
+      that cosmetic regression before the corrected PR run.
 
 ## Scoped change: branch hygiene and release CI consolidation
 

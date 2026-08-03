@@ -57,6 +57,10 @@ expect_fail() {
   fi
   grep -Fq "$expected" "$TMP_DIR/$name.out"
   grep -Fq '**Result: FAIL**' "$TMP_DIR/$name.out"
+  if grep -Fq '\n-' "$TMP_DIR/$name.out"; then
+    echo "FAIL: $name rendered a literal newline escape" >&2
+    exit 1
+  fi
 }
 
 expect_pass docs-only

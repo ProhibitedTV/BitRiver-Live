@@ -110,7 +110,8 @@ if ((${#failures[@]} == 0)); then
 else
   summary+=$'\n\n**Result: FAIL**\n'
   for failure in "${failures[@]}"; do
-    summary+="\n- $failure"
+    summary+=$'\n- '
+    summary+="$failure"
   done
 fi
 
