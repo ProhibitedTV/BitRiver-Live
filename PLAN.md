@@ -49,6 +49,18 @@
   exact merged-main CI, live branch-protection API verification, and a blocked
   disposable canary PR before calling the merge enforcement active.
 
+### Outcome
+
+- PR #1363 merged as `200bf414`; exact-main run `30787937537` passed every
+  selected child and the stable `Merge gate`.
+- Live `main` protection now requires the strict, app-bound GitHub Actions
+  `Merge gate`, pull requests, current-head checks, resolved conversations, and
+  admin enforcement; force pushes and branch deletion are disabled.
+- Ready canary PR #1364 failed the required gate in run `30788386196`, GitHub
+  reported it `BLOCKED`, and it was closed unmerged with both branch refs
+  removed. Issue #1270 is closed; #1302 stays open only for #1301's immutable
+  stable-promotion work.
+
 ## Current scope - remove tracked generated Go caches (2026-08-02)
 
 - Remove the four root `.gocache-*` directories that were accidentally added

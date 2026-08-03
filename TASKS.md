@@ -89,7 +89,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Markdown link tests/check, installer wording, generated contract freshness,
       scorecard fixtures, and `git diff --check` pass.
 
-- [-] Task 5 - Prove, merge, protect, and negatively demonstrate enforcement
+- [x] Task 5 - Prove, merge, protect, and negatively demonstrate enforcement
   - Acceptance criteria:
     - Focused checks, literal `./scripts/verify.sh`, intentional failing PR
       evidence, corrected PR CI, and exact merged-main CI pass.
@@ -106,8 +106,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The private `.env` returned to SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
       both temporary env files were removed, and zero Compose-labeled containers
-      or volumes remain. Merge, protection, and canary evidence are still
-      pending.
+      or volumes remain.
     - Draft PR #1363 intentionally omitted its risky-path scorecard. Run
       `30786811135` passed Ubuntu `test-all`, docs consistency, ShellCheck,
       macOS/Windows Go, and all quickstart entrypoint checks; `Merge gate` then
@@ -125,6 +124,28 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `f24e03d4c599679bc504431797ee35a8b1173385df56c2bbfe99b7948f7882f7`).
       Its Markdown table ends in `Result: PASS` and contains no literal newline
       escape regression.
+    - Final PR-head run `30787600492` passed on `2c520855`; PR #1363 was marked
+      ready and squash-merged as `200bf414`. Push run `30787937537` then passed
+      on that exact `main` commit, including the stable aggregate.
+    - Live `main` protection requires the strict `Merge gate` check bound to
+      GitHub Actions app ID `15368`, pull requests with stale-review dismissal,
+      resolved conversations, and admin enforcement. Force pushes and branch
+      deletion are disabled; API readback confirmed every setting.
+    - Ready canary PR #1364 changed one disposable `.github` marker and omitted
+      the risky-path scorecard. Run `30788386196` failed `Merge gate`; GitHub
+      reported `mergeStateStatus: BLOCKED` and REST `mergeable_state: blocked`.
+      The PR was closed unmerged, both branch refs were deleted, and the remote
+      branch count returned from 65 to its 64-branch baseline.
+    - Issue #1270 was closed with pass/fail artifact and canary evidence. #1302
+      records the completed merge half and remains open because its stable-
+      promotion half and negative promotion proof still depend on open #1301.
+    - The evidence-ledger follow-up passed literal `./scripts/verify.sh` in
+      129.7 seconds: aggregate fixtures, all Go packages, real Postgres
+      migrations, Compose rendering, and healthy SRS/OME/transcoder/API/viewer
+      smoke all passed. The temporary env files were removed, the private env
+      retained the SHA-256 above, and the BitRiver `deploy` Compose project left
+      zero containers and volumes; unrelated `novel-generator` Docker objects
+      were identified and preserved.
 
 ## Scoped change: branch hygiene and release CI consolidation
 
