@@ -74,6 +74,21 @@
   verifier, then land the correction through PR and exact-main gates before
   redispatching RC13. The rejected dispatch is parser evidence only and must
   not be reported as a clean-host execution attempt.
+- Run `30822618916` proved the parser correction and no-checkout boundary, then
+  stopped before package installation because exact Cosign 3.1.2 supports
+  `--bundle` for `verify-blob` but not container-image `verify`. Keep bundled
+  root verification unchanged; checksum each downloaded image bundle against
+  its signed image entry, signed artifact entry, and `CHECKSUMS.txt`, then use
+  Cosign's supported anonymous registry-backed `verify` command for each exact
+  immutable image digest and release-workflow identity. The five public RC13
+  bundle hashes match all three signed/checksum sources, and the exact Cosign
+  binary verifies all five remote digests anonymously with that command.
+- Extend the workflow contract so image bundle byte verification is mandatory
+  and container verification rejects the unsupported `--bundle` flag. Run the
+  focused/YAML/policy and literal verifier gates, land through a new protected
+  PR and exact-main run, and redispatch the same immutable RC13 inputs. Treat
+  `30822618916` as a provenance-stage compatibility failure only; its sanitized
+  artifact may be inspected, but it is not clean-host lifecycle evidence.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 

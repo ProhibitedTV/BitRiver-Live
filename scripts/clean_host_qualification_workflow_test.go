@@ -26,6 +26,9 @@ func TestCleanHostQualificationUsesOnlySignedReleaseArtifacts(t *testing.T) {
 		"release-set candidate identity mismatch",
 		"release-set workflow identity mismatch",
 		"package does not match signed release-set checksum",
+		"image signature bundle does not match signed image entry",
+		"image signature bundle does not match signed artifact entry",
+		"image signature bundle CHECKSUMS entry is missing or incorrect",
 		"gh release download \"$COSIGN_VERSION\"",
 		"--repo sigstore/cosign",
 		"cosign_checksums.txt",
@@ -45,6 +48,17 @@ func TestCleanHostQualificationUsesOnlySignedReleaseArtifacts(t *testing.T) {
 	install := strings.Index(workflow, "- name: Install the published Ubuntu package")
 	if provenance == -1 || install <= provenance {
 		t.Fatal("package installation must occur only after signed provenance verification")
+	}
+	imageVerify := strings.Index(workflow, `"$cosign_root/cosign-linux-amd64" verify \`)
+	if imageVerify == -1 {
+		t.Fatal("clean-host workflow is missing registry-backed image verification")
+	}
+	imageVerifyWindow := workflow[imageVerify:]
+	if end := strings.Index(imageVerifyWindow, "done <"); end >= 0 {
+		imageVerifyWindow = imageVerifyWindow[:end]
+	}
+	if strings.Contains(imageVerifyWindow, "--bundle") {
+		t.Fatal("Cosign 3 container verify does not support --bundle; downloaded bundle bytes must be checked separately")
 	}
 
 	for _, forbidden := range []string{

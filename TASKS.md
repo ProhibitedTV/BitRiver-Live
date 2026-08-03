@@ -135,6 +135,30 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       pass. Its isolated Compose project leaves zero containers/volumes; the
       private `.env` is restored to SHA-256 `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
       and all six operator-owned paths remain present.
+    - Parser correction PR #1370 passed refreshed protected CI run `30821426755`
+      after the required PR release scorecard was supplied, merged as
+      `2789b8b614791bacd65006e1544bba23ed9d49f1`, and passed exact-main run
+      `30822039774`; its remote branch was deleted.
+    - Live run `30822618916` established the no-checkout boundary and verified
+      the signed release-set blob, then failed before package installation:
+      Cosign 3.1.2 container `verify` rejects its unsupported `--bundle` flag.
+      The sanitized failure/cleanup steps passed. Exact-binary diagnosis proves
+      the five downloaded image bundles match their signed image entries,
+      signed artifact entries, and `CHECKSUMS.txt`, while supported anonymous
+      registry-backed verification succeeds for all five immutable digests.
+      Bundle-byte assertions, the supported container command, revalidation,
+      protected merge, and redispatch are in progress.
+    - The correction now requires each downloaded image bundle SHA-256 to match
+      its signed image record, signed artifact record, and checksum entry before
+      supported registry-backed verification of the exact digest. Its contract
+      rejects `--bundle` specifically from the Cosign container-verify block.
+      Focused Go 1.26.5 contracts, js-yaml parsing, CI policy, committed-secret,
+      and `git diff --check` gates pass.
+    - The literal verifier passes again with the RC13 five-image/eight-dependency
+      production pins, including all repository checks, Compose render/build,
+      healthy OME and dependent services, API/viewer smoke, and cleanup. The
+      isolated project leaves zero containers/volumes, the six operator paths
+      remain present, and the private `.env` returns to its exact recorded hash.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
