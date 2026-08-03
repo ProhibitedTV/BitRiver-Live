@@ -993,6 +993,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       contract check, workflow YAML parsing, committed-secret guard, shell
       syntax, and `git diff --check` pass. The host's Go 1.25.6 was correctly
       rejected by the module's Go 1.26 requirement.
+    - Corrected PR run `30784659494` detected the complete diff in 9 seconds
+      and selected the intended jobs. Ubuntu `test-all` passed in 4m16s,
+      ShellCheck passed, macOS/Windows Go tests passed, and Ubuntu/macOS/Windows
+      quickstart entrypoint checks passed; unrelated viewer, docs, monitoring,
+      image-scan, wizard, and Go-workflow jobs remained correctly skipped.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 
