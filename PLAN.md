@@ -1,5 +1,44 @@
 # PLAN
 
+## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
+
+- Use `v1.2.3-rc.13`, the next unused candidate tag after the public RC12, and
+  point it at the exact protected-main commit that passed CI. Do not move or
+  recreate any prior tag.
+- Let the candidate-only release workflow build once, sign all five exact image
+  digests, exercise the anonymous pull-only product gate, generate/sign the
+  deterministic release-set root, and publish the complete prerelease assets.
+- Inspect the public GitHub release, checksum coverage, release-set signature,
+  exact tag/commit/workflow binding, five image signature bundles, evidence,
+  SBOMs, and anonymous GHCR visibility before calling the candidate valid.
+- Close #1271 only if the public candidate proves its complete provenance
+  contract. Keep #1301 and every external stable gate open: publishing a signed
+  candidate is not byte-identical stable promotion or Ubuntu/XOA qualification.
+
+### Risks and boundaries
+
+- Tag publication is externally visible and immutable in normal operation. Tag
+  only the exact green main commit and never repair a bad candidate by moving
+  the tag; fix forward with another prerelease.
+- Registry propagation, keyless signing, scanners, multi-architecture builds,
+  and the pull-only media stack are network-dependent. Treat a failed run as
+  evidence to diagnose, not permission to weaken or bypass a gate.
+- Preserve the private root `.env` and the six operator-owned untracked paths.
+  A candidate does not authorize stable aliases, `latest`, or production
+  exposure through Nginx Proxy Manager.
+
+### Test and rollout plan
+
+- Merge the completed promotion rollout ledger through the protected aggregate
+  gate and require exact-main CI to remain green.
+- Create an annotated `v1.2.3-rc.13` tag at that exact main commit and push only
+  the tag. Monitor the release workflow to a terminal result.
+- Verify public release assets and digest/checksum/signature relationships with
+  the repository verifier plus direct GitHub/GHCR inspection. Confirm the
+  release is a prerelease and that `v1.2.3` and `latest` remain untouched.
+- Record the workflow/release evidence in `TASKS.md` and the relevant issues.
+  If publication fails, retain the failed tag/run for audit and fix forward.
+
 ## Current scope - immutable candidate release sets and stable promotion (#1301, #1271, #1302) (2026-08-03)
 
 - Make prerelease candidate tags the only build inputs. A stable tag must never
@@ -79,6 +118,20 @@
   reapply those overrides after sourcing the env file before `compose up`;
   preserve every pin in pull/production mode and add a shell contract fixture
   so release digest enforcement is never weakened.
+
+### Outcome
+
+- PR #1366 squash-merged as `38cfeb13` after PR CI run `30793307725` and its
+  protected `Merge gate` passed. Exact-main CI run `30793780301` also passed,
+  including the unified Ubuntu gate, cross-platform Go/quickstart jobs, image
+  scans, and aggregate gate.
+- GitHub environment `stable-promotion` was created and read back with required
+  reviewer `ProhibitedTV`, self-review allowed for the single-owner project,
+  and protected-branch-only deployment.
+- Deliberate negative run `30794248391` rejected the absent tracked promotion
+  record in the unprivileged `Stable promotion gate`; both mutation jobs were
+  skipped, and no `v1.2.3` tag or release was created. Issue evidence was added
+  to #1271, #1301, and already-closed #1302 without claiming external gates.
 
 ## Current scope - enforce one aggregate merge gate (#1302, #1270) (2026-08-03)
 
