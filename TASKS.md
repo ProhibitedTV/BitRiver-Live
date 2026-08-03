@@ -181,13 +181,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The plan requires exact green main, candidate-only publication, signed
       public-root inspection, no stable/latest mutation, and fix-forward tags.
 
-- [-] Task 2 - Land the rollout ledger through protected main
+- [x] Task 2 - Land the rollout ledger through protected main
   - Acceptance criteria:
     - PLAN/TASKS accurately record the completed promotion rollout and bounded
       RC13 plan without touching runtime/deployment contracts.
     - Focused docs/diff checks, PR CI, protected `Merge gate`, and exact-main CI
       pass with operator-owned paths excluded.
-  - Check (in progress):
+  - Check:
     - PLAN was updated first, followed by this task ledger.
     - The first literal `./scripts/verify.sh` attempt stopped at the Go gate
       because Git Bash resolved host Go 1.25.6 while `go.mod` requires 1.26.0+;
@@ -215,28 +215,72 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Only this run's generated verifier env, RC12 evidence download, and
       isolated external Go cache were removed; older `.tmp` evidence and all
       six operator-owned untracked paths were preserved.
+    - Only PLAN/TASKS were committed. Committed-secret guard and
+      `git diff --check` passed; PR #1367's docs-only protected `Merge gate`
+      passed, it squash-merged as `d416968e`, and exact-main run `30795396504`
+      passed before any tag was created.
 
-- [ ] Task 3 - Publish `v1.2.3-rc.13` from exact green main
+- [x] Task 3 - Publish `v1.2.3-rc.13` from exact green main
   - Acceptance criteria:
     - One annotated tag points to the exact protected-main commit and is pushed
       without moving any prior tag or creating a stable tag.
     - The candidate release workflow completes without bypassing any gate.
-  - Check: pending Task 2.
+  - Check:
+    - Annotated tag `v1.2.3-rc.13` points to exact protected-main commit
+      `d416968e0cadb900820ecf1b4307b101b82ffbbc`; no prior or stable tag moved.
+    - Release run `30795492882` passed production env and Postgres validation,
+      the unified verifier, cross-platform binaries/installers/packages,
+      multi-architecture image builds, exact-digest signatures, package
+      acceptance, anonymous pull-only product proof, payload scanning,
+      release-set signing, and publication without a bypass.
 
-- [ ] Task 4 - Verify the public signed candidate set
+- [x] Task 4 - Verify the public signed candidate set
   - Acceptance criteria:
     - Public assets, checksums, signed release-set root, five exact image
       signatures, SBOM/evidence coverage, tag/commit/run binding, and anonymous
       GHCR pulls are verified.
     - The release is a prerelease; stable and `latest` remain unchanged.
-  - Check: pending Task 3.
+  - Check:
+    - Public prerelease `v1.2.3-rc.13` has 46 assets. All downloaded bytes
+      matched GitHub's server-reported SHA-256 digests, and the complete payload
+      passed `release_set.py verify-candidate` for RC13 and commit `d416968e`.
+    - `release-set.json` SHA-256 is
+      `795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+      It binds 42 payload artifacts, five evidence assets, five image digests/
+      SBOM/signature bundles, eight passed workflow gates, and eight explicitly
+      pending external gates to release run `30795492882`.
+    - Official Cosign v3.1.2 matched its published checksum. It independently
+      verified the release-set blob and all five registry image signatures
+      against the exact `release.yml@refs/tags/v1.2.3-rc.13` identity and GitHub
+      OIDC issuer, including transparency-log and code-signing certificate
+      checks.
+    - Empty-credential GHCR inspection resolved all five public RC13 tags to
+      the exact signed digests. Every first-party `v1.2.3` and `latest` alias,
+      plus the stable GitHub tag/release, remained absent.
+    - Public golden-path evidence passed real RTMP publish/live state, OME
+      LL-HLS playlist advancement and 3-second decoded 1080p H.264 playback,
+      transcoder HLS, offline transition, chat/moderation, VOD upload/playback,
+      and final aggregate readiness. Publication and payload scans passed.
+    - The first attempted local image verification used blob-only `--bundle`
+      syntax with `cosign verify` and failed before verification because that
+      image subcommand does not accept the flag. Correct registry verification
+      then passed for every exact digest; bundle file hashes remain covered by
+      the independently verified release-set root.
 
-- [ ] Task 5 - Record release evidence and update issue state truthfully
+- [x] Task 5 - Record release evidence and update issue state truthfully
   - Acceptance criteria:
     - TASKS/PLAN and #1271/#1301 receive durable public evidence.
     - #1271 closes only after provenance publication is proven; #1301 and all
       external stable gates remain open until byte-identical promotion is real.
-  - Check: pending Task 4.
+  - Check:
+    - PLAN/TASKS record the public release, workflow, signed root, exact image
+      digests/signatures, anonymous access, OME/media evidence, and boundaries.
+    - #1271 closed with complete public provenance evidence. #1301 received the
+      candidate-side proof and remains open for no-build stable promotion;
+      #1297/#1304 received the exact candidate and OME baseline while remaining
+      open for Ubuntu/XOA/NPM/reboot/recovery evidence.
+    - #1298/#1299/#1303/#1305/#1306/#1307 remain open and are still recorded as
+      pending in the signed root. No stable release readiness is claimed.
 
 ## Scoped change: aggregate merge gate and main protection (#1302, #1270)
 

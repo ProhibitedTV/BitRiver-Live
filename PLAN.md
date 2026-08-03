@@ -39,6 +39,32 @@
 - Record the workflow/release evidence in `TASKS.md` and the relevant issues.
   If publication fails, retain the failed tag/run for audit and fix forward.
 
+### Outcome
+
+- Ledger PR #1367 squash-merged as `d416968e`; exact-main CI run
+  `30795396504` passed before the annotated `v1.2.3-rc.13` tag was created at
+  that exact commit and pushed without moving an earlier tag.
+- Release run `30795492882` passed every environment, Postgres, Go, package,
+  multi-platform build, exact-image signing, anonymous pull-only product,
+  payload scan, release-set signing, and publication job. The public release is
+  a prerelease with 46 assets and no stable or `latest` alias.
+- The complete public download passed `release_set.py verify-candidate`; every
+  downloaded SHA-256 matched GitHub's server digest. `release-set.json` has
+  SHA-256 `795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`
+  and binds RC13, commit `d416968e`, run `30795492882`, 42 payload artifacts,
+  five evidence files, eight passed workflow gates, and eight pending external
+  gates.
+- Checksum-verified Cosign v3.1.2 independently verified the signed release-set
+  root and all five public image signatures against the exact
+  `release.yml@refs/tags/v1.2.3-rc.13` identity and GitHub OIDC issuer. Empty-
+  credential GHCR inspection resolved all five RC13 tags to their manifest
+  digests and confirmed every `v1.2.3`/`latest` alias remained absent.
+- The public golden-path evidence passed real RTMP ingest, live/offline state,
+  OME LL-HLS playlist advancement and decoded 1080p H.264 media, transcoder HLS,
+  chat/moderation, VOD upload/playback, and final aggregate readiness. #1271 is
+  closed; #1301 and #1297/#1298/#1299/#1303-#1307 remain open for actual stable
+  promotion and target Ubuntu/XOA/NPM qualification.
+
 ## Current scope - immutable candidate release sets and stable promotion (#1301, #1271, #1302) (2026-08-03)
 
 - Make prerelease candidate tags the only build inputs. A stable tag must never
