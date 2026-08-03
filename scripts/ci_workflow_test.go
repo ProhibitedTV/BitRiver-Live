@@ -80,6 +80,30 @@ func TestReusableWorkflowChangesSelectTheirCIJobs(t *testing.T) {
 	}
 }
 
+func TestCIPathFiltersUseCompleteGitDiff(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	ci := strings.ReplaceAll(
+		readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "ci.yml")),
+		"\r\n",
+		"\n",
+	)
+
+	checkoutStart := strings.Index(ci, "  changed-files:\n")
+	filterStart := strings.Index(ci, "        uses: dorny/paths-filter@")
+	filtersStart := strings.Index(ci, "          filters: |\n")
+	if checkoutStart < 0 || filterStart <= checkoutStart || filtersStart <= filterStart {
+		t.Fatal("CI workflow is missing the changed-file checkout or pinned path filter")
+	}
+	changedFilesJob := ci[checkoutStart:filterStart]
+	filterInputs := ci[filterStart:filtersStart]
+	if !strings.Contains(changedFilesJob, "          fetch-depth: 0\n") {
+		t.Fatal("changed-file routing must check out complete history for git diff")
+	}
+	if !strings.Contains(filterInputs, "          token: ''\n") {
+		t.Fatal("pull-request path filtering must use git diff instead of the 3,000-file REST API result")
+	}
+}
+
 func TestQuickstartEntrypointMatrixUsesRepositoryGoToolchain(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	workflow := readRepoFile(t, repoRoot, filepath.Join(".github", "workflows", "quickstart-smoke.yml"))

@@ -13,6 +13,12 @@
   repository-hygiene regression to reject any tracked root Go cache even when
   it is force-added, and run that guard through the canonical verification
   path rather than creating another overlapping workflow.
+- PR #1361 exposed a release-blocking large-diff seam in the existing CI
+  orchestrator: `dorny/paths-filter` used GitHub's pull-request files API,
+  received only the first 3,000 of 6,780 changed paths, and therefore skipped
+  every substantive job even though three `scripts/**` files changed. Keep the
+  pinned action, but use its documented empty-token mode so the complete
+  checkout and unbounded `git diff` drive pull-request routing.
 - Close the preceding documentation task with its exact merged-main evidence:
   PR #1354 merged as `f3952624`, `main` CI run `30779028786` passed, and the
   remote returned to 58 branches after the PR head was deleted.
@@ -28,6 +34,9 @@
 - Do not claim that deleting tracked files removes their objects from existing
   Git history or immediately shrinks every established clone; repository
   history rewriting is deliberately out of scope.
+- Do not weaken path selectivity or force every expensive job for every PR.
+  The correction must preserve the existing filters while changing only their
+  complete changed-file source.
 
 ### Test plan
 
@@ -36,6 +45,10 @@
 - Require the tracked deletion inventory to contain exactly 6,775 files under
   the four audited roots and zero other paths; run `git diff --check` and the
   committed-secret guard.
+- Add a CI workflow regression that requires the changed-file detector's
+  supported Git fallback plus full-history checkout, and prove PR #1361 now
+  selects at least the Ubuntu, ShellCheck, and quickstart jobs for the changed
+  canonical verification scripts.
 - Run literal `./scripts/verify.sh`, PR CI, and exact merged-main CI before
   considering the cleanup complete.
 

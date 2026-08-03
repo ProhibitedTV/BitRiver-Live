@@ -963,6 +963,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Acceptance criteria:
     - Focused guard tests, deletion inventory, secret guard, `git diff --check`,
       literal `./scripts/verify.sh`, PR CI, and exact merged-main CI pass.
+    - Large pull requests cannot truncate CI path routing before changed
+      verification scripts are evaluated; a focused workflow regression locks
+      the complete-checkout Git diff boundary.
     - The remote branch count returns to its pre-PR value after merge.
   - Check:
     - Docker Desktop initially stopped at a failed automatic-update recovery
@@ -977,7 +980,19 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       restored the private root `.env` to SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
       The staged inventory remains exactly 6,775 audited deletions and zero
-      unexpected deletion; PR and merged-main CI remain pending publication.
+      unexpected deletion.
+    - PR #1361 run `30784385158` exposed the existing GitHub REST changed-files
+      limit: `dorny/paths-filter` received 3,000 of 6,780 paths, all substantive
+      filters returned false, and the Ubuntu, ShellCheck, and quickstart jobs
+      skipped despite three changed `scripts/**` files. The pinned action's
+      documented empty-token mode uses the complete checkout plus `git diff`;
+      the workflow correction, rerun PR CI, and merged-main CI remain pending.
+    - Added the empty-token input without changing any selector, plus a focused
+      regression requiring both the complete-history checkout and Git fallback.
+      Pinned Go 1.26.5 `go test ./scripts -count=1 -timeout=120s`, the Linux CI
+      contract check, workflow YAML parsing, committed-secret guard, shell
+      syntax, and `git diff --check` pass. The host's Go 1.25.6 was correctly
+      rejected by the module's Go 1.26 requirement.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 
