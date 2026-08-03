@@ -18,6 +18,10 @@ Naming convention:
 
 Current published candidate:
 
+- [`v1.2.3-rc.13.md`](v1.2.3-rc.13.md)
+
+Previous candidate:
+
 - [`v1.2.3-rc.12.md`](v1.2.3-rc.12.md)
 
 Stable-line draft:

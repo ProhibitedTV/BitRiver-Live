@@ -1,5 +1,66 @@
 # PLAN
 
+## Current scope - artifact-only Ubuntu host qualification (#1297, #1304) (2026-08-03)
+
+- Add a manual, least-privilege Ubuntu 24.04 amd64 qualification workflow that
+  performs no repository checkout. It must download one public prerelease's
+  signed release set, exact `.deb`, checksums, and five image signature bundles;
+  verify their exact tag/workflow identity; and use only those published bytes
+  for installation and runtime acceptance.
+- Install the package on the clean hosted runner, stage the disabled systemd
+  service for a non-root Docker operator, derive immutable image pins from the
+  signed manifest, validate the production environment, and activate the
+  canonical pull-only Compose stack. Exercise `doctor`, `smoke`, authenticated
+  OME manager access, same-tag upgrade, OME restart, Docker daemon restart,
+  full systemd restart, status, ordinary uninstall, package removal, and
+  config/data retention.
+- Emit a sanitized `bitriver.clean-host-qualification/v1` JSON report even on
+  failure. Bind it to candidate tag, source commit, release-set SHA-256,
+  package checksum, exact image digests, OS/architecture, tool versions,
+  workflow run, and per-stage outcomes without retaining credentials, raw env,
+  generated media credentials, OME XML, or broad logs.
+- Refresh first-install documentation from superseded RC12 wording to the
+  public signed RC13 release set. Keep Ubuntu 24.04 amd64 as the sole production
+  installation target and keep Debian/RPM/arm64, real XOA reboot, Nginx Proxy
+  Manager browser/media routing, firewall/NAT, and target-host ingest/playback
+  explicitly provisional.
+
+### Risks and boundaries
+
+- A GitHub-hosted Ubuntu VM can prove a clean package/systemd/Docker lifecycle,
+  but it cannot prove the user's XCP-ng/XOA reboot path, router/firewall rules,
+  or Nginx Proxy Manager TLS/WebSocket/media topology. #1297 and #1304 remain
+  open until those external checks are attached to the same RC13 manifest hash.
+- Never trust the candidate tag alone. Require the operator-supplied release-
+  set hash, verify the root with checksum-verified Cosign against the exact
+  release workflow/tag identity, verify all five exact image bundles, and
+  populate Compose digests from that signed root before Docker pulls.
+- The qualification job runs with generated ephemeral credentials. It must not
+  print or upload `/etc/bitriver-live/bitriver.env`, generated OME/SRS config,
+  container logs, stream keys, or credentials. Diagnostics are restricted to
+  safe versions, systemd state, Compose status, and explicit stage outcomes.
+- Preserve the canonical Compose/env/generated OME contract, the private root
+  `.env`, and the six operator-owned untracked paths. This slice adds a consumer
+  of the release contract; it does not create a second deployment topology.
+
+### Test and rollout plan
+
+- Add focused workflow contract tests for manual-only triggering, no checkout,
+  least privilege, exact release-set/image signature verification, release-
+  only package install, non-root systemd lifecycle, bounded OME/Docker/systemd
+  recovery, retention-safe uninstall, always-produced sanitized evidence, and
+  explicit external-gate boundaries.
+- Parse workflow YAML, run the focused Go contract test, installer-language and
+  Markdown-link checks, committed-secret guard, `git diff --check`, and literal
+  `./scripts/verify.sh` with the private environment restored byte-for-byte.
+- Merge only through the protected aggregate gate and require exact-main CI.
+  Then dispatch the workflow for `v1.2.3-rc.13` and release-set SHA-256
+  `795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+- If the live run passes, download and independently inspect its report, commit
+  the durable redacted evidence in a follow-up, and attach it to #1297/#1304.
+  Do not close either issue or enable stable promotion until the XOA/NPM/reboot
+  and remaining production gates genuinely pass.
+
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 
 - Use `v1.2.3-rc.13`, the next unused candidate tag after the public RC12, and

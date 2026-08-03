@@ -1,5 +1,119 @@
 # TASKS
 
+## Scoped change: artifact-only Ubuntu host qualification (#1297, #1304)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the live clean-host gate and public candidate
+  - Acceptance criteria:
+    - #1297/#1304 dependencies and remaining evidence are inspected live.
+    - The current installer, package, systemd, release-set, image-signature,
+      OME, smoke, documentation, and public RC assets are inspected read-only.
+    - `PLAN.md` records scope, trust boundary, external limitations, risks, and
+      tests before workflow or documentation changes.
+  - Check:
+    - #1296 and #1300 are closed; #1297 is the next P0 dependency while #1298
+      remains sequenced after clean-host and backup/restore proof. #1304 is open
+      and assigns initial host/Docker/OME recovery evidence to the same target.
+    - Public `v1.2.3-rc.13` contains the signed release-set root, exact amd64
+      `.deb`, all five exact image signature bundles, checksums, SBOMs, and the
+      passed pull-only product report. Its release-set SHA-256 is
+      `795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+    - The existing installer already provides safe two-phase systemd lifecycle,
+      non-root Docker operation, bounded startup, OME diagnostics, and retained
+      config/data uninstall. Existing release CI proves package payloads in
+      containers but not a clean VM systemd/Docker lifecycle.
+    - README, quickstart, Ubuntu install, production status, and draft notes
+      still call RC12 current, even though RC13 is the first candidate eligible
+      for signed-root qualification and stable-promotion evidence.
+
+- [x] Task 2 - Add the no-checkout Ubuntu qualification workflow
+  - Acceptance criteria:
+    - Manual-only Ubuntu 24.04 amd64 workflow uses no repository checkout and
+      grants only read access to public release metadata.
+    - Exact root/package/image signatures and checksums bind all installed and
+      pulled bytes to one candidate tag, commit, and release-set SHA-256.
+    - Package, non-root installer, doctor/env, systemd activation, smoke,
+      authenticated OME, OME/Docker/systemd restart, status, and retained-data
+      uninstall paths are bounded and asserted.
+    - A sanitized versioned report is uploaded on pass or failure and states
+      the XOA/NPM/reboot/media evidence that the hosted VM cannot prove.
+  - Check:
+    - Added manual-only `clean-host-qualification.yml` on a pinned Ubuntu 24.04
+      amd64 runner with `contents: read`, no checkout action, an explicit empty-
+      workspace assertion, bounded job/recovery timeouts, and no registry login.
+    - The workflow verifies the caller-supplied release-set SHA-256, exact tag/
+      repository/commit/workflow identity, checksum-matched Cosign version,
+      signed root, five exact image bundles, package hash, and dependency pins
+      before installing the public `.deb`.
+    - It stages the package's systemd manager for the non-root runner, writes
+      only public URLs and signed digest pins into the generated private env,
+      then proves validation, doctor, pull-only activation, smoke, authenticated
+      OME control, aggregate OME health, viewer content, same-tag upgrade, OME
+      restart, Docker daemon restart, full systemd restart, and config/data-
+      preserving manager plus package removal.
+    - An always-run evidence step emits a versioned JSON/Markdown report, safe
+      systemd/Compose state, explicit XOA/NPM/reboot/media limitations, and
+      scans every retained file against generated secret values before a pinned
+      30-day artifact upload. Workflow YAML parsing, repository CI-contract
+      checks, and `git diff --check` pass.
+
+- [x] Task 3 - Add workflow contract tests and focused verification
+  - Acceptance criteria:
+    - Tests fail on checkout/source use, weak permissions, missing signature or
+      lifecycle gates, secret-bearing evidence, unbounded recovery, unsafe
+      uninstall, absent retention assertions, or overclaimed external proof.
+    - Workflow YAML and relevant focused checks pass.
+  - Check:
+    - Added focused Go workflow contracts covering manual-only/no-checkout/
+      read-only execution, root and five-image provenance, checksum-matched
+      Cosign, anonymous registry use, verify-before-install ordering, package/
+      systemd/doctor/smoke/OME lifecycle, bounded restart timeouts, ordinary
+      uninstall retention, versioned reports, pinned uploads, secret scanning,
+      and explicit XOA/NPM/media limitations.
+    - The tests reject repository scripts/source use, write/package/OIDC
+      permissions, checkout/login/build seams, journal/container-log retention,
+      environment or generated-config upload, missing cleanup assertions, and
+      missing artifact retention policy.
+    - Isolated Go 1.26.5 `go test ./scripts -run TestCleanHostQualification`,
+      js-yaml parsing, `check-ci-contract.sh`, and `git diff --check` pass. The
+      first Go attempt did not run because sandbox policy denied a new
+      `C:\\tmp` cache; the successful rerun uses uniquely scoped workspace
+      caches without touching retained operator/evidence paths.
+
+- [x] Task 4 - Refresh first-install and release-candidate documentation
+  - Acceptance criteria:
+    - README, quickstart, Ubuntu guide, production status, release notes, gates,
+      and testing guidance identify RC13 and its signed root accurately.
+    - Hosted qualification versus real XOA/NPM/reboot/firewall/media acceptance
+      is explicit, and provisional platform support is not promoted.
+    - Stale no-installer/RC12-current claims are removed from operator docs.
+  - Check:
+    - README, quickstart, Ubuntu install, production status/release, testing,
+      release gates, viewer deployment, advanced deployment, changelog, release
+      index, and stable draft now identify signed RC13 rather than presenting
+      RC12 or a future candidate as current.
+    - Added the RC13 note with exact commit/run/signed-root hash, 46-asset/45-
+      checksum coverage, five image digests, install choices, product evidence,
+      and all still-open external gates. Historical RC12 notes remain intact.
+    - Ubuntu and release guidance explains the no-checkout hosted workflow as
+      partial package/systemd/Docker/OME evidence, then requires the same bytes
+      on the real XOA/NPM/firewall/reboot/media topology before promotion.
+    - Removed the stale advanced-deployment claim that no package exists and
+      updated the installer-language guard itself to require RC13 plus its
+      release note. Installer-language checks, focused workflow tests, YAML
+      parsing, and `git diff --check` pass.
+
+- [-] Task 5 - Verify, merge, run live qualification, and retain evidence
+  - Acceptance criteria:
+    - Focused checks, literal verifier, committed-secret guard, PR CI, protected
+      aggregate gate, and exact-main CI pass without operator-owned files.
+    - The merged manual workflow runs against exact RC13 and its signed-root
+      hash; its public artifact is independently inspected and retained durably.
+    - #1297/#1304 receive bounded evidence without closing external gates or
+      enabling stable promotion prematurely.
+  - Check: pending
+
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

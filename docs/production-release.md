@@ -8,9 +8,9 @@ For the promotion ladder that explains which checks are blocking or advisory at
 each stage, read [`docs/release-gates.md`](release-gates.md) before changing CI,
 release workflows, or operator-facing deployment behavior.
 
-Current reference: [`v1.2.3-rc.12`](releases/v1.2.3-rc.12.md) completed the
-automated publication and pull-only product gates. Its clean target-host
-promotion checks remain open and must not be inferred from CI.
+Current reference: [`v1.2.3-rc.13`](releases/v1.2.3-rc.13.md) completed the
+signed publication and pull-only product gates. Its clean target-host promotion
+checks remain open and must not be inferred from CI or hosted VM qualification.
 
 **Canonical deployment path:** Production rollouts must flow through the
 repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails
@@ -293,10 +293,12 @@ signature references, pinned third-party digests, and gate evidence. The job
 keylessly signs that root, writes `CHECKSUMS.txt` over every other immutable
 asset, re-verifies the complete set, and only then creates the prerelease.
 
-The current public RC12 predates this root. Do not claim it has
-`release-set.json`; use its checksum and launcher-bundle verification path.
-Candidates produced by the current workflow follow the complete process in
-[`docs/release-promotion.md`](release-promotion.md).
+The current public RC13 is the first candidate carrying this root. Its
+`release-set.json` SHA-256 is
+`795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+Verify that root, its exact tag workflow identity, and selected artifact/image
+hashes using [`docs/release-promotion.md`](release-promotion.md); a tag or
+`CHECKSUMS.txt` alone is not the complete current provenance contract.
 
 ### Record image digests for production
 
@@ -324,6 +326,13 @@ registry credentials. Pull-only mode enables preflight manifest checks and
 avoids accidental source builds on production nodes.
 
 ### Clean-host artifact gate (required before announcing the release)
+
+Start with the manual no-checkout
+[`clean-host-qualification.yml`](../.github/workflows/clean-host-qualification.yml)
+on protected `main`. Supply the exact prerelease tag and independently verified
+`release-set.json` SHA-256. Retain its secret-scanned JSON report as the hosted
+Ubuntu package/systemd/Docker/OME lifecycle portion of this gate; a passed
+hosted runner is not the XOA/NPM/reboot result.
 
 Use a newly provisioned Ubuntu Server 24.04 amd64 VM with no source checkout.
 Download the `.deb` or Linux launcher archive and `CHECKSUMS.txt` from the

@@ -166,10 +166,15 @@ third-party digests, and reruns this same gate in production/pull mode. GitHub
 Release creation depends on that result.
 
 That hosted-runner proof is still not clean-host proof. Before stable
-promotion, install the immutable pull-only artifacts on the supported Ubuntu
-24.04 amd64 candidate and rerun the same assertions with `--stack running`.
-Authenticated OME control, Nginx Proxy Manager/browser playback, and VM
-reboot/recovery remain separate required evidence.
+promotion, first dispatch the manual no-checkout
+[`clean-host-qualification.yml`](../.github/workflows/clean-host-qualification.yml)
+with the exact candidate tag and signed-root SHA-256. It proves the published
+Ubuntu package, non-root systemd/Docker lifecycle, doctor/smoke, authenticated
+OME, bounded OME/Docker/systemd restart, and retention-safe uninstall on an
+ephemeral Ubuntu 24.04 amd64 VM. Then install the same immutable pull-only
+artifacts on the supported XOA candidate and rerun the full media assertions
+with `--stack running`. Nginx Proxy Manager/browser playback, firewall/NAT, and
+real VM reboot/recovery remain separate required evidence.
 
 ### 5. AI-authored PR risk scorecard
 
