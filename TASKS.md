@@ -887,7 +887,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       changed Markdown files resolve, and the private root `.env` was restored
       byte-for-byte after Compose validation.
 
-- [-] Task 14 - Verify and publish the repository refresh
+- [x] Task 14 - Verify and publish the repository refresh
   - Acceptance criteria:
     - Link/reference/wording regressions, generated docs, Markdown checks,
       required repository verification, PR CI, and exact merged-main CI pass.
@@ -919,10 +919,85 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       flow, and repository-relative navigation intact. The public repository
       About description and topics now match the one-host Compose/Ubuntu support
       boundary.
-    - PR #1354 CI run `30674183171` passed the Ubuntu `test-all` gate, Windows
+    - PR #1354 CI runs `30674183171` and `30674523079` passed the Ubuntu
+      `test-all` gate, Windows
       and macOS Go tests, macOS/Windows/Ubuntu quickstart entrypoint checks,
       Docs consistency, ShellCheck, changed-file detection, and the committed
-      secret guard. Exact merged-main CI remains pending merge.
+      secret guard. The PR squash-merged as `f3952624`; exact merged-main CI run
+      `30779028786` passed the same required matrix, and deleting the PR branch
+      returned the remote inventory to 58 branches.
+
+## Scoped change: remove tracked generated Go caches
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 15 - Audit root cache provenance and removal boundary
+  - Acceptance criteria:
+    - The exact tracked roots, file count, current-tree byte size, introduction
+      commit, ignore coverage, and references outside those roots are recorded.
+    - The plan explicitly excludes history rewriting and every non-cache path.
+  - Check:
+    - `.gocache-bitriver-fix`, `.gocache-ingest`, `.gocache-metrics-fix`, and
+      `.gocache-scripts-fix` contain exactly 6,775 tracked generated objects and
+      416,199,766 bytes in `HEAD`; commit `b4617f75` introduced them.
+    - No repository path outside those roots references them. `.gitignore`
+      already contains both `.gocache/` and `/.gocache-*/` coverage.
+
+- [x] Task 16 - Remove the caches and add a tracked-cache regression
+  - Acceptance criteria:
+    - Exactly the 6,775 audited paths are removed and no unrelated path changes.
+    - A focused guard accepts the cleaned repository and rejects a force-added
+      root `.gocache-*` artifact in an isolated fixture repository.
+  - Check:
+    - `git rm` removed exactly 6,775 tracked paths under the four audited roots;
+      an explicit path inventory found zero deletion outside those roots.
+    - Added `scripts/check-repository-hygiene.sh` plus an isolated fixture test.
+      The cleaned repository passes, while a temporary repository with a
+      force-added `.gocache-forced/00/cache-entry-a` is rejected with the exact
+      offending path.
+    - The guard and its fixture test now run near the start of
+      `scripts/verify.sh`. Shell syntax, the focused fixture, cleaned-tree guard,
+      committed-secret guard, and staged/unstaged diff checks pass.
+
+- [-] Task 17 - Verify and publish repository hygiene cleanup
+  - Acceptance criteria:
+    - Focused guard tests, deletion inventory, secret guard, `git diff --check`,
+      literal `./scripts/verify.sh`, PR CI, and exact merged-main CI pass.
+    - Large pull requests cannot truncate CI path routing before changed
+      verification scripts are evaluated; a focused workflow regression locks
+      the complete-checkout Git diff boundary.
+    - The remote branch count returns to its pre-PR value after merge.
+  - Check:
+    - Docker Desktop initially stopped at a failed automatic-update recovery
+      dialog because its staging check saw 348 MB free against a 3,394 MB
+      requirement. The installed 4.83.0 / Engine 29.6.2 rollback recovered
+      without deleting unrelated user files, and Docker became healthy.
+    - Docker-backed ShellCheck passed. Literal `./scripts/verify.sh` passed in
+      140.3 seconds, including the new fixture/clean-tree guard, all Go packages,
+      PostgreSQL migrations, Compose rendering, healthy SRS, authenticated OME
+      token/health, transcoder, API, and viewer smoke.
+    - Verification left no BitRiver containers, no generated-config drift, and
+      restored the private root `.env` to SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+      The staged inventory remains exactly 6,775 audited deletions and zero
+      unexpected deletion.
+    - PR #1361 run `30784385158` exposed the existing GitHub REST changed-files
+      limit: `dorny/paths-filter` received 3,000 of 6,780 paths, all substantive
+      filters returned false, and the Ubuntu, ShellCheck, and quickstart jobs
+      skipped despite three changed `scripts/**` files. The pinned action's
+      documented empty-token mode uses the complete checkout plus `git diff`;
+      the workflow correction, rerun PR CI, and merged-main CI remain pending.
+    - Added the empty-token input without changing any selector, plus a focused
+      regression requiring both the complete-history checkout and Git fallback.
+      Pinned Go 1.26.5 `go test ./scripts -count=1 -timeout=120s`, the Linux CI
+      contract check, workflow YAML parsing, committed-secret guard, shell
+      syntax, and `git diff --check` pass. The host's Go 1.25.6 was correctly
+      rejected by the module's Go 1.26 requirement.
+    - Corrected PR run `30784659494` detected the complete diff in 9 seconds
+      and selected the intended jobs. Ubuntu `test-all` passed in 4m16s,
+      ShellCheck passed, macOS/Windows Go tests passed, and Ubuntu/macOS/Windows
+      quickstart entrypoint checks passed; unrelated viewer, docs, monitoring,
+      image-scan, wizard, and Go-workflow jobs remained correctly skipped.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 

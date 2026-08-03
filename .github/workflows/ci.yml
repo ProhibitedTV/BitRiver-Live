@@ -53,6 +53,9 @@ jobs:
         id: filter
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         with:
+          # Pull-request API results stop after 3,000 files. An empty token makes
+          # the pinned action use the complete checkout and git diff instead.
+          token: ''
           filters: |
             verify_changed:
               - '.github/actions/**'

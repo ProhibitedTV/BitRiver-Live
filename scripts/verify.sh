@@ -239,6 +239,8 @@ fi
 
 run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 run_step "CI workflow contract check" ./scripts/check-ci-contract.sh
+run_step "Repository hygiene guard tests" bash ./scripts/test-repository-hygiene.sh
+run_step "Repository hygiene guard" ./scripts/check-repository-hygiene.sh
 run_step "Env example placeholder hygiene" ./scripts/check-env-example-placeholders.sh
 run_step "Release bundle contents" bash ./scripts/test-release-bundle.sh
 if [[ "$(uname -s)" == "Linux" ]]; then
