@@ -28,9 +28,6 @@ jobs:
       CANDIDATE_TAG: ${{ inputs.candidate_tag }}
       EXPECTED_RELEASE_SET_SHA256: ${{ inputs.release_set_sha256 }}
       GH_TOKEN: ${{ github.token }}
-      QUALIFICATION_ROOT: ${{ runner.temp }}/bitriver-clean-host
-      DOWNLOAD_ROOT: ${{ runner.temp }}/bitriver-clean-host/downloads
-      EVIDENCE_ROOT: ${{ runner.temp }}/bitriver-clean-host/evidence
       INSTALL_ROOT: /opt/bitriver-live
       CONFIG_ROOT: /etc/bitriver-live
       DATA_ROOT: /var/lib/bitriver-live
@@ -46,9 +43,17 @@ jobs:
           [[ "$CANDIDATE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z.-]+$ ]]
           [[ "$EXPECTED_RELEASE_SET_SHA256" =~ ^[0-9a-f]{64}$ ]]
           test ! -e "$GITHUB_WORKSPACE/.git"
-          rm -rf "$QUALIFICATION_ROOT"
-          mkdir -p "$DOWNLOAD_ROOT" "$EVIDENCE_ROOT"
-          printf 'Repository checkout: absent\n' >"$EVIDENCE_ROOT/source-boundary.txt"
+          qualification_root="$RUNNER_TEMP/bitriver-clean-host"
+          download_root="$qualification_root/downloads"
+          evidence_root="$qualification_root/evidence"
+          {
+            echo "QUALIFICATION_ROOT=$qualification_root"
+            echo "DOWNLOAD_ROOT=$download_root"
+            echo "EVIDENCE_ROOT=$evidence_root"
+          } >>"$GITHUB_ENV"
+          rm -rf "$qualification_root"
+          mkdir -p "$download_root" "$evidence_root"
+          printf 'Repository checkout: absent\n' >"$evidence_root/source-boundary.txt"
 
       - name: Download and verify signed public release set
         id: provenance
