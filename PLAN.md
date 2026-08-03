@@ -1,5 +1,44 @@
 # PLAN
 
+## Current scope - remove tracked generated Go caches (2026-08-02)
+
+- Remove the four root `.gocache-*` directories that were accidentally added
+  by commit `b4617f75`. They contain 6,775 generated Go build-cache objects and
+  416,199,766 bytes in the current tree; no source, workflow, documentation, or
+  release path references them.
+- Preserve repository history, tags, releases, and every non-cache path. This
+  is a HEAD cleanup, not a history rewrite: future checkouts stop materializing
+  the 416 MB cache payload, while old commits remain reproducible.
+- Keep the existing `/.gocache-*/` and `.gocache/` ignore rules. Add a focused
+  repository-hygiene regression to reject any tracked root Go cache even when
+  it is force-added, and run that guard through the canonical verification
+  path rather than creating another overlapping workflow.
+- Close the preceding documentation task with its exact merged-main evidence:
+  PR #1354 merged as `f3952624`, `main` CI run `30779028786` passed, and the
+  remote returned to 58 branches after the PR head was deleted.
+
+### Risks and boundaries
+
+- A deletion-only cache diff is mechanically large. Build the removal set from
+  `git ls-files` under the four exact audited roots, verify that all deleted
+  entries match those roots, and never use a broad recursive cleanup against
+  the repository.
+- Do not touch the private root `.env`, generated OME configuration, or the
+  user's six untracked deployment/runtime paths.
+- Do not claim that deleting tracked files removes their objects from existing
+  Git history or immediately shrinks every established clone; repository
+  history rewriting is deliberately out of scope.
+
+### Test plan
+
+- Prove the new hygiene guard accepts the cleaned tree and rejects a temporary
+  repository with a force-added root `.gocache-*` artifact.
+- Require the tracked deletion inventory to contain exactly 6,775 files under
+  the four audited roots and zero other paths; run `git diff --check` and the
+  committed-secret guard.
+- Run literal `./scripts/verify.sh`, PR CI, and exact merged-main CI before
+  considering the cleanup complete.
+
 ## Current scope - first-time installer documentation refresh (2026-07-31)
 
 - Treat published prerelease `v1.2.3-rc.12` as the current consumer artifact

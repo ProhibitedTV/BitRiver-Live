@@ -1,5 +1,0 @@
-./doc.go
-./metrics.go
-./middleware.go
-./metrics_test.go
-./middleware_test.go
