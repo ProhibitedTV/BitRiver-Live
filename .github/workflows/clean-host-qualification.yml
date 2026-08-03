@@ -1,0 +1,671 @@
+name: Clean host qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: Immutable prerelease tag to qualify (for example v1.2.3-rc.13)
+        required: true
+        type: string
+      release_set_sha256:
+        description: Expected SHA-256 of the candidate release-set.json
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clean-host-${{ inputs.candidate_tag }}
+  cancel-in-progress: false
+
+jobs:
+  ubuntu-amd64:
+    name: Ubuntu 24.04 amd64 artifact-only host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+      EXPECTED_RELEASE_SET_SHA256: ${{ inputs.release_set_sha256 }}
+      GH_TOKEN: ${{ github.token }}
+      QUALIFICATION_ROOT: ${{ runner.temp }}/bitriver-clean-host
+      DOWNLOAD_ROOT: ${{ runner.temp }}/bitriver-clean-host/downloads
+      EVIDENCE_ROOT: ${{ runner.temp }}/bitriver-clean-host/evidence
+      INSTALL_ROOT: /opt/bitriver-live
+      CONFIG_ROOT: /etc/bitriver-live
+      DATA_ROOT: /var/lib/bitriver-live
+      ENV_FILE: /etc/bitriver-live/bitriver.env
+      COMPOSE_FILE: /opt/bitriver-live/deploy/docker-compose.yml
+
+    steps:
+      - name: Establish clean no-checkout boundary
+        id: clean-boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z.-]+$ ]]
+          [[ "$EXPECTED_RELEASE_SET_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test ! -e "$GITHUB_WORKSPACE/.git"
+          rm -rf "$QUALIFICATION_ROOT"
+          mkdir -p "$DOWNLOAD_ROOT" "$EVIDENCE_ROOT"
+          printf 'Repository checkout: absent\n' >"$EVIDENCE_ROOT/source-boundary.txt"
+
+      - name: Download and verify signed public release set
+        id: provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$DOWNLOAD_ROOT" \
+            --pattern release-set.json \
+            --pattern release-set.sigstore.json \
+            --pattern CHECKSUMS.txt \
+            --pattern '*_amd64.deb' \
+            --pattern '*.image.sigstore.json'
+
+          actual_release_set_sha256=$(sha256sum "$DOWNLOAD_ROOT/release-set.json" | awk '{print $1}')
+          test "$actual_release_set_sha256" = "$EXPECTED_RELEASE_SET_SHA256"
+
+          python3 - "$DOWNLOAD_ROOT" "$CANDIDATE_TAG" "$GITHUB_REPOSITORY" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          tag = sys.argv[2]
+          repository = sys.argv[3]
+          manifest = json.loads((root / "release-set.json").read_text(encoding="utf-8"))
+          if manifest.get("schemaVersion") != "bitriver.release-set/v1":
+              raise SystemExit("unsupported release-set schema")
+          candidate = manifest.get("candidate", {})
+          if candidate.get("tag") != tag or candidate.get("repository") != repository:
+              raise SystemExit("release-set candidate identity mismatch")
+          commit = candidate.get("sourceCommit", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", commit):
+              raise SystemExit("release-set source commit is invalid")
+          workflow = manifest.get("workflow", {})
+          identity = (
+              f"https://github.com/{repository}/.github/workflows/"
+              f"release.yml@refs/tags/{tag}"
+          )
+          if workflow.get("identity") != identity:
+              raise SystemExit("release-set workflow identity mismatch")
+          if workflow.get("oidcIssuer") != "https://token.actions.githubusercontent.com":
+              raise SystemExit("release-set OIDC issuer mismatch")
+
+          artifacts = {entry["name"]: entry for entry in manifest.get("artifacts", [])}
+          package_names = [name for name in artifacts if name.endswith("_amd64.deb")]
+          if len(package_names) != 1:
+              raise SystemExit(f"expected one amd64 deb, found {len(package_names)}")
+          package_name = package_names[0]
+          package_path = root / package_name
+          package_sha = hashlib.sha256(package_path.read_bytes()).hexdigest()
+          if package_sha != artifacts[package_name].get("sha256"):
+              raise SystemExit("package does not match signed release-set checksum")
+
+          checksum_entries = {}
+          for line in (root / "CHECKSUMS.txt").read_text(encoding="utf-8").splitlines():
+              digest, separator, name = line.partition("  ")
+              if not separator or name in checksum_entries:
+                  raise SystemExit("invalid or duplicate CHECKSUMS entry")
+              checksum_entries[name] = digest
+          if checksum_entries.get(package_name) != package_sha:
+              raise SystemExit("package CHECKSUMS entry disagrees with signed release set")
+          release_set_sha = hashlib.sha256((root / "release-set.json").read_bytes()).hexdigest()
+          if checksum_entries.get("release-set.json") != release_set_sha:
+              raise SystemExit("release-set CHECKSUMS entry is missing or incorrect")
+
+          expected_images = {
+              "bitriver-live",
+              "bitriver-viewer",
+              "bitriver-srs-controller",
+              "bitriver-transcoder",
+              "bitriver-ome-config",
+          }
+          images = manifest.get("images", [])
+          if {entry.get("name") for entry in images} != expected_images:
+              raise SystemExit("release set does not contain the exact five first-party images")
+          image_lines = []
+          for entry in images:
+              digest = entry.get("digest", "")
+              immutable = entry.get("immutableReference", "")
+              bundle = entry.get("signature", {}).get("asset", "")
+              if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+                  raise SystemExit("invalid first-party image digest")
+              if not immutable.endswith("@" + digest):
+                  raise SystemExit("immutable image reference/digest mismatch")
+              if not bundle.endswith(".image.sigstore.json") or not (root / bundle).is_file():
+                  raise SystemExit("missing first-party image signature bundle")
+              image_lines.append(f"{immutable}\t{bundle}")
+
+          dependencies = manifest.get("dependencies", [])
+          if not dependencies:
+              raise SystemExit("release set has no third-party dependency pins")
+          for entry in dependencies:
+              if not re.fullmatch(r"sha256:[0-9a-f]{64}", entry.get("digest", "")):
+                  raise SystemExit("invalid dependency digest")
+              if not re.fullmatch(r"BITRIVER_[A-Z0-9_]+_IMAGE_DIGEST", entry.get("envKey", "")):
+                  raise SystemExit("invalid dependency digest key")
+
+          cosign_version = manifest.get("toolchains", {}).get("cosign", "")
+          if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", cosign_version):
+              raise SystemExit("invalid Cosign version")
+          metadata = root.parent / "metadata.env"
+          metadata.write_text(
+              "\n".join(
+                  [
+                      f"CANDIDATE_COMMIT={commit}",
+                      f"PACKAGE_NAME={package_name}",
+                      f"PACKAGE_SHA256={package_sha}",
+                      f"COSIGN_VERSION={cosign_version}",
+                      f"RELEASE_WORKFLOW_IDENTITY={identity}",
+                  ]
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          (root.parent / "image-signatures.tsv").write_text(
+              "\n".join(sorted(image_lines)) + "\n", encoding="utf-8"
+          )
+          PY
+
+          source "$QUALIFICATION_ROOT/metadata.env"
+          cosign_root="$QUALIFICATION_ROOT/cosign"
+          mkdir -p "$cosign_root"
+          gh release download "$COSIGN_VERSION" \
+            --repo sigstore/cosign \
+            --dir "$cosign_root" \
+            --pattern cosign-linux-amd64 \
+            --pattern cosign_checksums.txt
+          expected_cosign=$(awk '$2 == "cosign-linux-amd64" {print $1}' "$cosign_root/cosign_checksums.txt")
+          [[ "$expected_cosign" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s  %s\n' "$expected_cosign" "$cosign_root/cosign-linux-amd64" | sha256sum --check -
+          chmod +x "$cosign_root/cosign-linux-amd64"
+
+          "$cosign_root/cosign-linux-amd64" verify-blob \
+            --bundle "$DOWNLOAD_ROOT/release-set.sigstore.json" \
+            --certificate-identity "$RELEASE_WORKFLOW_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$DOWNLOAD_ROOT/release-set.json" >/dev/null
+
+          while IFS=$'\t' read -r immutable bundle; do
+            "$cosign_root/cosign-linux-amd64" verify \
+              --bundle "$DOWNLOAD_ROOT/$bundle" \
+              --certificate-identity "$RELEASE_WORKFLOW_IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$immutable" >/dev/null
+          done <"$QUALIFICATION_ROOT/image-signatures.tsv"
+
+          cat "$QUALIFICATION_ROOT/metadata.env" >>"$GITHUB_ENV"
+          printf 'Signed release set and five exact image digests verified.\n'
+
+      - name: Install the published Ubuntu package
+        id: package-install
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo dpkg --install "$DOWNLOAD_ROOT/$PACKAGE_NAME"
+          dpkg-query --show --showformat='${Package} ${Version} ${Architecture}\n' bitriver-live
+          test -x /usr/local/bin/bitriver
+          test -x /usr/local/bin/bitriver-live
+          test -x /usr/local/sbin/bitriver-host
+          test -f /usr/local/share/bitriver-live/deploy/docker-compose.yml
+          test ! -e "$GITHUB_WORKSPACE/.git"
+
+      - name: Stage disabled service for the non-root Docker operator
+        id: host-install
+        shell: bash
+        run: |
+          set -euo pipefail
+          id -nG "$USER" | tr ' ' '\n' | grep -qx docker
+          docker version >/dev/null
+          docker compose version >/dev/null
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          sudo bitriver-host install --operator-user "$USER"
+          test -x "$INSTALL_ROOT/bin/bitriver"
+          test -f "$COMPOSE_FILE"
+          test -f "$ENV_FILE"
+          test -d "$DATA_ROOT"
+          test "$(stat --format='%U' "$ENV_FILE")" = "$USER"
+          test "$(systemctl is-enabled bitriver-live-compose.service 2>/dev/null || true)" = disabled
+          sudo -u "$USER" touch "$DATA_ROOT/qualification-retained"
+
+      - name: Configure immutable production inputs and run preflight
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          public_host="qualification-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.invalid"
+          project_name="bitriver-q-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'PUBLIC_HOST=%s\nCOMPOSE_PROJECT_NAME_SAFE=%s\n' "$public_host" "$project_name" >>"$GITHUB_ENV"
+
+          sudo -u "$USER" python3 - "$DOWNLOAD_ROOT/release-set.json" "$ENV_FILE" "$CANDIDATE_TAG" "$public_host" "$project_name" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          env_path = pathlib.Path(sys.argv[2])
+          tag, host, project = sys.argv[3:]
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          updates = {
+              "BITRIVER_DEPLOY_IMAGE_SOURCE": "pull",
+              "BITRIVER_LIVE_MODE": "production",
+              "BITRIVER_LIVE_STORAGE_DRIVER": "postgres",
+              "BITRIVER_LIVE_ADMIN_EMAIL": f"qualification-admin@{host}",
+              "NEXT_PUBLIC_API_BASE_URL": f"http://{host}",
+              "NEXT_PUBLIC_VIEWER_URL": f"http://{host}/viewer",
+              "BITRIVER_LIVE_ADMIN_CORS_ORIGINS": f"http://{host}",
+              "BITRIVER_LIVE_VIEWER_CORS_ORIGINS": f"http://{host}",
+              "BITRIVER_OME_PUBLIC_LLHLS_BASE_URL": f"http://{host}/live",
+              "BITRIVER_SRS_PUBLIC_RTMP_BASE_URL": f"rtmp://{host}:1935/live",
+              "BITRIVER_TRANSCODER_PUBLIC_BASE_URL": f"http://{host}/hls",
+              "COMPOSE_PROJECT_NAME": project,
+          }
+          for key in (
+              "BITRIVER_LIVE_IMAGE_TAG",
+              "BITRIVER_VIEWER_IMAGE_TAG",
+              "BITRIVER_SRS_CONTROLLER_IMAGE_TAG",
+              "BITRIVER_TRANSCODER_IMAGE_TAG",
+              "BITRIVER_OME_CONFIG_IMAGE_TAG",
+          ):
+              updates[key] = tag
+          for entry in manifest["images"] + manifest["dependencies"]:
+              updates[entry["envKey"]] = "@" + entry["digest"]
+
+          lines = env_path.read_text(encoding="utf-8").splitlines()
+          counts = {key: 0 for key in updates}
+          output = []
+          for line in lines:
+              key = line.split("=", 1)[0] if "=" in line and not line.lstrip().startswith("#") else ""
+              if key in updates:
+                  output.append(f"{key}={updates[key]}")
+                  counts[key] += 1
+              else:
+                  output.append(line)
+          if counts["COMPOSE_PROJECT_NAME"] == 0:
+              output.append(f"COMPOSE_PROJECT_NAME={updates['COMPOSE_PROJECT_NAME']}")
+              counts["COMPOSE_PROJECT_NAME"] = 1
+          missing = [key for key, count in counts.items() if count == 0]
+          duplicate = [key for key, count in counts.items() if count > 1]
+          if missing or duplicate:
+              raise SystemExit(f"environment key contract mismatch: missing={missing} duplicate={duplicate}")
+          env_path.write_text("\n".join(output) + "\n", encoding="utf-8")
+          PY
+
+          sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" env validate --env-file "$ENV_FILE"
+          sudo bitriver-host doctor
+          sudo -u "$USER" docker compose \
+            --file "$COMPOSE_FILE" \
+            --env-file "$ENV_FILE" \
+            config --images >"$QUALIFICATION_ROOT/compose-images.txt"
+          python3 - "$DOWNLOAD_ROOT/release-set.json" "$QUALIFICATION_ROOT/compose-images.txt" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          rendered = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+          for entry in manifest["images"] + manifest["dependencies"]:
+              if entry["digest"] not in rendered:
+                  raise SystemExit(f"Compose output is missing signed digest for {entry['envKey']}")
+          PY
+
+      - name: Activate the pull-only systemd stack
+        id: activate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bitriver-host activate
+          systemctl is-enabled --quiet bitriver-live-compose.service
+          systemctl is-active --quiet bitriver-live-compose.service
+          sudo bitriver-host status
+
+      - name: Prove smoke and authenticated OME control
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >"$QUALIFICATION_ROOT/verify-runtime.py" <<'PY'
+          import base64
+          import json
+          import pathlib
+          import sys
+          import urllib.request
+
+          env_path = pathlib.Path(sys.argv[1])
+          values = {}
+          for line in env_path.read_text(encoding="utf-8").splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  values[key] = value.strip().strip('"').strip("'")
+          token = values.get("BITRIVER_OME_API_TOKEN", "")
+          if not token:
+              raise SystemExit("OME API token is missing")
+          auth = base64.b64encode(token.encode()).decode()
+          request = urllib.request.Request(
+              "http://127.0.0.1:8081/v1/vhosts/default/apps/live",
+              headers={"Authorization": "Basic " + auth},
+          )
+          with urllib.request.urlopen(request, timeout=10) as response:
+              if response.status < 200 or response.status >= 300:
+                  raise SystemExit(f"OME manager returned HTTP {response.status}")
+          with urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=10) as response:
+              health = json.load(response)
+          if health.get("status") != "ok":
+              raise SystemExit("aggregate health is not ok")
+          services = health.get("services", [])
+          ome = [entry for entry in services if entry.get("component") == "ovenmediaengine"]
+          if len(ome) != 1 or ome[0].get("status") != "ok":
+              raise SystemExit("aggregate OME health is not ok")
+          with urllib.request.urlopen("http://127.0.0.1:8080/viewer", timeout=10) as response:
+              body = response.read(1024 * 1024).lower()
+              if response.status != 200 or b"bitriver" not in body:
+                  raise SystemExit("viewer route did not return BitRiver content")
+          print("Authenticated OME control, aggregate health, and viewer route passed.")
+          PY
+
+          smoke_retry() {
+            local attempt
+            for attempt in $(seq 1 24); do
+              if sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" smoke \
+                --compose-file "$COMPOSE_FILE" \
+                --env-file "$ENV_FILE"; then
+                return 0
+              fi
+              sleep 10
+            done
+            return 1
+          }
+          smoke_retry
+          sudo -u "$USER" python3 "$QUALIFICATION_ROOT/verify-runtime.py" "$ENV_FILE"
+
+      - name: Prove same-tag upgrade staging
+        id: upgrade
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          before_upgrade_sha256=$(sudo -u "$USER" sha256sum "$ENV_FILE" | awk '{print $1}')
+          sudo bitriver-host upgrade --operator-user "$USER"
+          systemctl is-active --quiet bitriver-live-compose.service
+          test "$(sudo -u "$USER" sha256sum "$ENV_FILE" | awk '{print $1}')" = "$before_upgrade_sha256"
+          sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" smoke \
+            --compose-file "$COMPOSE_FILE" \
+            --env-file "$ENV_FILE"
+          sudo -u "$USER" python3 "$QUALIFICATION_ROOT/verify-runtime.py" "$ENV_FILE"
+
+      - name: Prove OME restart recovery
+        id: ome-restart
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -u "$USER" docker compose \
+            --file "$COMPOSE_FILE" \
+            --env-file "$ENV_FILE" \
+            restart ome
+          for attempt in $(seq 1 24); do
+            if sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" smoke \
+              --compose-file "$COMPOSE_FILE" \
+              --env-file "$ENV_FILE" >/dev/null 2>&1 && \
+              sudo -u "$USER" python3 "$QUALIFICATION_ROOT/verify-runtime.py" "$ENV_FILE"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Prove Docker daemon restart recovery
+        id: docker-restart
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl restart docker.service
+          for attempt in $(seq 1 24); do
+            if docker version >/dev/null 2>&1 && \
+              sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" smoke \
+                --compose-file "$COMPOSE_FILE" \
+                --env-file "$ENV_FILE" >/dev/null 2>&1 && \
+              sudo -u "$USER" python3 "$QUALIFICATION_ROOT/verify-runtime.py" "$ENV_FILE"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Prove full systemd restart recovery
+        id: systemd-restart
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl restart bitriver-live-compose.service
+          systemctl is-active --quiet bitriver-live-compose.service
+          sudo -u "$USER" "$INSTALL_ROOT/bin/bitriver" smoke \
+            --compose-file "$COMPOSE_FILE" \
+            --env-file "$ENV_FILE"
+          sudo -u "$USER" python3 "$QUALIFICATION_ROOT/verify-runtime.py" "$ENV_FILE"
+
+      - name: Prove safe uninstall and package-removal retention
+        id: uninstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$DATA_ROOT/qualification-retained"
+          before_uninstall_sha256=$(sudo -u "$USER" sha256sum "$ENV_FILE" | awk '{print $1}')
+          sudo bitriver-host uninstall
+          test ! -e "$INSTALL_ROOT"
+          test ! -e /etc/systemd/system/bitriver-live-compose.service
+          test -f "$ENV_FILE"
+          test -f "$DATA_ROOT/qualification-retained"
+          test "$(sudo -u "$USER" sha256sum "$ENV_FILE" | awk '{print $1}')" = "$before_uninstall_sha256"
+          sudo dpkg --remove bitriver-live
+          test -f "$ENV_FILE"
+          test -f "$DATA_ROOT/qualification-retained"
+          test "$(sudo -u "$USER" sha256sum "$ENV_FILE" | awk '{print $1}')" = "$before_uninstall_sha256"
+
+          containers=$(docker ps --all --quiet --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME_SAFE")
+          if [[ -n "$containers" ]]; then docker rm --force $containers >/dev/null; fi
+          volumes=$(docker volume ls --quiet --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME_SAFE")
+          if [[ -n "$volumes" ]]; then docker volume rm --force $volumes >/dev/null; fi
+          networks=$(docker network ls --quiet --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME_SAFE")
+          if [[ -n "$networks" ]]; then docker network rm $networks >/dev/null; fi
+
+      - name: Build sanitized qualification evidence
+        id: evidence
+        if: always()
+        shell: bash
+        env:
+          CLEAN_BOUNDARY_OUTCOME: ${{ steps.clean-boundary.outcome }}
+          PROVENANCE_OUTCOME: ${{ steps.provenance.outcome }}
+          PACKAGE_INSTALL_OUTCOME: ${{ steps.package-install.outcome }}
+          HOST_INSTALL_OUTCOME: ${{ steps.host-install.outcome }}
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          ACTIVATE_OUTCOME: ${{ steps.activate.outcome }}
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
+          UPGRADE_OUTCOME: ${{ steps.upgrade.outcome }}
+          OME_RESTART_OUTCOME: ${{ steps.ome-restart.outcome }}
+          DOCKER_RESTART_OUTCOME: ${{ steps.docker-restart.outcome }}
+          SYSTEMD_RESTART_OUTCOME: ${{ steps.systemd-restart.outcome }}
+          UNINSTALL_OUTCOME: ${{ steps.uninstall.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_ROOT"
+          systemctl show bitriver-live-compose.service \
+            --property=LoadState \
+            --property=ActiveState \
+            --property=SubState \
+            --property=UnitFileState \
+            >"$EVIDENCE_ROOT/systemd-state.txt" 2>&1 || true
+          docker ps --all \
+            --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME_SAFE:-not-created}" \
+            --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' \
+            >"$EVIDENCE_ROOT/compose-state.txt" 2>&1 || true
+
+          python3 - "$DOWNLOAD_ROOT/release-set.json" "$EVIDENCE_ROOT/clean-host-qualification.json" <<'PY'
+          import json
+          import os
+          import pathlib
+          import platform
+          import subprocess
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          output_path = pathlib.Path(sys.argv[2])
+          manifest = {}
+          if manifest_path.is_file():
+              manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          stages = [
+              ("no-checkout-boundary", "CLEAN_BOUNDARY_OUTCOME"),
+              ("signed-provenance", "PROVENANCE_OUTCOME"),
+              ("package-install", "PACKAGE_INSTALL_OUTCOME"),
+              ("host-install", "HOST_INSTALL_OUTCOME"),
+              ("production-preflight", "PREFLIGHT_OUTCOME"),
+              ("systemd-activation", "ACTIVATE_OUTCOME"),
+              ("smoke-and-ome-control", "RUNTIME_OUTCOME"),
+              ("same-tag-upgrade", "UPGRADE_OUTCOME"),
+              ("ome-restart", "OME_RESTART_OUTCOME"),
+              ("docker-daemon-restart", "DOCKER_RESTART_OUTCOME"),
+              ("systemd-restart", "SYSTEMD_RESTART_OUTCOME"),
+              ("uninstall-retention", "UNINSTALL_OUTCOME"),
+          ]
+          stage_rows = [
+              {"id": stage_id, "status": os.environ.get(env_key, "not-run")}
+              for stage_id, env_key in stages
+          ]
+          passed = all(row["status"] == "success" for row in stage_rows)
+          os_release = {}
+          release_file = pathlib.Path("/etc/os-release")
+          if release_file.is_file():
+              for line in release_file.read_text(encoding="utf-8").splitlines():
+                  if "=" in line:
+                      key, value = line.split("=", 1)
+                      os_release[key] = value.strip().strip('"')
+          def command_version(*args):
+              try:
+                  return subprocess.check_output(args, text=True, stderr=subprocess.DEVNULL).strip()
+              except Exception:
+                  return "unavailable"
+          report = {
+              "schemaVersion": "bitriver.clean-host-qualification/v1",
+              "status": "passed" if passed else "failed",
+              "candidate": {
+                  "tag": os.environ.get("CANDIDATE_TAG", ""),
+                  "sourceCommit": os.environ.get("CANDIDATE_COMMIT", ""),
+                  "releaseSetSha256": os.environ.get("EXPECTED_RELEASE_SET_SHA256", ""),
+              },
+              "package": {
+                  "name": os.environ.get("PACKAGE_NAME", ""),
+                  "sha256": os.environ.get("PACKAGE_SHA256", ""),
+              },
+              "images": [
+                  {"name": entry.get("name", ""), "digest": entry.get("digest", "")}
+                  for entry in manifest.get("images", [])
+              ],
+              "host": {
+                  "os": os_release.get("PRETTY_NAME", platform.platform()),
+                  "architecture": platform.machine(),
+                  "runnerImage": os.environ.get("ImageOS", "ubuntu24"),
+                  "docker": command_version("docker", "version", "--format", "{{.Server.Version}}"),
+                  "compose": command_version("docker", "compose", "version", "--short"),
+                  "systemd": command_version("systemctl", "--version").splitlines()[0],
+              },
+              "workflow": {
+                  "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+                  "runId": int(os.environ.get("GITHUB_RUN_ID", "0")),
+                  "runAttempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "0")),
+                  "url": (
+                      f"{os.environ.get('GITHUB_SERVER_URL', '')}/"
+                      f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/"
+                      f"{os.environ.get('GITHUB_RUN_ID', '')}"
+                  ),
+                  "sourceCheckout": "absent",
+                  "registryAuthentication": "anonymous",
+              },
+              "stages": stage_rows,
+              "retainedSecrets": "none",
+              "remainingExternalChecks": [
+                  "real XCP-ng/XOA VM reboot",
+                  "Nginx Proxy Manager TLS/WebSocket browser path",
+                  "router and firewall RTMP/WebRTC/NAT policy",
+                  "target-host real RTMP ingest and decoded playback after reboot",
+              ],
+          }
+          output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          summary = output_path.with_suffix(".md")
+          summary.write_text(
+              "# Clean-host qualification\n\n"
+              f"- Status: **{report['status']}**\n"
+              f"- Candidate: `{report['candidate']['tag']}`\n"
+              f"- Release set: `{report['candidate']['releaseSetSha256']}`\n"
+              f"- Host: {report['host']['os']} ({report['host']['architecture']})\n"
+              "- Source checkout: absent\n"
+              "- External XOA/NPM/reboot/media checks: still required\n",
+              encoding="utf-8",
+          )
+          PY
+
+          python3 - "$ENV_FILE" "$EVIDENCE_ROOT" <<'PY'
+          import pathlib
+          import sys
+
+          env_path = pathlib.Path(sys.argv[1])
+          evidence_root = pathlib.Path(sys.argv[2])
+          forbidden = []
+          if env_path.is_file():
+              for line in env_path.read_text(encoding="utf-8").splitlines():
+                  if "=" not in line or line.lstrip().startswith("#"):
+                      continue
+                  key, value = line.split("=", 1)
+                  if any(marker in key for marker in ("PASSWORD", "TOKEN", "SECRET", "KEY")):
+                      value = value.strip().strip('"').strip("'")
+                      if len(value) >= 6:
+                          forbidden.append(value)
+          for path in evidence_root.iterdir():
+              if not path.is_file():
+                  continue
+              contents = path.read_text(encoding="utf-8", errors="replace")
+              if any(value in contents for value in forbidden):
+                  path.unlink(missing_ok=True)
+                  raise SystemExit("sanitized evidence contained an ephemeral secret; unsafe file removed")
+              if "BITRIVER_OME_API_TOKEN=" in contents or "BITRIVER_LIVE_ADMIN_PASSWORD=" in contents:
+                  path.unlink(missing_ok=True)
+                  raise SystemExit("sanitized evidence contained an environment assignment; unsafe file removed")
+          PY
+          cat "$EVIDENCE_ROOT/clean-host-qualification.md" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized qualification evidence
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clean-host-${{ inputs.candidate_tag }}-${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE_ROOT }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove ephemeral qualification runtime
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          sudo systemctl disable --now bitriver-live-compose.service >/dev/null 2>&1
+          if command -v bitriver-host >/dev/null 2>&1; then
+            sudo bitriver-host uninstall >/dev/null 2>&1
+          fi
+          if dpkg-query --show bitriver-live >/dev/null 2>&1; then
+            sudo dpkg --remove bitriver-live >/dev/null 2>&1
+          fi
+          project="${COMPOSE_PROJECT_NAME_SAFE:-}"
+          if [[ -n "$project" ]]; then
+            containers=$(docker ps --all --quiet --filter "label=com.docker.compose.project=$project")
+            [[ -z "$containers" ]] || docker rm --force $containers >/dev/null
+            volumes=$(docker volume ls --quiet --filter "label=com.docker.compose.project=$project")
+            [[ -z "$volumes" ]] || docker volume rm --force $volumes >/dev/null
+            networks=$(docker network ls --quiet --filter "label=com.docker.compose.project=$project")
+            [[ -z "$networks" ]] || docker network rm $networks >/dev/null
+          fi

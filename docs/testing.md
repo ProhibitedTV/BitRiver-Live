@@ -85,6 +85,16 @@ Use these category entrypoints from the repository root:
 - **Ubuntu host lifecycle:** `./scripts/test-compose-host-installer.sh`
   - Exercises rerunnable install/upgrade, separated configuration/data, bounded unit rendering, safe uninstall, rejected purge, and confirmed purge under an isolated root prefix.
   - Runs automatically from `./scripts/verify.sh` on Linux.
+- **Published clean-host qualification:** manual
+  [`.github/workflows/clean-host-qualification.yml`](../.github/workflows/clean-host-qualification.yml)
+  - Runs on Ubuntu 24.04 amd64 without checking out the repository. Given an
+    immutable candidate tag and expected `release-set.json` SHA-256, it verifies
+    the signed root plus five exact image bundles, installs only the public
+    `.deb`, and exercises the non-root package/systemd/Docker/doctor/smoke/OME
+    same-tag upgrade, restart, and data-retaining uninstall lifecycle.
+  - Always uploads a secret-scanned `bitriver.clean-host-qualification/v1`
+    report. This hosted VM evidence does not replace real XOA reboot, Nginx
+    Proxy Manager, firewall/NAT, or post-reboot ingest/playback acceptance.
 - **Linux package generation:** `BITRIVER_INSTALL_NFPM=1 ./scripts/test-linux-packages.sh`
   - Installs the pinned nFPM version when opted in, then builds stable and
     separately tag-stamped prerelease amd64/arm64 `.deb`/`.rpm` packages from

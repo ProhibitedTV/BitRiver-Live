@@ -11,12 +11,12 @@ Next.js viewer, media services, Postgres, and Redis ship as one Docker Compose
 stack.
 
 **Current public candidate:**
-[`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12).
+[`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13).
 It is a prerelease for evaluation and staged home-hosting rollout, not a stable
-or managed-service promise. RC12 predates the signed release-set root now on
-`main`; verify RC12 with its `CHECKSUMS.txt` and bundled launcher signature.
-The next candidate produced by the current workflow will add the complete
-signed manifest described below.
+or managed-service promise. RC13 is the first public candidate produced by the
+current immutable release-set workflow. Its 46 assets, five exact image
+digests, SBOMs, sanitized product evidence, and `CHECKSUMS.txt` are bound by a
+keylessly signed `release-set.json`.
 
 ![BitRiver Live viewer home showing one live channel](docs/assets/screenshots/viewer-home.png)
 
@@ -45,7 +45,7 @@ capture, not concept art._
 | Goal | Supported entry point | What has been proved |
 | --- | --- | --- |
 | Evaluate on Windows | Source checkout + Docker Desktop Linux containers | Native PowerShell contract check and full local Compose/OME startup |
-| Host on Ubuntu | RC12 `.deb` or launcher archive on Ubuntu Server 24.04 amd64 | Checksums, package install/remove, anonymous image pulls, and pull-only media/API product gate |
+| Host on Ubuntu | RC13 `.deb` or launcher archive on Ubuntu Server 24.04 amd64 | Signed release set, package install/remove, anonymous exact-image pulls, and pull-only media/API product gate |
 | Develop or contribute | Source checkout on Windows, macOS, or Linux | Cross-platform Go and entrypoint CI plus the canonical repository gate |
 
 The Ubuntu package and archive are real public downloads. Clean XOA VM reboot,
@@ -117,7 +117,7 @@ Docker Engine and the Compose plugin. Download the package and checksum from
 the same immutable release:
 
 ```bash
-release_tag=v1.2.3-rc.12
+release_tag=v1.2.3-rc.13
 base_url="https://github.com/ProhibitedTV/BitRiver-Live/releases/download/${release_tag}"
 
 curl -fLO "${base_url}/bitriver-live_${release_tag}_amd64.deb"
@@ -145,6 +145,15 @@ Prefer a portable archive? The same release includes
 `bitriver-launcher-linux-amd64.tar.gz`, plus Linux arm64 packages, RPMs, a
 Windows MSI, launcher archives, a Homebrew formula, checksums, signatures, and
 software bills of materials.
+
+Maintainers can also dispatch the manual **Clean host qualification** workflow
+with the candidate tag and signed release-set SHA-256. It performs no source
+checkout: it installs the public Ubuntu package on a clean Ubuntu 24.04 VM,
+verifies all five image signatures, starts the systemd-managed stack, exercises
+doctor/smoke/authenticated OME, same-tag upgrade and restart recovery, and
+proves ordinary uninstall retains configuration and data. This hosted proof
+complements rather than replaces the real XOA/Nginx Proxy Manager checklist
+below.
 
 ## First broadcast
 
@@ -205,10 +214,10 @@ the exact trusted-proxy, TLS, firewall, and media-port guidance.
 
 ## Production evidence boundary
 
-RC12 proves:
+RC13 proves:
 
-- checksum-complete public release assets and five anonymously readable GHCR
-  image manifests;
+- a checksum-complete, signed public release set and five signed, anonymously
+  readable GHCR image digests;
 - package install/inspect/remove on Ubuntu 24.04, Debian 12, and Rocky Linux 9;
 - a pull-only tagged stack with authenticated configuration and bounded OME
   startup; and

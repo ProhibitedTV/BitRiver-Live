@@ -8,7 +8,11 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 
 ### Changed
 
-- Replaced pre-release-only onboarding with current RC12 download, Docker
+- Added a manual no-checkout Ubuntu 24.04 host-qualification workflow for
+  signed public candidates, including package/systemd/Docker lifecycle,
+  authenticated OME and restart recovery, retained-data uninstall, and
+  sanitized evidence with explicit XOA/NPM limitations.
+- Replaced pre-release-only onboarding with current RC13 download, Docker
   Desktop, Ubuntu package, first-stream, Nginx Proxy Manager, and recovery
   guidance backed by the published artifacts.
 - Removed the unimplemented GitHub Pages viewer path and aligned public docs
@@ -21,6 +25,38 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 - Corrected public GitHub repository URLs in packaging/docs metadata and clarified release-stage wording so the public release surface reads consistently.
 - Fixed a stale quickstart link in `web/viewer/README.md`.
 - Replaced dated internal release-check reports with a cleaner release-notes layout under `docs/releases/`.
+
+## [v1.2.3-rc.13] - 2026-08-03
+
+### Added
+
+- A deterministic signed `bitriver.release-set/v1` root covering every public
+  payload, five exact image digests and signature bundles, SBOMs, dependency
+  pins, sanitized workflow evidence, and remaining external gates.
+- A protected stable-promotion transaction that can copy one accepted
+  candidate byte-for-byte without rebuilding it, plus signed rollback metadata
+  and append-only candidate revocation.
+
+### Changed
+
+- Candidate tags are now the only build inputs. Stable tags and `latest` cannot
+  be produced by the candidate workflow.
+- Release consumers can verify one exact root before selecting packages or
+  image digests; stable promotion refuses incomplete, cross-candidate, revoked,
+  or mismatched evidence.
+
+### Verified
+
+- All 46 public assets were downloaded and matched their server-reported and
+  published SHA-256 values; `CHECKSUMS.txt` covers the other 45 assets.
+- Checksum-matched Cosign v3.1.2 verified the release-set root and five exact
+  GHCR image signatures against the RC13 tag workflow identity.
+- Anonymous pull-only deployment passed real 1080p RTMP, decoded OME and
+  transcoder media, offline transition, chat/moderation, VOD, and aggregate
+  health in release run `30795492882`.
+
+See [`docs/releases/v1.2.3-rc.13.md`](docs/releases/v1.2.3-rc.13.md) for the
+signed-root identity, install entry points, and remaining target-host gates.
 
 ## [v1.2.3-rc.12] - 2026-07-31
 

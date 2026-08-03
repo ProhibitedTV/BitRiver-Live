@@ -2,7 +2,7 @@
 
 This is the artifact-only installation path for an operator-managed Ubuntu VM. It installs the canonical Docker Compose stack; it does not build application images or require a source checkout.
 
-> **Current candidate:** [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12) publishes checksum-covered Ubuntu packages, launcher archives, signatures, SBOMs, and five matching first-party images. It is a prerelease, not stable promotion. RC12 predates the signed release-set root now on `main`; use the RC12-specific checksum and launcher-signature steps below.
+> **Current candidate:** [`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13) publishes checksum-covered Ubuntu packages, launcher archives, SBOMs, five signed first-party image digests, sanitized product evidence, and a signed `release-set.json`. It is a prerelease, not stable promotion.
 
 A tag containing a hyphen is a GitHub prerelease and does not move the `latest`
 image tag. Official images use `ghcr.io/prohibitedtv`; forks and mirrors can
@@ -15,20 +15,32 @@ publishes the GitHub prerelease.
 - Production target: Ubuntu Server 24.04 LTS on amd64.
 - Package build coverage: amd64 and arm64 `.deb`/`.rpm` artifacts.
 - Package install coverage: Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers.
-- RC12 release evidence: Ubuntu 24.04, Debian 12, and Rocky Linux 9 package
+- RC13 release evidence: Ubuntu 24.04, Debian 12, and Rocky Linux 9 package
   install/inspect/remove passed; the pull-only five-image stack passed real
   RTMP, decoded OME/transcoder media, chat/moderation, VOD, and aggregate
-  status checks.
+  status checks. The release set binds that evidence to source commit
+  `d416968e0cadb900820ecf1b4307b101b82ffbbc` and workflow run `30795492882`.
 - Provisional until target-host evidence is recorded: Debian/Rocky production
   support, arm64, clean XOA/XCP-ng installation, NPM browser access, reboot
   recovery, and repeated OME failure/media recovery.
 
 The installer proves rendered configuration, migration completion, process
-health, and critical Compose health. RC12's tag workflow also proved the real
+health, and critical Compose health. RC13's tag workflow also proved the real
 media/API product path from published images. Stable promotion still requires
 the package to be installed and exercised on the target Ubuntu VM through its
 real proxy, firewall, authenticated OvenMediaEngine control path, and reboot
 cycle.
+
+The repository's manual **Clean host qualification** workflow automates the
+release-only Ubuntu portion on an ephemeral Ubuntu 24.04 amd64 VM. It accepts
+the candidate tag and expected signed-root SHA-256, performs no repository
+checkout, verifies the root/package/five image signatures, installs the `.deb`,
+activates the non-root systemd stack, and tests doctor, smoke, authenticated OME
+control, same-tag upgrade, OME/Docker/systemd restart, and data-preserving
+uninstall. Its
+sanitized report remains partial evidence: an ephemeral hosted runner cannot
+prove your XCP-ng/XOA reboot, NPM TLS/WebSocket route, router/firewall rules, or
+post-reboot ingest and decoded playback.
 
 ## XOA/XCP-ng VM baseline
 
@@ -73,22 +85,24 @@ Membership in the `docker` group is effectively root-level host access. Use a de
 ## 2. Download and verify a release artifact
 
 Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from
-the same [RC12 release](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12).
+the same [RC13 release](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13).
 Never mix a package, archive, or checksum file from different tags.
 
 ```bash
-release_tag=v1.2.3-rc.12
+release_tag=v1.2.3-rc.13
 base_url="https://github.com/ProhibitedTV/BitRiver-Live/releases/download/${release_tag}"
 curl -fLO "${base_url}/bitriver-live_${release_tag}_amd64.deb"
 curl -fLO "${base_url}/bitriver-launcher-linux-amd64.tar.gz"
 curl -fLO "${base_url}/CHECKSUMS.txt"
+curl -fLO "${base_url}/release-set.json"
+curl -fLO "${base_url}/release-set.sigstore.json"
 grep "  bitriver-live_${release_tag}_amd64.deb$" CHECKSUMS.txt | sha256sum --check -
 grep '  bitriver-launcher-linux-amd64.tar.gz$' CHECKSUMS.txt | sha256sum --check -
+grep '  release-set.json$' CHECKSUMS.txt | sha256sum --check -
 ```
 
-For a later candidate that publishes `release-set.json`, download that file and
-`release-set.sigstore.json` too. Verify the exact tag workflow identity, then
-compare the package directly with its hash in the signed manifest:
+Verify the exact tag workflow identity, then compare the package directly with
+its hash in the signed manifest:
 
 ```bash
 identity="https://github.com/ProhibitedTV/BitRiver-Live/.github/workflows/release.yml@refs/tags/${release_tag}"
@@ -105,6 +119,11 @@ printf '%s  %s\n' "$expected" "$artifact" | sha256sum --check -
 Do not install when the manifest has no exact entry or a signed revocation
 marker is attached to the candidate. Stable releases retain the RC package
 filename because promotion copies candidate bytes instead of rebuilding them.
+
+For RC13, the expected `release-set.json` SHA-256 is
+`795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+Confirm that value from the GitHub Release and tracked release note rather than
+copying it from an untrusted forum or installation script.
 
 Confirm the matching images are public before changing the host:
 

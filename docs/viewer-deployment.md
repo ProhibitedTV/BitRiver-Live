@@ -26,11 +26,12 @@ repository. BitRiver does not publish a static-export or GitHub Pages build.
 
 ```bash
 sudo mkdir -p /opt/bitriver-viewer
-sudo tar -xzvf bitriver-viewer-v1.2.3-rc.12.tar.gz -C /opt/bitriver-viewer --strip-components=1
+sudo tar -xzvf bitriver-viewer-v1.2.3-rc.13.tar.gz -C /opt/bitriver-viewer --strip-components=1
 ```
 
 > Keep the viewer bundle, API, and first-party image tag aligned. The current
-> public candidate is `v1.2.3-rc.12`.
+> public candidate is `v1.2.3-rc.13`; verify its signed release-set entry before
+> extracting or pulling it.
 
 The extraction creates `/opt/bitriver-viewer/.next/standalone/`,
 `/opt/bitriver-viewer/.next/static/`, and `/opt/bitriver-viewer/public/`. Keep
@@ -100,7 +101,7 @@ docker run -d --name bitriver-viewer \
   --restart unless-stopped \
   -p 3000:3000 \
   --env-file /opt/bitriver-viewer/.env \
-  ghcr.io/prohibitedtv/bitriver-viewer:v1.2.3-rc.12
+  ghcr.io/prohibitedtv/bitriver-viewer:v1.2.3-rc.13@sha256:9da7986407258fbf503d6a4f78ff812e4364815063c426d8f9060a89ba753f5f
 ```
 
 Use Docker Compose or Kubernetes manifests when you need to manage replicas, but

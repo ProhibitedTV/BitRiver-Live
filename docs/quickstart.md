@@ -17,14 +17,14 @@ If you are evaluating the project, start here. If you are preparing a production
 | --- | --- | --- |
 | Windows Docker Desktop evaluation | You want a native PowerShell check that builds, starts, and probes the full local stack. | `.\scripts\verify-windows-docker.ps1 -Start` |
 | Source checkout | You want a local stack on Linux/macOS or plan to inspect/change code. | `./scripts/quickstart.sh` |
-| Ubuntu 24.04 amd64 host | You want a source-free, boot-managed Compose installation. | [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12) `.deb` or launcher archive; follow [`installing-on-ubuntu.md`](installing-on-ubuntu.md) |
+| Ubuntu 24.04 amd64 host | You want a source-free, boot-managed Compose installation. | [`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13) `.deb` or launcher archive; follow [`installing-on-ubuntu.md`](installing-on-ubuntu.md) |
 
-RC12 is a public prerelease, not the stable `v1.2.3` declaration. Its release
-contains checksum-covered binaries, launcher archives, amd64/arm64 Linux
-packages, a Windows MSI, a Homebrew formula, viewer and container SBOMs, and
-five matching anonymous GHCR images. Package availability does not replace the
-clean-host, reverse-proxy, reboot, and OME recovery checks required for your
-production host.
+RC13 is a public prerelease, not the stable `v1.2.3` declaration. Its signed
+release set covers binaries, launcher archives, amd64/arm64 Linux packages, a
+Windows MSI, a Homebrew formula, SBOMs, five signed anonymous GHCR image
+digests, and sanitized product evidence. Package availability and hosted-runner
+qualification do not replace the reverse-proxy, XOA reboot, firewall/NAT, and
+target-host media recovery checks required for your production host.
 
 The control centre's browser-based Home Server Installer now mirrors the Ubuntu helper with a seven-step flow: Welcome, System Check, Install Mode, Core Settings, Review, Installing, and Success. Quick Install is the default path, while Advanced Install opens the lower-level storage, network, and service controls only when you explicitly ask for them.
 

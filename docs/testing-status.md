@@ -34,8 +34,9 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 
 - **Published artifact tag integrity:** Release bundle and Linux package tests
   require the exact immutable candidate tag in all five first-party image
-  defaults while preserving the canonical source env. RC12 independently
-  passed this check after its public `.deb` and launcher were downloaded.
+  defaults while preserving the canonical source env. RC13 independently
+  passed this check and binds the public `.deb`, launcher, five image digests,
+  and gate evidence to one signed release-set root.
 - **Authentication/session lifecycle:** Integration-style tests under
   `internal/api/auth_integration_test.go` exercise login, refresh, logout, and
   admin-only enforcement using the `internal/testsupport.SessionStoreStub`.

@@ -48,7 +48,7 @@ required_current_candidate_files=(
   "docs/releases/README.md"
 )
 for file in "${required_current_candidate_files[@]}"; do
-  if ! grep -Fq 'v1.2.3-rc.12' "$file"; then
+  if ! grep -Fq 'v1.2.3-rc.13' "$file"; then
     echo "current release candidate missing from $file" >&2
     failed=1
   fi
@@ -63,8 +63,8 @@ for screenshot in \
   fi
 done
 
-if [[ ! -s docs/releases/v1.2.3-rc.12.md ]]; then
-  echo "current release note is missing: docs/releases/v1.2.3-rc.12.md" >&2
+if [[ ! -s docs/releases/v1.2.3-rc.13.md ]]; then
+  echo "current release note is missing: docs/releases/v1.2.3-rc.13.md" >&2
   failed=1
 fi
 
