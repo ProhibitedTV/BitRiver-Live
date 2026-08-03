@@ -138,13 +138,12 @@ func TestReleaseWorkflowResolvesThirdPartyDependenciesOnce(t *testing.T) {
 	}
 }
 
-func TestReleaseWorkflowHandlesPrereleasesWithoutMovingLatest(t *testing.T) {
+func TestReleaseWorkflowPublishesCandidatesWithoutMovingLatest(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	for _, required := range []string{
-		"publish_latest: ${{ steps.release-metadata.outputs.publish_latest }}",
-		"needs.verify-env.outputs.publish_latest == 'true'",
+		"- 'v*.*.*-*'",
 		"org.opencontainers.image.source=https://github.com/${{ github.repository }}",
-		"prerelease: ${{ needs.verify-env.outputs.is_prerelease == 'true' }}",
+		"prerelease: true",
 		"MSI_VERSION: ${{ needs.verify-env.outputs.msi_version }}",
 		"NFPM_VERSION: ${{ needs.verify-env.outputs.nfpm_version }}",
 		"NFPM_PRERELEASE: ${{ needs.verify-env.outputs.nfpm_prerelease }}",
@@ -153,8 +152,48 @@ func TestReleaseWorkflowHandlesPrereleasesWithoutMovingLatest(t *testing.T) {
 			t.Fatalf("release workflow missing prerelease invariant %q", required)
 		}
 	}
-	if strings.Contains(workflow, "${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}:latest") {
-		t.Fatal("release workflow must not publish latest unconditionally")
+	for _, forbidden := range []string{
+		"publish_latest",
+		":latest",
+		"prerelease: ${{ needs.verify-env.outputs.is_prerelease == 'true' }}",
+	} {
+		if strings.Contains(workflow, forbidden) {
+			t.Fatalf("candidate workflow must not contain stable publication seam %q", forbidden)
+		}
+	}
+}
+
+func TestReleaseWorkflowSignsAndInventoriesImmutableCandidateSet(t *testing.T) {
+	workflow := readReleaseWorkflow(t)
+	for _, required := range []string{
+		"cosign-release: v3.1.2",
+		`image_ref="$IMAGE_NAMESPACE/$IMAGE_NAME@$IMAGE_DIGEST"`,
+		`bundle="$IMAGE_NAME-$RELEASE_TAG.image.sigstore.json"`,
+		`bundle="bitriver-viewer-$RELEASE_TAG.image.sigstore.json"`,
+		"name: Verify immutable first-party image signatures",
+		"cosign verify \"$image_ref\"",
+		"name: Create and sign immutable candidate release set",
+		"./scripts/release_set.py candidate",
+		"--assets-dir dist",
+		"--output dist/release-set.json",
+		"--markdown-output dist/release-set.md",
+		"cosign sign-blob --yes",
+		"--bundle dist/release-set.sigstore.json",
+		"cosign verify-blob",
+		"./scripts/release_set.py checksums",
+		"./scripts/release_set.py verify-candidate",
+		"fail_on_unmatched_files: true",
+		"files: dist/*",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("release workflow missing immutable candidate invariant %q", required)
+		}
+	}
+	if count := strings.Count(workflow, "name: Upload image signature bundle"); count != 2 {
+		t.Fatalf("image signature upload step count=%d, want generic matrix plus viewer", count)
+	}
+	if strings.Index(workflow, "./scripts/release_set.py candidate") > strings.Index(workflow, "./scripts/release_set.py checksums") {
+		t.Fatal("candidate manifest and signature must be created before final checksum coverage")
 	}
 }
 
@@ -412,7 +451,8 @@ func TestViewerImagePublicationUsesNativeArchitectures(t *testing.T) {
 		"docker buildx imagetools create",
 		`"$release_ref-amd64"`,
 		`"$release_ref-arm64"`,
-		"needs.verify-env.outputs.publish_latest",
+		"Sign and verify viewer image digest",
+		"container-signature-viewer",
 		"container-sbom-viewer",
 	} {
 		if !strings.Contains(viewerManifest, required) {

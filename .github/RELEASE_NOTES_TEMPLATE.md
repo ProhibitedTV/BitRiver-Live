@@ -31,6 +31,7 @@ _or_
 - Safe rollback conditions:
 - Unsafe rollback conditions:
 - Restore prerequisites:
+- Previous signed stable release-set/tag/digests (or explicitly none for the first stable release):
 
 ## Operator checklist
 - [ ] Confirm single-host production baseline assumptions still hold for this release ([`docs/production-single-host.md`](../docs/production-single-host.md)).
@@ -44,5 +45,10 @@ _or_
 - [ ] `./scripts/render-ome-config.sh --check`
 - [ ] `go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env`
 - [ ] Published `CHECKSUMS.txt` covers every other release asset exactly once.
+- [ ] `release-set.json` and its Sigstore bundle verify against the exact candidate tag workflow identity.
+- [ ] The signed manifest records all five exact image digests, SBOMs/signatures, dependency pins, and sanitized gate evidence.
 - [ ] Downloaded package/archive defaults reference the exact release tag for all five first-party images.
 - [ ] Pull-only tagged product evidence covers real ingest, decoded playback, offline transition, chat/moderation, and VOD.
+- [ ] Stable only: a tracked promotion record binds every required durable evidence hash to this candidate release-set hash.
+- [ ] Stable only: `Stable promotion gate` passed before environment review, no revocation marker exists, and candidate assets were copied byte-for-byte without rebuild.
+- [ ] Stable only: stable aliases resolve to the recorded digests; any `latest` move is explicit and non-authoritative.

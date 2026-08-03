@@ -16,6 +16,13 @@ the target Ubuntu/XOA VM, browser/media access through its real Nginx Proxy
 Manager and firewall path, reboot recovery, and repeated OME recovery still
 need operator evidence.
 
+RC12 also predates the signed release-set root introduced on `main`. It remains
+valid evaluation evidence through its published checksums and launcher
+signature, but it cannot be promoted through the new stable workflow. A later
+candidate must publish `release-set.json`, its Sigstore bundle, complete public
+evidence, and five exact image signatures before tracked production gates can
+bind to it.
+
 ## Status levels
 
 ### dev
@@ -52,6 +59,8 @@ What is guaranteed:
 - Intended stable feature set is frozen except for release-blocking fixes.
 - Upgrade and rollback steps are documented and validated for the candidate.
 - Operator runbooks are expected to reflect release behavior.
+- Candidates from the current workflow are immutable signed release sets and
+  never update stable or `latest` image aliases.
 
 What is not guaranteed:
 - No last-minute changes; critical fixes can still land.
@@ -66,6 +75,9 @@ What is guaranteed:
 - Upgrade guidance and release notes are maintained for stable versions.
 - Security and monitoring runbooks exist for operators.
 - Breaking changes are explicitly documented in release messaging.
+- The stable release copies one approved candidate byte-for-byte, retags exact
+  image digests, and publishes signed stable/rollback metadata through a
+  reviewed environment; it is not rebuilt from the stable tag.
 
 What remains outside the stable guarantee:
 - HA/multi-host deployment guarantees.

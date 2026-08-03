@@ -1,5 +1,85 @@
 # PLAN
 
+## Current scope - immutable candidate release sets and stable promotion (#1301, #1271, #1302) (2026-08-03)
+
+- Make prerelease candidate tags the only build inputs. A stable tag must never
+  invoke the build workflow or move `latest`; stable publication is a separate
+  manual promotion from one already-published candidate tag and digest set.
+- Add a deterministic `bitriver.release-set/v1` generator/verifier. The signed
+  root manifest records the candidate tag and commit, workflow run, every
+  public artifact checksum/size, five first-party image digests and SBOM/
+  signature references, pinned third-party digests, toolchain policy, gate
+  results, evidence hashes, and explicit skipped/remaining external gates.
+- Sign all five image manifest digests with keyless Cosign, verify those exact
+  digests during the anonymous pull-only product gate, then sign the release-
+  set manifest. Publish the scanner-approved manifest, bundle, checksums, and
+  fixed-schema evidence as candidate release assets.
+- Add a `workflow_dispatch` stable-promotion workflow on protected `main`.
+  Its read-only `Stable promotion gate` downloads the candidate assets, checks
+  GitHub asset digests, checksum coverage, root/image signatures, revocation
+  state, the candidate commit, and a tracked promotion record whose required
+  gate issues/evidence all target the same release-set hash.
+- Only after validation may an environment-approved job retag exact image
+  digests, generate stable and previous-stable rollback manifests, copy the
+  unchanged candidate assets into a draft stable release, verify all aliases,
+  optionally update convenience-only `latest`, and publish the draft. Reruns
+  must be idempotent and must reject any existing tag, asset, or alias that
+  points at different bytes.
+- Add an environment-approved candidate-revocation operation that publishes a
+  signed, append-only revocation marker. Promotion refuses any candidate with
+  that marker; no prior stable asset or alias is overwritten by revocation.
+- After the workflow merges and exact-main CI passes, configure the public
+  repository's `stable-promotion` environment with a required reviewer,
+  self-review allowed for the single-owner project, and protected-branch-only
+  deployment. Do not invent completion evidence for the still-open Ubuntu/XOA,
+  recoverability, resilience, capacity, security, or browser gates.
+
+### Risks and boundaries
+
+- Cross-repository image aliases and GitHub release publication are not one
+  atomic transaction. Validate every immutable input before the first write,
+  publish through a draft release, retain no-op/retry semantics, and keep
+  production truth at candidate tag plus digest rather than `latest`.
+- Candidate assets intentionally retain their candidate filenames/package
+  metadata when promoted; renaming or rebuilding them would violate identical-
+  byte promotion. Stable metadata points back to the candidate release set.
+- Keyless signature verification must bind the exact repository workflow
+  identity, tag ref, and GitHub OIDC issuer. Do not accept wildcard identities,
+  disable claim checking, or treat an unsigned checksum file as provenance.
+- Promotion evidence may arrive after the candidate build. It must be a tracked
+  main-branch record with durable URL plus SHA-256 references and the exact
+  signed release-set hash; expiring Actions logs alone are insufficient.
+- Do not change the deployment contract, runtime code, private root `.env`, or
+  the six user-owned untracked deployment/runtime paths in this slice.
+
+### Test and rollout plan
+
+- Unit-test deterministic manifest output, checksum coverage, exact image/
+  evidence schemas, signature references, promotion-record gate completeness,
+  revoked candidates, stable/candidate tag matching, rollback metadata, path
+  traversal, duplicate assets, tampering, and idempotence classifications.
+- Extend workflow contracts for candidate-only tag triggers, no build-time
+  `latest`, pinned Cosign installation, exact-digest signing/verification,
+  signed release-set publication, least-privilege promotion permissions,
+  environment approval, no build steps, validation-before-mutation, draft
+  publication, rollback metadata, and refusal to overwrite mismatched state.
+- Run Python fixtures, YAML parsing, action pinning/policy checks, focused Go
+  workflow tests, ShellCheck where applicable, documentation checks, secret
+  scanning, `git diff --check`, and literal `./scripts/verify.sh`.
+- Require full PR CI, exact merged-main CI, live environment API readback, and
+  a deliberately unverified manual promotion run that fails in `Stable
+  promotion gate` before any environment or registry mutation. A new immutable
+  RC is the later end-to-end manifest proof; stable promotion remains blocked
+  until its external gate record is genuinely complete.
+- Literal verification with a digest-complete synthetic environment exposed a
+  source-build smoke seam: SRS is the only third-party image that also has a
+  local build target, and Compose cannot use its pull-only `@sha256` suffix as
+  the resulting build tag. In build-mode smoke only, clear
+  `BITRIVER_SRS_IMAGE_DIGEST` alongside the five first-party build digests and
+  reapply those overrides after sourcing the env file before `compose up`;
+  preserve every pin in pull/production mode and add a shell contract fixture
+  so release digest enforcement is never weakened.
+
 ## Current scope - enforce one aggregate merge gate (#1302, #1270) (2026-08-03)
 
 - Preserve the consolidated, path-filtered reusable workflow graph. Add one

@@ -13,7 +13,10 @@ stack.
 **Current public candidate:**
 [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12).
 It is a prerelease for evaluation and staged home-hosting rollout, not a stable
-or managed-service promise.
+or managed-service promise. RC12 predates the signed release-set root now on
+`main`; verify RC12 with its `CHECKSUMS.txt` and bundled launcher signature.
+The next candidate produced by the current workflow will add the complete
+signed manifest described below.
 
 ![BitRiver Live viewer home showing one live channel](docs/assets/screenshots/viewer-home.png)
 
@@ -48,6 +51,22 @@ capture, not concept art._
 The Ubuntu package and archive are real public downloads. Clean XOA VM reboot,
 Nginx Proxy Manager browser access, and repeated OME failure/recovery are still
 operator acceptance checks; see [Production evidence boundary](#production-evidence-boundary).
+
+## How a release is trusted
+
+BitRiver builds once at a prerelease tag. The candidate workflow publishes the
+cross-platform artifacts, five digest-addressed images, SBOMs, sanitized gate
+evidence, complete checksums, and a keylessly signed `release-set.json`.
+Stable promotion is a separate protected workflow: it copies those exact bytes
+and retags those exact image digests after the tracked clean-host, recovery,
+capacity, security, and browser gates pass. A stable tag never rebuilds an RC.
+
+For production, trust the candidate or stable tag together with the digest in
+the signed manifest. Do not use `latest` as an integrity or rollback source.
+Revoked candidates receive signed append-only markers and cannot be promoted.
+See [immutable candidate and stable promotion](docs/release-promotion.md) for
+verification commands, approval records, rollback metadata, and the guarded
+workflow.
 
 ## Try it on Docker Desktop for Windows
 

@@ -282,7 +282,7 @@ func TestReusableImageScanUsesVerifiedModuleProxyForComposeBuilds(t *testing.T) 
 	}
 }
 
-func TestVerifySelectsPythonRunnerForMarkdownChecks(t *testing.T) {
+func TestVerifySelectsPythonRunnerForRepositoryChecks(t *testing.T) {
 	repoRoot := filepath.Dir(mustGetwd(t))
 	verify := readRepoFile(t, repoRoot, filepath.Join("scripts", "verify.sh"))
 	for _, required := range []string{
@@ -290,6 +290,7 @@ func TestVerifySelectsPythonRunnerForMarkdownChecks(t *testing.T) {
 		"PYTHON_RUNNER=(python3)",
 		"PYTHON_RUNNER=(py -3)",
 		"PYTHON_RUNNER=(python)",
+		`run_step "Release-set manifest tests" "${PYTHON_RUNNER[@]}" -m unittest scripts/release_set_test.py`,
 		`run_step "Markdown local-link checker tests" "${PYTHON_RUNNER[@]}" -m unittest scripts/check_doc_links_test.py`,
 		`run_step "Markdown local-link check" "${PYTHON_RUNNER[@]}" scripts/check_doc_links.py`,
 	} {

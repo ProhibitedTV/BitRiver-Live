@@ -10,6 +10,20 @@ BitRiver Live uses Semantic Versioning (`MAJOR.MINOR.PATCH`, typically tagged as
 - **MINOR**: backward-compatible features, new optional config, new endpoints, additive schema changes, and non-breaking behavior improvements.
 - **MAJOR**: breaking changes requiring operator action, compatibility resets, or removals.
 
+## Candidate and stable tag policy
+
+Build tags must contain a prerelease suffix, for example `v1.2.3-rc.13`.
+Published tags are immutable: a failed candidate is replaced by a higher RC,
+never force-moved. The release workflow does not accept stable tags and never
+moves `latest`.
+
+A stable `vMAJOR.MINOR.PATCH` tag is created only by the guarded promotion
+workflow after one tracked record approves the matching signed candidate root.
+Promotion copies candidate assets byte-for-byte and retags exact image digests;
+it does not rebuild or rename packages. Version/digest identity in the signed
+stable release set is authoritative, while `latest` remains optional. See
+[`docs/release-promotion.md`](release-promotion.md).
+
 ## What counts as breaking
 
 A change is breaking and requires a **major** bump when it does any of the following:

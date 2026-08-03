@@ -1,0 +1,620 @@
+name: Stable promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Promote a candidate or append a candidate revocation
+        required: true
+        type: choice
+        options:
+          - promote
+          - revoke
+      candidate_tag:
+        description: Existing prerelease candidate tag (for example v1.2.3-rc.13)
+        required: true
+        type: string
+      stable_tag:
+        description: Stable tag for promotion (for example v1.2.3; ignored for revoke)
+        required: false
+        type: string
+      promotion_record:
+        description: Tracked docs/releases/promotions JSON path (required for promote)
+        required: false
+        type: string
+      publish_latest:
+        description: Also move convenience-only latest image aliases
+        required: false
+        default: false
+        type: boolean
+      revocation_reason:
+        description: Actionable reason (required for revoke)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: stable-promotion-${{ inputs.stable_tag }}-${{ inputs.candidate_tag }}
+  cancel-in-progress: false
+
+jobs:
+  stable-promotion-gate:
+    name: Stable promotion gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      candidate_commit: ${{ steps.validate.outputs.candidate_commit }}
+      stable_tag: ${{ steps.validate.outputs.stable_tag }}
+      existing_state: ${{ steps.existing.outputs.existing_state }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+      STABLE_TAG: ${{ inputs.stable_tag }}
+      OPERATION: ${{ inputs.operation }}
+      PROMOTION_RECORD: ${{ inputs.promotion_record }}
+    steps:
+      - name: Check out protected main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
+
+      - name: Download candidate release without mutation
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+            echo "candidate_tag must be a semantic-version prerelease tag" >&2
+            exit 2
+          fi
+          if [[ "$OPERATION" == promote ]]; then
+            if [[ ! "$STABLE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "stable_tag must be a stable semantic-version tag" >&2
+              exit 2
+            fi
+            if [[ ! "$PROMOTION_RECORD" =~ ^docs/releases/promotions/[A-Za-z0-9][A-Za-z0-9._-]*\.json$ ]]; then
+              echo "promotion_record must be a tracked docs/releases/promotions JSON file" >&2
+              exit 2
+            fi
+            git ls-files --error-unmatch -- "$PROMOTION_RECORD" >/dev/null
+          elif [[ "$OPERATION" != revoke ]]; then
+            echo "unsupported operation: $OPERATION" >&2
+            exit 2
+          fi
+
+          rm -rf "$RUNNER_TEMP/promotion-input"
+          mkdir -p "$RUNNER_TEMP/promotion-input/candidate" "$RUNNER_TEMP/promotion-input/revocations"
+          gh release download "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/promotion-input/candidate"
+          gh release view "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json assets,isDraft,isPrerelease,tagName,url \
+            >"$RUNNER_TEMP/promotion-input/candidate-release.json"
+
+      - name: Verify public asset digests and revocation state
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/promotion-input/candidate"
+          release_json="$RUNNER_TEMP/promotion-input/candidate-release.json"
+          jq -e \
+            --arg tag "$CANDIDATE_TAG" \
+            '.tagName == $tag and .isDraft == false and .isPrerelease == true' \
+            "$release_json" >/dev/null
+          while IFS=$'\t' read -r name digest; do
+            [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || {
+              echo "unsafe candidate asset name: $name" >&2
+              exit 1
+            }
+            test -f "$root/$name"
+            actual="sha256:$(sha256sum "$root/$name" | awk '{print $1}')"
+            if [[ "$digest" != "$actual" ]]; then
+              echo "GitHub asset digest mismatch for $name" >&2
+              exit 1
+            fi
+          done < <(jq -r '.assets[] | [.name, .digest] | @tsv' "$release_json")
+
+          revocations=()
+          for marker in \
+              "$root/candidate-revocation.json" \
+              "$root"/candidate-revocation-*.json; do
+            [[ -f "$marker" ]] && revocations+=("$marker")
+          done
+          if [[ "$OPERATION" == promote && ${#revocations[@]} -gt 0 ]]; then
+            echo "candidate has an append-only revocation marker and cannot be promoted" >&2
+            exit 1
+          fi
+          if [[ "$OPERATION" == revoke ]]; then
+            for marker in "${revocations[@]}"; do
+              mv "$marker" "$RUNNER_TEMP/promotion-input/revocations/"
+            done
+          fi
+
+      - name: Verify candidate manifest and signatures
+        id: validate
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/promotion-input/candidate"
+          manifest="$root/release-set.json"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$CANDIDATE_TAG"
+
+          git fetch --force --no-tags origin \
+            "refs/tags/$CANDIDATE_TAG:refs/tags/$CANDIDATE_TAG"
+          candidate_commit="$(git rev-parse "$CANDIDATE_TAG^{commit}")"
+          if [[ "$OPERATION" == promote ]]; then
+            cp "$PROMOTION_RECORD" "$RUNNER_TEMP/promotion-input/promotion-record.json"
+            python3 ./scripts/release_set.py verify-candidate \
+              --assets-dir "$root" \
+              --manifest "$manifest" \
+              --expected-tag "$CANDIDATE_TAG" \
+              --expected-commit "$candidate_commit" \
+              --promotion-record "$RUNNER_TEMP/promotion-input/promotion-record.json"
+          else
+            python3 ./scripts/release_set.py verify-candidate \
+              --assets-dir "$root" \
+              --manifest "$manifest" \
+              --expected-tag "$CANDIDATE_TAG" \
+              --expected-commit "$candidate_commit"
+          fi
+          cosign verify-blob \
+            --bundle "$root/release-set.sigstore.json" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$manifest"
+          jq -r '.images[].immutableReference' "$manifest" |
+            while IFS= read -r image_ref; do
+              cosign verify "$image_ref" \
+                --certificate-identity "$identity" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                >/dev/null
+            done
+
+          manifest_stable="$(jq -r '.candidate.stableVersion' "$manifest")"
+          if [[ "$OPERATION" == promote && "$manifest_stable" != "$STABLE_TAG" ]]; then
+            echo "stable_tag does not match the candidate manifest" >&2
+            exit 1
+          fi
+          {
+            echo "candidate_commit=$candidate_commit"
+            echo "stable_tag=$manifest_stable"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Verify tracked promotion gates are closed
+        if: inputs.operation == 'promote'
+        run: |
+          set -euo pipefail
+          for issue in 1297 1299 1298 1303 1304 1305 1306 1307; do
+            state="$(gh issue view "$issue" --repo "$GITHUB_REPOSITORY" --json state --jq .state)"
+            if [[ "$state" != CLOSED ]]; then
+              echo "required promotion gate issue #$issue is $state" >&2
+              exit 1
+            fi
+          done
+
+      - name: Verify existing stable state before approval
+        id: existing
+        if: inputs.operation == 'promote'
+        env:
+          CANDIDATE_COMMIT: ${{ steps.validate.outputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/promotion-input/candidate"
+          state="$RUNNER_TEMP/promotion-input/stable-state.json"
+          stable_commit=""
+          if git fetch --force --no-tags origin \
+              "refs/tags/$STABLE_TAG:refs/tags/$STABLE_TAG" 2>/dev/null; then
+            stable_commit="$(git rev-parse "$STABLE_TAG^{commit}")"
+          fi
+          if gh release view "$STABLE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets,isDraft >"$RUNNER_TEMP/stable-release.json" 2>/dev/null; then
+            [[ -n "$stable_commit" ]] || {
+              echo "stable release exists without a stable tag" >&2
+              exit 1
+            }
+            jq --arg commit "$stable_commit" \
+              '{stableRefCommit: $commit, release: {targetCommit: $commit, draft: .isDraft, assets: [.assets[] | {name, digest}]}}' \
+              "$RUNNER_TEMP/stable-release.json" >"$state"
+          else
+            jq -n --arg commit "$stable_commit" \
+              '{stableRefCommit: (if $commit == "" then null else $commit end), release: null}' \
+              >"$state"
+          fi
+          existing_state="$(python3 ./scripts/release_set.py classify-state \
+            --assets-dir "$root" \
+            --manifest "$root/release-set.json" \
+            --state "$state")"
+          echo "existing_state=$existing_state" >>"$GITHUB_OUTPUT"
+
+      - name: Download and verify previous stable rollback root
+        if: inputs.operation == 'promote'
+        run: |
+          set -euo pipefail
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            >"$RUNNER_TEMP/published-releases.json"
+          previous_tag="$(jq -r --arg stable "$STABLE_TAG" \
+            '[.[] | select(.draft == false and .prerelease == false and .tag_name != $stable and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")))] | first | .tag_name // empty' \
+            "$RUNNER_TEMP/published-releases.json")"
+          if [[ -z "$previous_tag" ]]; then
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/promotion-input/previous"
+          gh release download "$previous_tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern stable-release-set.json \
+            --pattern stable-release-set.sigstore.json \
+            --dir "$RUNNER_TEMP/promotion-input/previous"
+          previous_identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/stable-promotion.yml@refs/heads/main"
+          cosign verify-blob \
+            --bundle "$RUNNER_TEMP/promotion-input/previous/stable-release-set.sigstore.json" \
+            --certificate-identity "$previous_identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$RUNNER_TEMP/promotion-input/previous/stable-release-set.json"
+
+      - name: Scan validated promotion input
+        run: |
+          ./scripts/scan-release-evidence.sh --root "$RUNNER_TEMP/promotion-input"
+
+      - name: Upload validated promotion input
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validated-promotion-input
+          path: ${{ runner.temp }}/promotion-input
+          if-no-files-found: error
+          retention-days: 3
+
+  promote-stable:
+    name: Publish stable release set
+    if: inputs.operation == 'promote'
+    needs: stable-promotion-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: stable-promotion
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+      STABLE_TAG: ${{ needs.stable-promotion-gate.outputs.stable_tag }}
+      CANDIDATE_COMMIT: ${{ needs.stable-promotion-gate.outputs.candidate_commit }}
+      PUBLISH_LATEST: ${{ inputs.publish_latest }}
+    steps:
+      - name: Check out protected main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download validated promotion input
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: validated-promotion-input
+          path: ${{ runner.temp }}/promotion-input
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Revalidate immutable inputs and live stable state
+        id: state
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/promotion-input/candidate"
+          manifest="$root/release-set.json"
+          record="$RUNNER_TEMP/promotion-input/promotion-record.json"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$CANDIDATE_TAG"
+          python3 ./scripts/release_set.py verify-candidate \
+            --assets-dir "$root" \
+            --manifest "$manifest" \
+            --expected-tag "$CANDIDATE_TAG" \
+            --expected-commit "$CANDIDATE_COMMIT" \
+            --promotion-record "$record"
+          cosign verify-blob \
+            --bundle "$root/release-set.sigstore.json" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$manifest"
+
+          stable_commit=""
+          if git fetch --force --no-tags origin \
+              "refs/tags/$STABLE_TAG:refs/tags/$STABLE_TAG" 2>/dev/null; then
+            stable_commit="$(git rev-parse "$STABLE_TAG^{commit}")"
+          fi
+          state="$RUNNER_TEMP/live-stable-state.json"
+          if gh release view "$STABLE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets,isDraft >"$RUNNER_TEMP/live-stable-release.json" 2>/dev/null; then
+            [[ -n "$stable_commit" ]] || exit 1
+            jq --arg commit "$stable_commit" \
+              '{stableRefCommit: $commit, release: {targetCommit: $commit, draft: .isDraft, assets: [.assets[] | {name, digest}]}}' \
+              "$RUNNER_TEMP/live-stable-release.json" >"$state"
+          else
+            jq -n --arg commit "$stable_commit" \
+              '{stableRefCommit: (if $commit == "" then null else $commit end), release: null}' \
+              >"$state"
+          fi
+          classification="$(python3 ./scripts/release_set.py classify-state \
+            --assets-dir "$root" \
+            --manifest "$manifest" \
+            --state "$state")"
+
+          while IFS=$'\t' read -r alias digest; do
+            if current="$(docker buildx imagetools inspect "$alias" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+              if [[ "$current" != "$digest" ]]; then
+                echo "stable image alias $alias points at $current instead of $digest" >&2
+                exit 1
+              fi
+            fi
+          done < <(jq -r --arg stable "$STABLE_TAG" '.images[] | [(.immutableReference | split("@")[0]) + ":" + $stable, .digest] | @tsv' "$manifest")
+          echo "classification=$classification" >>"$GITHUB_OUTPUT"
+
+      - name: Prepare signed stable and rollback metadata
+        if: steps.state.outputs.classification != 'complete'
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/promotion-input/candidate"
+          payload="$RUNNER_TEMP/stable-payload"
+          rm -rf "$payload"
+          mkdir -p "$payload"
+          cp "$root"/* "$payload/"
+          cp "$RUNNER_TEMP/promotion-input/promotion-record.json" \
+            "$payload/$STABLE_TAG-promotion.json"
+          previous=()
+          if [[ -f "$RUNNER_TEMP/promotion-input/previous/stable-release-set.json" ]]; then
+            previous=(--previous-stable-manifest "$RUNNER_TEMP/promotion-input/previous/stable-release-set.json")
+          fi
+          latest=()
+          [[ "$PUBLISH_LATEST" == true ]] && latest=(--publish-latest)
+          python3 ./scripts/release_set.py stable \
+            --candidate-manifest "$root/release-set.json" \
+            --promotion-record "$RUNNER_TEMP/promotion-input/promotion-record.json" \
+            "${previous[@]}" \
+            "${latest[@]}" \
+            --output "$payload/stable-release-set.json" \
+            --markdown-output "$payload/stable-release-set.md" \
+            --rollback-output "$payload/rollback-release-set.json"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/stable-promotion.yml@refs/heads/main"
+          bundle="$payload/stable-release-set.sigstore.json"
+          if [[ -f "$RUNNER_TEMP/live-stable-release.json" ]] &&
+              jq -e '.assets[] | select(.name == "stable-release-set.sigstore.json")' \
+                "$RUNNER_TEMP/live-stable-release.json" >/dev/null; then
+            gh release download "$STABLE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern stable-release-set.sigstore.json \
+              --dir "$RUNNER_TEMP/existing-stable-signature"
+            cp "$RUNNER_TEMP/existing-stable-signature/stable-release-set.sigstore.json" "$bundle"
+          else
+            cosign sign-blob --yes \
+              --bundle "$bundle" \
+              "$payload/stable-release-set.json"
+          fi
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$payload/stable-release-set.json"
+          python3 ./scripts/release_set.py checksums \
+            --assets-dir "$payload" \
+            --output "$payload/PROMOTION-CHECKSUMS.txt"
+          ./scripts/scan-release-evidence.sh --root "$payload"
+
+      - name: Create exact stable tag and draft release
+        if: steps.state.outputs.classification != 'complete'
+        run: |
+          set -euo pipefail
+          if ! git fetch --force --no-tags origin \
+              "refs/tags/$STABLE_TAG:refs/tags/$STABLE_TAG" 2>/dev/null; then
+            gh api --method POST \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$STABLE_TAG" \
+              -f sha="$CANDIDATE_COMMIT" >/dev/null
+            git fetch --force --no-tags origin \
+              "refs/tags/$STABLE_TAG:refs/tags/$STABLE_TAG"
+          fi
+          actual_commit="$(git rev-parse "$STABLE_TAG^{commit}")"
+          [[ "$actual_commit" == "$CANDIDATE_COMMIT" ]] || {
+            echo "stable tag points at another commit" >&2
+            exit 1
+          }
+          if ! gh release view "$STABLE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$STABLE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --title "BitRiver Live $STABLE_TAG" \
+              --notes-file "$RUNNER_TEMP/stable-payload/stable-release-set.md" \
+              --target "$CANDIDATE_COMMIT"
+          fi
+
+      - name: Retag exact image digests without rebuilding
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/promotion-input/candidate/release-set.json"
+          while IFS=$'\t' read -r repository digest; do
+            immutable="$repository@$digest"
+            stable_ref="$repository:$STABLE_TAG"
+            docker buildx imagetools create --tag "$stable_ref" "$immutable"
+            actual="$(docker buildx imagetools inspect "$stable_ref" --format '{{.Manifest.Digest}}')"
+            [[ "$actual" == "$digest" ]] || exit 1
+            if [[ "$PUBLISH_LATEST" == true ]]; then
+              docker buildx imagetools create --tag "$repository:latest" "$immutable"
+              latest="$(docker buildx imagetools inspect "$repository:latest" --format '{{.Manifest.Digest}}')"
+              [[ "$latest" == "$digest" ]] || exit 1
+            fi
+          done < <(jq -r '.images[] | [(.immutableReference | split("@")[0]), .digest] | @tsv' "$manifest")
+
+      - name: Upload missing stable assets and publish draft
+        if: steps.state.outputs.classification != 'complete'
+        run: |
+          set -euo pipefail
+          payload="$RUNNER_TEMP/stable-payload"
+          gh release view "$STABLE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json assets,isDraft >"$RUNNER_TEMP/current-stable-release.json"
+          jq -e '.isDraft == true' "$RUNNER_TEMP/current-stable-release.json" >/dev/null
+          for file in "$payload"/*; do
+            name="$(basename "$file")"
+            remote_digest="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' "$RUNNER_TEMP/current-stable-release.json")"
+            local_digest="sha256:$(sha256sum "$file" | awk '{print $1}')"
+            if [[ -n "$remote_digest" ]]; then
+              [[ "$remote_digest" == "$local_digest" ]] || {
+                echo "stable asset $name already exists with different bytes" >&2
+                exit 1
+              }
+              continue
+            fi
+            gh release upload "$STABLE_TAG" "$file" --repo "$GITHUB_REPOSITORY"
+          done
+
+          verified=false
+          for attempt in $(seq 1 12); do
+            gh release view "$STABLE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets,isDraft >"$RUNNER_TEMP/final-stable-release.json"
+            jq -e '.isDraft == true' "$RUNNER_TEMP/final-stable-release.json" >/dev/null
+            verified=true
+            for file in "$payload"/*; do
+              name="$(basename "$file")"
+              local_digest="sha256:$(sha256sum "$file" | awk '{print $1}')"
+              remote_digest="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest // empty' "$RUNNER_TEMP/final-stable-release.json")"
+              if [[ -n "$remote_digest" && "$remote_digest" != "$local_digest" ]]; then
+                echo "stable release retained different bytes for $name" >&2
+                exit 1
+              fi
+              [[ "$remote_digest" == "$local_digest" ]] || verified=false
+            done
+            [[ "$verified" == true ]] && break
+            sleep 5
+          done
+          [[ "$verified" == true ]] || {
+            echo "stable release asset digests did not settle before timeout" >&2
+            exit 1
+          }
+          gh release edit "$STABLE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --prerelease=false
+
+      - name: Verify published stable state
+        run: |
+          set -euo pipefail
+          gh release view "$STABLE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease \
+            --jq 'select(.isDraft == false and .isPrerelease == false)' >/dev/null
+          manifest="$RUNNER_TEMP/promotion-input/candidate/release-set.json"
+          while IFS=$'\t' read -r alias digest; do
+            actual="$(docker buildx imagetools inspect "$alias" --format '{{.Manifest.Digest}}')"
+            [[ "$actual" == "$digest" ]] || exit 1
+          done < <(jq -r --arg stable "$STABLE_TAG" '.images[] | [(.immutableReference | split("@")[0]) + ":" + $stable, .digest] | @tsv' "$manifest")
+
+  revoke-candidate:
+    name: Append candidate revocation
+    if: inputs.operation == 'revoke'
+    needs: stable-promotion-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: stable-promotion
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+      REVOCATION_REASON: ${{ inputs.revocation_reason }}
+    steps:
+      - name: Check out protected main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Download validated promotion input
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: validated-promotion-input
+          path: ${{ runner.temp }}/promotion-input
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.2
+
+      - name: Create and sign append-only revocation
+        run: |
+          set -euo pipefail
+          if [[ ${#REVOCATION_REASON} -lt 12 ]]; then
+            echo "revocation_reason must be actionable" >&2
+            exit 2
+          fi
+          root="$RUNNER_TEMP/promotion-input/candidate"
+          revocation_dir="$RUNNER_TEMP/new-revocation"
+          rm -rf "$revocation_dir"
+          mkdir -p "$revocation_dir"
+          output="$revocation_dir/candidate-revocation-$GITHUB_RUN_ID.json"
+          bundle="$revocation_dir/candidate-revocation-$GITHUB_RUN_ID.sigstore.json"
+          workflow_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+          revoked_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python3 ./scripts/release_set.py revoke \
+            --candidate-manifest "$root/release-set.json" \
+            --candidate-tag "$CANDIDATE_TAG" \
+            --reason "$REVOCATION_REASON" \
+            --actor "$GITHUB_ACTOR" \
+            --revoked-at "$revoked_at" \
+            --workflow-url "$workflow_url" \
+            --output "$output"
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/stable-promotion.yml@refs/heads/main"
+          cosign sign-blob --yes --bundle "$bundle" "$output"
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$output"
+          ./scripts/scan-release-evidence.sh --root "$revocation_dir"
+
+          release_json="$RUNNER_TEMP/revocation-release.json"
+          gh release view "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json assets >"$release_json"
+          for file in "$output" "$bundle"; do
+            name="$(basename "$file")"
+            if jq -e --arg name "$name" '.assets[] | select(.name == $name)' "$release_json" >/dev/null; then
+              echo "refusing to overwrite existing revocation asset $name" >&2
+              exit 1
+            fi
+            gh release upload "$CANDIDATE_TAG" "$file" --repo "$GITHUB_REPOSITORY"
+          done
+
+          gh release view "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json assets >"$release_json"
+          for file in "$output" "$bundle"; do
+            name="$(basename "$file")"
+            expected="sha256:$(sha256sum "$file" | awk '{print $1}')"
+            actual="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' "$release_json")"
+            [[ "$actual" == "$expected" ]] || exit 1
+          done

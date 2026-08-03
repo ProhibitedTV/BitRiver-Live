@@ -2,7 +2,7 @@
 
 This is the artifact-only installation path for an operator-managed Ubuntu VM. It installs the canonical Docker Compose stack; it does not build application images or require a source checkout.
 
-> **Current candidate:** [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12) publishes checksum-covered Ubuntu packages, launcher archives, signatures, SBOMs, and five matching first-party images. It is a prerelease, not stable promotion.
+> **Current candidate:** [`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12) publishes checksum-covered Ubuntu packages, launcher archives, signatures, SBOMs, and five matching first-party images. It is a prerelease, not stable promotion. RC12 predates the signed release-set root now on `main`; use the RC12-specific checksum and launcher-signature steps below.
 
 A tag containing a hyphen is a GitHub prerelease and does not move the `latest`
 image tag. Official images use `ghcr.io/prohibitedtv`; forks and mirrors can
@@ -85,6 +85,26 @@ curl -fLO "${base_url}/CHECKSUMS.txt"
 grep "  bitriver-live_${release_tag}_amd64.deb$" CHECKSUMS.txt | sha256sum --check -
 grep '  bitriver-launcher-linux-amd64.tar.gz$' CHECKSUMS.txt | sha256sum --check -
 ```
+
+For a later candidate that publishes `release-set.json`, download that file and
+`release-set.sigstore.json` too. Verify the exact tag workflow identity, then
+compare the package directly with its hash in the signed manifest:
+
+```bash
+identity="https://github.com/ProhibitedTV/BitRiver-Live/.github/workflows/release.yml@refs/tags/${release_tag}"
+artifact="bitriver-live_${release_tag}_amd64.deb"
+cosign verify-blob \
+  --bundle release-set.sigstore.json \
+  --certificate-identity "$identity" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  release-set.json
+expected="$(jq -r --arg name "$artifact" '.artifacts[] | select(.name == $name) | .sha256' release-set.json)"
+printf '%s  %s\n' "$expected" "$artifact" | sha256sum --check -
+```
+
+Do not install when the manifest has no exact entry or a signed revocation
+marker is attached to the candidate. Stable releases retain the RC package
+filename because promotion copies candidate bytes instead of rebuilding them.
 
 Confirm the matching images are public before changing the host:
 

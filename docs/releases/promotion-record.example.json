@@ -1,0 +1,77 @@
+{
+  "approvedAt": "2026-08-03T00:00:00Z",
+  "approvedBy": "replace-with-reviewer",
+  "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "candidateReleaseUrl": "https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.N",
+  "candidateTag": "v1.2.3-rc.N",
+  "decision": "approved",
+  "epicIssue": 1293,
+  "gates": [
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/clean-host-install-evidence.json",
+      "id": "clean-host-install",
+      "issue": 1297,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/backup-restore-evidence.json",
+      "id": "backup-restore",
+      "issue": 1299,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/upgrade-rollback-evidence.json",
+      "id": "upgrade-rollback",
+      "issue": 1298,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/capacity-evidence.json",
+      "id": "capacity",
+      "issue": 1303,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/resilience-evidence.json",
+      "id": "resilience",
+      "issue": 1304,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/slo-alerts-evidence.json",
+      "id": "slo-alerts",
+      "issue": 1305,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/security-review-evidence.json",
+      "id": "security-review",
+      "issue": 1306,
+      "status": "passed"
+    },
+    {
+      "candidateReleaseSetSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "evidenceUrl": "https://example.invalid/viewer-compatibility-evidence.json",
+      "id": "viewer-compatibility",
+      "issue": 1307,
+      "status": "passed"
+    }
+  ],
+  "schemaVersion": "bitriver.stable-promotion/v1",
+  "stableTag": "v1.2.3"
+}
