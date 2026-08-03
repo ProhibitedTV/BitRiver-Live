@@ -106,8 +106,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The private `.env` returned to SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
       both temporary env files were removed, and zero Compose-labeled containers
-      or volumes remain. PR failure/pass, merge, protection, and canary evidence
-      are still pending.
+      or volumes remain. Merge, protection, and canary evidence are still
+      pending.
     - Draft PR #1363 intentionally omitted its risky-path scorecard. Run
       `30786811135` passed Ubuntu `test-all`, docs consistency, ShellCheck,
       macOS/Windows Go, and all quickstart entrypoint checks; `Merge gate` then
@@ -115,6 +115,16 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `merge-gate-30786811135-1` (ID `8845612070`). Log review found a literal
       newline escape in the failure list; the formatter and fixture now prevent
       that cosmetic regression before the corrected PR run.
+    - Corrected PR run `30787193752` passed every selected child: Ubuntu
+      `test-all`, docs consistency, ShellCheck, macOS/Windows Go, and all three
+      quickstart entrypoint checks. Unrelated viewer, monitoring, image,
+      workflow-consistency, and wizard jobs skipped as selected; `Merge gate`
+      classified each result and passed the required scorecard.
+    - The successful aggregate retained two reports for 14 days as 626-byte
+      artifact `merge-gate-30787193752-1` (ID `8845751471`, SHA-256
+      `f24e03d4c599679bc504431797ee35a8b1173385df56c2bbfe99b7948f7882f7`).
+      Its Markdown table ends in `Result: PASS` and contains no literal newline
+      escape regression.
 
 ## Scoped change: branch hygiene and release CI consolidation
 
