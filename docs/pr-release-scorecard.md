@@ -2,7 +2,10 @@
 
 Every PR should make its release risk reviewable without reconstructing the change from commit history. The PR template contains a release scorecard for that purpose.
 
-The scorecard is part of Gate 5 in `docs/release-gates.md`. It is advisory by default, but reviewers should treat missing or inconsistent evidence as blocking for runtime, deployment, auth, data, migration, release packaging, or operator workflow changes.
+The scorecard is part of Gate 5 in `docs/release-gates.md`. `Merge gate` runs the
+validator for every pull request. Warnings are advisory for docs/planning-only
+paths and blocking when medium/high risk is selected or the diff touches code,
+CI, dependencies, deployment, release packaging, or operator workflow paths.
 
 ## What to fill in
 
@@ -39,5 +42,18 @@ Use strict mode when a workflow or release manager should fail on warnings:
   --changed-files .tmp/changed-files.txt \
   --strict
 ```
+
+Use the same risk-aware mode as pull-request CI with:
+
+```bash
+./scripts/check-pr-release-scorecard.sh \
+  --body pr-body.md \
+  --changed-files .tmp/changed-files.txt \
+  --strict-if-risky
+```
+
+Do not paste pull-request body text into shell source. CI reads the body from
+`GITHUB_EVENT_PATH`, writes it to a temporary file, and passes only that path to
+the validator.
 
 The validator checks for required scorecard sections, selected classification/risk/impact fields, evidence for medium/high-risk changes, and obvious changed-file mismatches such as migration changes without `data/migrations` selected.

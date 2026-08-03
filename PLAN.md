@@ -1,5 +1,54 @@
 # PLAN
 
+## Current scope - enforce one aggregate merge gate (#1302, #1270) (2026-08-03)
+
+- Preserve the consolidated, path-filtered reusable workflow graph. Add one
+  always-run `Merge gate` that evaluates the result of every existing child
+  job against the changed-file outputs and fails on failed, cancelled, or
+  unexpectedly skipped required work. Do not duplicate child test commands.
+- Reuse `scripts/check-pr-release-scorecard.sh`. Keep low-risk/docs-only
+  scorecards advisory, but make the scorecard blocking when changed paths
+  automatically indicate workflow, deployment, migration, auth/security, or
+  release/operator risk. Publish the scorecard and aggregate table as a
+  human-readable Actions artifact and job summary.
+- Live GitHub audit found no rulesets and `main` is not protected. After the
+  implementation PR and exact merged-main CI pass, require the stable `Merge
+  gate` context with strict up-to-date status, pull requests, conversation
+  resolution, admin enforcement, and no force pushes or deletion.
+- Demonstrate the aggregate failure locally and in the implementation PR before
+  correcting its scorecard. After protection is active, use a disposable
+  intentionally failing canary PR to prove the protected branch blocks a bad
+  aggregate result, then close it and delete its branch.
+- This slice completes #1270's gate clarity/artifact boundary and the merge half
+  of #1302. Stable-promotion enforcement remains explicitly blocked on #1301's
+  immutable release-set manifest and is not reimplemented here.
+
+### Risks and boundaries
+
+- GitHub reports conditional jobs as `skipped` both when they are correctly
+  irrelevant and when an upstream required job fails. Expected-job decisions
+  must therefore come from the changed-file outputs, while every unexpected
+  failure/cancellation blocks regardless of path selection.
+- The aggregate job must run with `if: always()` and depend on every child job;
+  otherwise GitHub can skip the aggregate precisely when it is most needed.
+- PR body content is untrusted input. Read it from `GITHUB_EVENT_PATH`, never
+  interpolate it into shell source, and keep workflow permissions read-only.
+- Do not change the deployment contract, release artifacts, runtime behavior,
+  private root `.env`, or the six user-owned untracked deployment/runtime paths.
+
+### Test and rollout plan
+
+- Add fixture coverage for docs-only success, selected-job success, required
+  skip, child failure/cancellation, unexpected extra failure, and scorecard
+  failure; add workflow contracts for complete `needs`, `if: always()`, stable
+  job naming, full-history checkout, summary, and pinned artifact upload.
+- Extend scorecard tests for advisory low-risk and blocking risky-path modes.
+  Run shell syntax/ShellCheck, YAML parsing, pinned Go script tests, CI contract,
+  committed-secret guard, `git diff --check`, and literal `./scripts/verify.sh`.
+- Require an intentional red aggregate run followed by corrected full PR CI,
+  exact merged-main CI, live branch-protection API verification, and a blocked
+  disposable canary PR before calling the merge enforcement active.
+
 ## Current scope - remove tracked generated Go caches (2026-08-02)
 
 - Remove the four root `.gocache-*` directories that were accidentally added

@@ -3,12 +3,12 @@ set -Eeuo pipefail
 
 body_file=""
 changed_files=""
-strict=0
+strict_mode="advisory"
 warnings=()
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/check-pr-release-scorecard.sh --body PR_BODY.md [--changed-files FILE] [--advisory|--strict]
+Usage: ./scripts/check-pr-release-scorecard.sh --body PR_BODY.md [--changed-files FILE] [--advisory|--strict|--strict-if-risky]
 
 Validates the PR release scorecard fields used by .github/pull_request_template.md.
 Default mode is advisory: warnings are printed but do not fail the command.
@@ -18,6 +18,9 @@ Options:
   --changed-files FILE   Optional newline-delimited changed-file list.
   --advisory             Print warnings and exit 0. This is the default.
   --strict               Exit 1 when warnings are found.
+  --strict-if-risky      Exit 1 on warnings only when medium/high risk is
+                         selected or changed paths affect code, CI, deployment,
+                         dependencies, packaging, or operator workflows.
   -h, --help             Show this help.
 USAGE
 }
@@ -60,6 +63,10 @@ changed_matches() {
   local pattern="$1"
   [[ -n "$changed_files" && -s "$changed_files" ]] || return 1
   grep -Eiq "$pattern" "$changed_files"
+}
+
+changed_files_require_strict() {
+  changed_matches '(^|/)(\.github/|cmd/|internal/|scripts/|deploy/|third_party/|web/viewer/)|(^|/)(go\.mod|go\.sum|\.go-version|package\.json|package-lock\.json|Dockerfile[^/]*)$'
 }
 
 validate_required_shape() {
@@ -147,9 +154,8 @@ validate_changed_file_mismatches() {
     add_warning "Changed release/operator-path files should select 'release packaging' or 'operator workflow'."
   fi
 
-  if has_checked_label "low" &&
-    changed_matches '(^|/)(deploy/docker-compose\.yml|deploy/\.env\.example|deploy/migrations/|deploy/ome/|\.env$)|auth|security|credential|secret|release|quickstart'; then
-    add_warning "Low risk looks inconsistent with deployment, migration, auth/security, or release-path changes."
+  if has_checked_label "low" && changed_files_require_strict; then
+    add_warning "Low risk looks inconsistent with code, workflow, dependency, deployment, security, or release-path changes."
   fi
 }
 
@@ -172,11 +178,15 @@ while (($# > 0)); do
       shift 2
       ;;
     --strict)
-      strict=1
+      strict_mode="strict"
+      shift
+      ;;
+    --strict-if-risky)
+      strict_mode="risk"
       shift
       ;;
     --advisory)
-      strict=0
+      strict_mode="advisory"
       shift
       ;;
     -h|--help)
@@ -215,7 +225,13 @@ validate_changed_file_mismatches
 if ((${#warnings[@]} > 0)); then
   echo "PR release scorecard warnings:"
   printf ' - %s\n' "${warnings[@]}"
-  if ((strict)); then
+  if [[ "$strict_mode" == "strict" ]]; then
+    echo "Strict mode: warnings fail this command."
+    exit 1
+  fi
+  if [[ "$strict_mode" == "risk" ]] &&
+    { has_checked_any "medium" "high" || changed_files_require_strict; }; then
+    echo "Risk-triggered strict mode: warnings fail this command."
     exit 1
   fi
   echo "Advisory mode: warnings do not fail this command."

@@ -16,6 +16,31 @@ coverage.
 
 If no usable Python 3 interpreter is available, `./scripts/verify.sh` fails fast with a clear prerequisite error before running the verify sequence.
 
+## Pull-request merge enforcement
+
+The CI orchestrator keeps expensive checks path-selective, then always runs one
+stable `Merge gate`. That job compares every child result with the complete
+changed-file classification. A relevant job that failed, was cancelled, or was
+unexpectedly skipped fails the aggregate; an unrelated skipped job is reported
+as an expected skip. `Merge gate` is the required branch-protection context, so
+contributors do not need to infer safety from a changing list of child jobs.
+
+The gate also validates the pull-request release scorecard. Warnings remain
+advisory for docs/planning-only paths. They become blocking when the scorecard
+selects medium/high risk or the diff touches code, CI, dependencies,
+deployment, packaging, or operator workflow paths.
+
+Run the focused aggregate fixtures locally with:
+
+```bash
+bash ./scripts/test-ci-merge-gate.sh
+```
+
+GitHub writes the result table to the job summary and retains
+`merge-gate-<run>-<attempt>` for 14 days. This merge enforcement does not prove
+or authorize stable release promotion; immutable promotion remains a separate
+release gate.
+
 ## Test taxonomy and single entrypoints
 
 Use these category entrypoints from the repository root:

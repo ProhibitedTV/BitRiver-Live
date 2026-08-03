@@ -1,5 +1,114 @@
 # TASKS
 
+## Scoped change: aggregate merge gate and main protection (#1302, #1270)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit current CI enforcement and protection state
+  - Acceptance criteria:
+    - The reusable job graph, scorecard behavior, gate documentation, live
+      rulesets/protection, and related issue contracts are inspected read-only.
+    - `PLAN.md` records scope, risks, exclusions, test plan, and rollout before
+      workflow implementation.
+  - Check:
+    - `ci.yml` has thirteen conditional/always-on child results but no aggregate
+      job. Run `30784385158` demonstrated that GitHub could report success when
+      the first 3,000 changed files hid every substantive selector.
+    - The scorecard validator exists but is not wired into CI; it is advisory by
+      default and strict for every warning only when manually requested.
+    - GitHub reports zero repository rulesets and `main` branch protection
+      returns `404 Branch not protected`. Issue #1270 assigns remaining gate
+      clarity/artifact work to #1302; #1302's stable-promotion half still
+      depends on #1301's immutable release-set manifest.
+
+- [x] Task 2 - Add deterministic aggregate-result and scorecard fixtures
+  - Acceptance criteria:
+    - One shell guard evaluates always-required and path-required child results,
+      rejects failed/cancelled/unexpectedly skipped work, and emits a concise
+      Markdown table without running child tests itself.
+    - Fixtures cover docs-only success, selected success, required skip,
+      child failure/cancellation, unexpected failure, and scorecard failure.
+    - Scorecard validation gains a tested risky-path mode that remains advisory
+      for low-risk/docs-only paths and blocks sensitive workflow/operator paths.
+  - Check:
+    - Added `check-ci-merge-gate.sh`, which derives the cross-platform Go
+      expectation from Go/deploy selectors, classifies every child result, and
+      writes the same secret-free Markdown table to stdout, the job summary,
+      and an optional artifact path.
+    - The guard rejects required skips, failures, cancellations, missing/invalid
+      booleans, and failures from unexpectedly executed jobs while allowing
+      correctly skipped or extra-successful non-required work.
+    - Added `--strict-if-risky` to the existing scorecard validator. Missing
+      scorecards remain advisory for docs-only paths but block when medium/high
+      risk is selected or code, CI, dependencies, deployment, or operator paths
+      change; low-risk declarations on those paths now warn.
+    - Linux shell syntax, six aggregate result scenarios, advisory/strict risky
+      scorecard fixtures, and pinned ShellCheck 0.11.0 all pass.
+
+- [x] Task 3 - Wire one always-run merge gate and evidence artifact
+  - Acceptance criteria:
+    - `Merge gate` needs every child, uses `if: always()`, and passes every
+      changed-file expectation/result into the focused guard.
+    - PR body input is read safely from the event file; the scorecard and gate
+      table reach the job summary and a pinned artifact upload.
+    - Static workflow regressions prevent missing needs, unstable naming,
+      shallow checkout, unpinned upload, or aggregate bypass.
+  - Check:
+    - Added one `Merge gate` with `if: always()` and explicit `needs` for all
+      twelve child jobs. It consumes all eleven relevant selector outputs and
+      every child result, including the macOS/Windows matrix aggregate.
+    - The PR scorecard step checks out full history, obtains body text from
+      `GITHUB_EVENT_PATH`, diffs the exact PR SHAs, and records its outcome
+      without interpolating untrusted text into shell source. The aggregate
+      makes that outcome blocking on PRs.
+    - The gate writes a job summary and uploads the merge/scorecard reports for
+      14 days with pinned `actions/upload-artifact` v7.0.1. On non-PR main pushes
+      the scorecard is correctly unrequired/skipped.
+    - Added a static Go contract covering stable name, unconditional execution,
+      complete needs/results/selectors, full checkout, safe scorecard input,
+      aggregate invocation, and pinned fail-closed artifact upload.
+    - CI workflow YAML parsing, pinned Go 1.26.5 `go test ./scripts`, CI policy,
+      aggregate fixtures, shell syntax, pinned ShellCheck 0.11.0, and
+      `git diff --check` pass.
+
+- [x] Task 4 - Document blocking, conditional, advisory, and manual gates
+  - Acceptance criteria:
+    - Release-gate, testing, scorecard, contributing, and security guidance name
+      the stable required check and explain expected skips and break-glass use.
+    - Documentation does not claim stable-promotion enforcement before #1301.
+  - Check:
+    - Contributor, testing, scorecard, and release-gate docs now identify
+      `Merge gate` as the single stable required context, explain path-selective
+      expected skips, and document risk-triggered scorecard enforcement plus
+      the retained report artifact.
+    - Security policy records PR/current-check/conversation/admin enforcement,
+      no force/delete, and a narrow audited break-glass procedure with immediate
+      restoration and follow-up evidence.
+    - Documentation explicitly limits this control to merges; it does not claim
+      stable promotion before #1301 supplies the immutable release-set input.
+    - Markdown link tests/check, installer wording, generated contract freshness,
+      scorecard fixtures, and `git diff --check` pass.
+
+- [-] Task 5 - Prove, merge, protect, and negatively demonstrate enforcement
+  - Acceptance criteria:
+    - Focused checks, literal `./scripts/verify.sh`, intentional failing PR
+      evidence, corrected PR CI, and exact merged-main CI pass.
+    - Live `main` protection requires a current successful `Merge gate`, PRs,
+      conversation resolution, admin enforcement, and rejects force/delete.
+    - A disposable failing canary PR is blocked, closed, and its branch deleted;
+      #1270 is closed with evidence while #1302 remains open for #1301.
+  - Check:
+    - Literal `./scripts/verify.sh` passed in 126.4 seconds with the existing
+      Windows Go 1.26.5 toolchain and a temporary env copy upgraded through the
+      supported CLI. It covered the new fixtures, all Go packages, Postgres
+      migrations, Compose rendering, healthy SRS/OME/transcoder/API/viewer
+      smoke, and clean teardown.
+    - The private `.env` returned to SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
+      both temporary env files were removed, and zero Compose-labeled containers
+      or volumes remain. PR failure/pass, merge, protection, and canary evidence
+      are still pending.
+
 ## Scoped change: branch hygiene and release CI consolidation
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
