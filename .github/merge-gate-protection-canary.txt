@@ -1,0 +1,2 @@
+Temporary negative-control file for branch-protection verification.
+This commit is intentionally not release-ready and must never be merged.
