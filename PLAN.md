@@ -89,6 +89,17 @@
   PR and exact-main run, and redispatch the same immutable RC13 inputs. Treat
   `30822618916` as a provenance-stage compatibility failure only; its sanitized
   artifact may be inspected, but it is not clean-host lifecycle evidence.
+- Run `30824712866` then proved signed provenance, public package installation,
+  and disabled systemd staging. Env validation and `bitriver-host doctor`
+  passed, but the digest-render assertion omitted disabled Compose profiles and
+  therefore could not see the signed `alpine:3`/`alpine:3.19` references used
+  only by the optional `postgres-host` and `srs-api` services. Render the audit
+  with `docker compose --profile '*' ... config --images` so all canonical
+  services are checked without enabling those profiles during activation.
+- Add a contract assertion for all-profile digest rendering, repeat focused and
+  literal gates, protected PR/main validation, and redispatch exact RC13. Treat
+  `30824712866` as package/preflight evidence only, not activation or lifecycle
+  evidence; its failure artifact and successful cleanup remain diagnostic.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 
