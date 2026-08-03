@@ -80,14 +80,19 @@ require_tool() {
   exit 1
 }
 
+PYTHON_RUNNER=()
+
 require_python_runner() {
   if python3 -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_RUNNER=(python3)
     return 0
   fi
   if py -3 -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_RUNNER=(py -3)
     return 0
   fi
   if python -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_RUNNER=(python)
     return 0
   fi
 
@@ -255,6 +260,8 @@ run_step "Architecture dependency direction check" ./scripts/check-architecture-
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
 require_python_runner
+run_step "Markdown local-link checker tests" "${PYTHON_RUNNER[@]}" -m unittest scripts/check_doc_links_test.py
+run_step "Markdown local-link check" "${PYTHON_RUNNER[@]}" scripts/check_doc_links.py
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
 run_step "Production third-party digest gate" ./scripts/require-image-digests.sh --env-file .env
 

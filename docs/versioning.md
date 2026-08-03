@@ -21,7 +21,8 @@ A change is breaking and requires a **major** bump when it does any of the follo
 
 ## Upgrade compatibility promise
 
-- Supported upgrades are defined in `docs/upgrades.md` and validated by `go run ./cmd/bitriver upgrade-plan --to <tag>`.
+- Supported upgrades are defined in `docs/upgrades.md` and validated by
+  `go run ./cmd/bitriver upgrade-plan --compose-file deploy/docker-compose.yml --env-file .env --target <tag>`.
 - N-1 minor hops only; no skipped majors.
 - Major upgrades must include explicit migration and rollback guidance.
 

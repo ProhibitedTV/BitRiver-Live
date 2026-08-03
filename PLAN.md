@@ -1,6 +1,42 @@
 # PLAN
 
-## Current scope - stamp exact image tags into release artifacts (2026-07-31)
+## Current scope - first-time installer documentation refresh (2026-07-31)
+
+- Treat published prerelease `v1.2.3-rc.12` as the current consumer artifact
+  baseline. Its 33-asset release is checksum-complete; downloaded Linux amd64
+  launcher and `.deb` payloads contain the exact RC12 tag for all five
+  first-party images; retained scans and the eight-stage pull-only product gate
+  passed at commit `3a9572f0`.
+- Rewrite the README for two clear audiences: a Windows user evaluating the
+  full stack with Docker Desktop from a checkout, and an Ubuntu 24.04 amd64
+  operator installing the published package/archive for an XOA VM and Nginx
+  Proxy Manager deployment. Lead with outcomes, prerequisites, exact commands,
+  first-stream flow, and links to deeper operator runbooks.
+- Keep the two committed screenshots because they are provenance-known captures
+  of the shipped viewer; remove stale release-availability language, malformed
+  punctuation, unsupported GitHub Pages guidance, and repeated source-only or
+  planned-`rc.1` copy. Prefer concise workflow diagrams/text over promotional
+  imagery that is not runtime evidence.
+- Align quickstart, Ubuntu install, viewer deployment, release index/notes,
+  changelog, production status/release, operations, and support navigation with
+  the shipped RC12 commands and assets. Strengthen documentation consistency
+  checks so the most damaging pre-release-only wording cannot return.
+
+### Documentation evidence boundary
+
+- Say exactly what RC12 proves: Docker Desktop source verification on this
+  Windows host, package install/remove acceptance on Ubuntu 24.04/Debian/Rocky,
+  anonymous five-image pulls, OME-backed ingest/live playback, offline
+  transition, chat/moderation, and VOD playback in the tagged product gate.
+- Do not claim a clean XOA VM installation, Nginx Proxy Manager browser path,
+  host reboot recovery, or repeated OME restart/media recovery has been
+  exercised. Present the existing runbooks and acceptance commands for those
+  remaining operator checks.
+- Run focused wording/link/Markdown/YAML checks, the documentation consistency
+  gate, `git diff --check`, and literal `./scripts/verify.sh`; then require PR
+  CI and exact merged-main CI before updating the public repository front door.
+
+## Previous scope - stamp exact image tags into release artifacts (2026-07-31)
 
 - Preserve immutable published prerelease `v1.2.3-rc.11` at commit
   `96e99fd6`. Its workflow, checksums, images, pull-only product gate, and

@@ -776,7 +776,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       activation; documentation refresh is paused until a corrected immutable
       candidate is published and re-downloaded.
 
-- [-] Task 11a - Stamp and prove exact image tags in release artifacts
+- [x] Task 11a - Stamp and prove exact image tags in release artifacts
   - Acceptance criteria:
     - The canonical staging helper accepts and validates an optional release
       tag, then changes only the staged `.env.example` image-tag values.
@@ -818,8 +818,24 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       and macOS quickstart jobs; the assertion now uses an escaped double-
       quoted pattern so the literal contract remains intact without a lint
       suppression.
+    - The corrected PR run `30671401731` passed every required job. PR #1353
+      squash-merged as exact main commit `3a9572f0`, and exact-main CI run
+      `30671758215` passed the full matrix before the tag was created.
+    - Annotated immutable tag `v1.2.3-rc.12` triggered release run
+      `30672085853`; every producer, hosted MSI, three Linux package-acceptance
+      hosts, five image/SBOM publishers, multi-architecture viewer manifest,
+      pull-only OME-backed product gate, artifact scan, and atomic publisher
+      passed.
+    - The public RC12 prerelease has 33 assets and 32 checksum entries covering
+      every other asset. Retained publication evidence binds both passed scans
+      to tag `v1.2.3-rc.12` and commit `3a9572f0`.
+    - Independently downloaded checksum-verified Linux amd64 launcher and
+      `.deb` payloads were extracted. Each contains exactly five first-party
+      tag assignments at `v1.2.3-rc.12` with no stale stable value. Retained
+      product evidence passed all eight stages, including RTMP live state,
+      decoded live media, offline transition, chat/moderation, and VOD.
 
-- [ ] Task 12 - Rewrite README around the consumer golden path
+- [x] Task 12 - Rewrite README around the consumer golden path
   - Acceptance criteria:
     - Lead with the product, honest support boundary, prerequisites, and two
       visible install choices: Docker Desktop evaluation and Ubuntu 24.04
@@ -828,8 +844,22 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       upgrade, backup, and recovery entry points without duplicating runbooks.
     - Replace stale promotional imagery with verified current product captures
       or concise workflow diagrams.
+  - Check:
+    - README now leads with the product, a linked RC12 prerelease badge/status,
+      and provenance-known captures of the shipped viewer instead of generated
+      promotional art.
+    - A consumer choice table and copy-paste paths cover native PowerShell plus
+      Docker Desktop evaluation and checksum-verified Ubuntu 24.04 amd64
+      package installation, with the two-phase activation boundary explicit.
+    - Creator setup, first OBS broadcast, same-origin playback, the SRS/API/OME
+      mapping, NPM routing, RTMP/UDP exposure, operations, recovery, support,
+      and contribution entry points are concise and link to deeper runbooks.
+    - RC12's actual package/image/product proof is separated from pending clean
+      XOA VM, NPM browser, reboot, and repeated OME recovery evidence.
+    - Installer wording checks and `git diff --check` pass; all 32 README local
+      Markdown link/image targets resolve.
 
-- [ ] Task 13 - Align install, operations, release, and support documentation
+- [x] Task 13 - Align install, operations, release, and support documentation
   - Acceptance criteria:
     - Quickstart, Ubuntu/XOA/Nginx Proxy Manager, production release,
       operations, security, architecture, troubleshooting, upgrade/backup, and
@@ -838,8 +868,26 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       diagnostics and bounded recovery remain explicit.
     - Stale/no-release wording and contradictory source-only paths are removed
       or clearly labeled for contributors.
+  - Check:
+    - Quickstart and Ubuntu guides now link the public RC12 assets, use exact
+      package/download names, distinguish Docker Desktop/source evaluation
+      from boot-managed hosting, and retain the clean-host/NPM/reboot boundary.
+    - Production status/release, operations, single-host sizing, reverse proxy,
+      upgrades, support, testing, dependency policy, versioning, and the
+      release-note template now use shipped commands and current Go 1.26.5,
+      Node 24, Next.js 16.2.11, package, and evidence contracts.
+    - Added a concise published RC12 note and changelog record; the stable-line
+      draft and release index now distinguish the candidate from future stable
+      promotion. Removed the nonexistent GitHub Pages deployment path.
+    - The documentation guard now rejects old no-release claims, superseded RC
+      examples, Pages action claims, missing current-candidate references, and
+      missing/empty real viewer captures.
+    - Installer wording, generated contract freshness, Compose contract
+      invariants, and `git diff --check` pass. All 102 local targets across 22
+      changed Markdown files resolve, and the private root `.env` was restored
+      byte-for-byte after Compose validation.
 
-- [ ] Task 14 - Verify and publish the repository refresh
+- [-] Task 14 - Verify and publish the repository refresh
   - Acceptance criteria:
     - Link/reference/wording regressions, generated docs, Markdown checks,
       required repository verification, PR CI, and exact merged-main CI pass.
@@ -847,6 +895,34 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       against GitHub before merge.
     - The handoff distinguishes proven Docker Desktop/tag/package behavior from
       still-pending clean XOA/NPM/reboot/repeated OME recovery evidence.
+  - Check:
+    - The new tracked-Markdown link checker and its three unit tests pass across
+      85 public Markdown files; installer wording, generated contract freshness,
+      13 workflow YAML parses, CI contract checks, ShellCheck, and
+      `go test ./scripts -count=1 -timeout=120s` also pass.
+    - The dependency-policy guard caught the removed review deadline during this
+      pass; the current zero-high/critical Next.js override disposition now keeps
+      its required 2026-08-12 review date.
+    - The first full-gate attempt exposed missing Python-runner assignment in
+      `scripts/verify.sh`; the launcher is now retained for `python3`, `py -3`,
+      and `python`, with a Go workflow-contract regression. Focused Go,
+      `bash -n`, CI-contract, and ShellCheck validation pass.
+    - Literal `./scripts/verify.sh` passed in 153 seconds, including all Go
+      packages, PostgreSQL migrations, Compose rendering, healthy SRS,
+      authenticated OME token/health, transcoder, API, and viewer smoke. It left
+      no BitRiver containers, and the private root `.env` was restored to SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+    - Both README images were visually inspected at original resolution and are
+      real shipped-viewer captures.
+    - GitHub rendered the branch README successfully with all three badges, both
+      real screenshots, the install table and code blocks, the Mermaid media
+      flow, and repository-relative navigation intact. The public repository
+      About description and topics now match the one-host Compose/Ubuntu support
+      boundary.
+    - PR #1354 CI run `30674183171` passed the Ubuntu `test-all` gate, Windows
+      and macOS Go tests, macOS/Windows/Ubuntu quickstart entrypoint checks,
+      Docs consistency, ShellCheck, changed-file detection, and the committed
+      secret guard. Exact merged-main CI remains pending merge.
 
 ## Scoped change: first public release-candidate publication gate (#1297)
 

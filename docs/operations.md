@@ -9,7 +9,15 @@ For baseline hardening posture, exposure boundaries, and rotation checklists, se
 
 ## Preflight before production changes
 
-Run the built-in preflight before first deployment and before major upgrades:
+For an installed Ubuntu package, run the host-manager preflight before first
+activation and before upgrades:
+
+```bash
+sudo bitriver-host doctor
+sudo bitriver-host status
+```
+
+From a source checkout, run the built-in preflight directly:
 
 ```bash
 go run ./cmd/bitriver doctor --compose-file deploy/docker-compose.yml --env-file ./.env

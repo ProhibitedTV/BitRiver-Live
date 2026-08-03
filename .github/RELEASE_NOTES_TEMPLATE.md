@@ -8,7 +8,7 @@
 - Target: `vX.Y.Z`
 
 ## Upgrade notes
-1. Run `go run ./cmd/bitriver upgrade-plan --env-file .env --to vX.Y.Z --check-schema --current-schema <current_schema_version>`.
+1. Run `go run ./cmd/bitriver upgrade-plan --compose-file deploy/docker-compose.yml --env-file .env --target vX.Y.Z`.
 2. Complete required pre-upgrade backups (DB dump + volumes + `.env`).
 3. Review [`docs/upgrades.md`](../docs/upgrades.md) and call out any release-specific steps/operators actions.
 
@@ -43,3 +43,6 @@ _or_
 - [ ] `deploy/check-env.sh`
 - [ ] `./scripts/render-ome-config.sh --check`
 - [ ] `go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env`
+- [ ] Published `CHECKSUMS.txt` covers every other release asset exactly once.
+- [ ] Downloaded package/archive defaults reference the exact release tag for all five first-party images.
+- [ ] Pull-only tagged product evidence covers real ingest, decoded playback, offline transition, chat/moderation, and VOD.
