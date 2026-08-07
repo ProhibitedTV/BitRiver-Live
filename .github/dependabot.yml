@@ -54,5 +54,3 @@ updates:
           - "patch"
     commit-message:
       prefix: "deps(viewer)"
-
-# CI refresh after release scorecard update
