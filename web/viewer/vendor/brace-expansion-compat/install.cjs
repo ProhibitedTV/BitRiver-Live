@@ -3,7 +3,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const expectedVersion = '5.0.8'
+const expectedVersion = '5.0.9'
 const marker = '// BitRiver legacy CommonJS compatibility'
 
 function* packageDirectories(nodeModulesDirectory) {
