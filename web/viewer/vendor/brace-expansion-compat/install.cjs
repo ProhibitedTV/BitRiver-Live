@@ -75,3 +75,5 @@ for (const packagePath of packagePaths) {
 console.log(
   `patched ${packagePaths.length} brace-expansion ${expectedVersion} CommonJS install(s)`,
 )
+
+// temporary scorecard refresh marker
