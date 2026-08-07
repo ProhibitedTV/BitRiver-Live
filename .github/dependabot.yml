@@ -54,5 +54,3 @@ updates:
           - "patch"
     commit-message:
       prefix: "deps(viewer)"
-
-# Temporary CI refresh marker; reverted in the next commit.
