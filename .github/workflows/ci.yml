@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  refresh-js-yaml-lock:
+  refresh-viewer-security-lock:
     if: github.event.pull_request.head.ref == 'fix/js-yaml-audit-2026-08-07'
     runs-on: ubuntu-latest
     steps:
@@ -26,35 +26,55 @@ jobs:
           cache: npm
           cache-dependency-path: web/viewer/package-lock.json
 
-      - name: Refresh patched js-yaml lock entries
+      - name: Refresh high-severity viewer dependency patches
         working-directory: web/viewer
         env:
           NEXT_TELEMETRY_DISABLED: '1'
         run: |
           set -euo pipefail
-          npm update js-yaml --package-lock-only --ignore-scripts
+          npm install --save-dev --save-exact brace-expansion@5.0.9 --package-lock-only --ignore-scripts
+          npm update js-yaml nanoid brace-expansion --package-lock-only --ignore-scripts
           node - <<'NODE'
+          const fs = require('fs')
+          const compat = 'vendor/brace-expansion-compat/install.cjs'
+          let source = fs.readFileSync(compat, 'utf8')
+          if (source.includes("const expectedVersion = '5.0.8'")) {
+            source = source.replace("const expectedVersion = '5.0.8'", "const expectedVersion = '5.0.9'")
+            fs.writeFileSync(compat, source)
+          } else if (!source.includes("const expectedVersion = '5.0.9'")) {
+            throw new Error('unexpected brace-expansion compatibility guard')
+          }
+
           const lock = require('./package-lock.json')
-          const versions = Object.entries(lock.packages)
+          const yamlVersions = Object.entries(lock.packages)
             .filter(([path]) => /(^|\/)js-yaml$/.test(path))
             .map(([path, pkg]) => `${path || '<root>'}: ${pkg.version}`)
-          console.log(versions.join('\n'))
-          if (!versions.some(v => v.endsWith(': 3.15.1')) || !versions.some(v => v.endsWith(': 4.3.1'))) {
+          console.log('js-yaml:', yamlVersions.join(', '))
+          if (!yamlVersions.some(v => v.endsWith(': 3.15.1')) || !yamlVersions.some(v => v.endsWith(': 4.3.1'))) {
             throw new Error('expected patched js-yaml 3.15.1 and 4.3.1 lock entries')
           }
+          const brace = lock.packages['node_modules/brace-expansion']?.version
+          if (brace !== '5.0.9') throw new Error(`expected brace-expansion 5.0.9, got ${brace}`)
+          const nanoid = lock.packages['node_modules/nanoid']?.version
+          const parts = String(nanoid || '').split('.').map(Number)
+          if (parts.length < 3 || parts[0] < 3 || (parts[0] === 3 && (parts[1] < 3 || (parts[1] === 3 && parts[2] < 17)))) {
+            throw new Error(`expected nanoid >=3.3.17, got ${nanoid}`)
+          }
+          console.log(`brace-expansion: ${brace}; nanoid: ${nanoid}`)
           NODE
+          npm ci
           npm audit --audit-level=high
 
-      - name: Restore normal CI and commit generated lockfile
+      - name: Restore normal CI and commit generated security update
         run: |
           set -euo pipefail
           git checkout origin/main -- .github/workflows/ci.yml
-          git add .github/workflows/ci.yml web/viewer/package-lock.json
+          git add .github/workflows/ci.yml web/viewer/package.json web/viewer/package-lock.json web/viewer/vendor/brace-expansion-compat/install.cjs
           if git diff --cached --quiet; then
-            echo 'No security lockfile change produced'
+            echo 'No security dependency change produced'
             exit 1
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(deps): refresh js-yaml security patches'
+          git commit -m 'fix(deps): refresh viewer security patches'
           git push origin HEAD:fix/js-yaml-audit-2026-08-07
