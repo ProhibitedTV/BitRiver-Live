@@ -1,5 +1,6 @@
 'use strict'
 
+// CI synchronize marker; reverted in the next commit.
 const fs = require('node:fs')
 const path = require('node:path')
 
