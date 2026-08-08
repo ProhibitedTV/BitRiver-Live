@@ -2,6 +2,7 @@
   "name": "bitriver-viewer",
   "private": true,
   "version": "0.1.0",
+  "ciSync": "scorecard-refresh",
   "packageManager": "npm@11.6.2",
   "engines": {
     "node": ">=24 <25",
