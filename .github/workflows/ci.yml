@@ -19,38 +19,38 @@ jobs:
       - name: Set up viewer Node toolchain
         uses: ./.github/actions/setup-node-viewer
 
-      - name: Diagnose ESLint 10 parser compatibility
+      - name: Generate and verify ESLint 10 migration
         shell: bash
         run: |
           set -euo pipefail
           cd web/viewer
-          npm install --package-lock-only --ignore-scripts --save-dev --save-exact eslint@10.8.0 @eslint/compat@2.1.0
+          npm install --package-lock-only --ignore-scripts --save-dev --save-exact eslint@10.8.0 @eslint/compat@2.1.0 espree@11.2.0
           npm ci
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import { ESLint } from 'eslint';
-          const eslint = new ESLint();
-          for (const file of ['__tests__/authDialog.test.tsx', 'eslint.config.mjs']) {
-            const config = await eslint.calculateConfigForFile(file);
-            const parser = config.languageOptions?.parser;
-            console.log(`PARSER ${file}:`, parser?.meta ?? '<no meta>');
-            if (parser?.parseForESLint) {
-              const source = fs.readFileSync(file, 'utf8');
-              const parsed = parser.parseForESLint(source, {
-                ...(config.languageOptions?.parserOptions ?? {}),
-                filePath: file,
-                loc: true,
-                range: true,
-                tokens: true,
-                comment: true,
-              });
-              console.log(`SCOPE ${file}: addGlobals=${typeof parsed?.scopeManager?.addGlobals}`);
-            }
-          }
-          NODE
           npm run lint
+          npm test
+          npm run build
+          npm audit --audit-level=high
+          cd ../..
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/runtime_baseline_test.go')
+          text = path.read_text()
+          old = '`"eslint": "9.39.5"`'
+          new = '`"eslint": "10.8.0"`'
+          if old not in text:
+              raise SystemExit('expected ESLint baseline not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          go test ./scripts -count=1
 
       - name: Restore normal CI and commit migration
-        if: false
         shell: bash
-        run: echo diagnostic-only
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ci.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/ci.yml web/viewer/package.json web/viewer/package-lock.json web/viewer/eslint.config.mjs scripts/runtime_baseline_test.go
+          git commit -m "deps(viewer): migrate to ESLint 10.8.0"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
