@@ -1,8 +1,9 @@
+import { fixupConfigRules } from "@eslint/compat";
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 
 export default defineConfig([
-  ...nextVitals,
+  ...fixupConfigRules(nextVitals),
   {
     rules: {
       // React Compiler is not enabled; existing effect-driven loaders remain covered by unit and browser tests.
