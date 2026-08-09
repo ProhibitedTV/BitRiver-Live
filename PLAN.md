@@ -229,6 +229,27 @@
   image rendering, Docker Compose validation, focused Go/shell tests, literal
   `./scripts/verify.sh`, protected PR/exact-main CI, and then publish only the
   next unused immutable candidate (RC17) for another no-checkout qualification.
+- Protected PR run `31341715983` proved the ownership, docs, ShellCheck, native
+  arm64 viewer, and blocking image-scan gates, but the Ubuntu smoke exposed a
+  path-alias regression: `ome-config` still writes the generated file through
+  the now-read-only `/workspace` mount. The writable config-root mount already
+  aliases the same source-checkout or installed target, so make both renderers
+  write directly under `/etc/bitriver-live/deploy`, make the verifier read from
+  that same canonical mount, and keep templates/assets read-only. Add a static
+  Compose assertion plus a real source-checkout render that proves the host
+  generated path changes without granting workspace write access. Re-run the
+  focused renderer tests, literal verifier, and fresh protected CI; do not
+  weaken mounts or bypass the failed gate.
+- Automated review also identified that `scripts/quickstart.sh` derives process
+  UID/GID values before Compose reads the selected env file. Because process
+  values win over `--env-file`, an explicit operator owner in `.env` can be
+  silently replaced by the invoking account. Detect both supported env-file
+  flag forms without sourcing or printing the file; if either managed identity
+  key has a non-empty env-file value, export neither fallback and let Compose
+  plus `env validate` retain or reject the pair. Derive both current IDs only
+  when neither the process nor selected file declares an identity. Exercise
+  the wrapper with stubbed Go for default derivation and both explicit flag
+  forms, then rerun shell/static/full verification.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 

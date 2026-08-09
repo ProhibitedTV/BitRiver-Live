@@ -333,7 +333,7 @@ services:
     container_name: bitriver-srs-config
     working_dir: /workspace
     # Render via a sanitized tmpfs copy while keeping installed/source assets read-only.
-    command: ["bash", "-lc", "tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /tmp/render-srs-config.sh && REPO_ROOT=/workspace exec bash /tmp/render-srs-config.sh --env-file /workspace/.env --force"]
+    command: ["bash", "-lc", "tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /tmp/render-srs-config.sh && REPO_ROOT=/workspace OUTPUT_FILE=/etc/bitriver-live/deploy/srs/conf/srs.generated.conf exec bash /tmp/render-srs-config.sh --env-file /workspace/.env --force"]
     user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"
     volumes:
       - ..:/workspace:ro
@@ -359,7 +359,7 @@ services:
         GOSUMDB: ${GOSUMDB:-off}
     image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     working_dir: /workspace
-    command: ["ome", "render", "--env-file", "/workspace/.env", "--force"]
+    command: ["ome", "render", "--env-file", "/workspace/.env", "--output", "/etc/bitriver-live/deploy/ome/Server.generated.xml", "--force"]
     user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"
     volumes:
       - ..:/workspace:ro
@@ -378,7 +378,7 @@ services:
     image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     container_name: bitriver-ome-health-token-check
     working_dir: /workspace
-    command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/workspace/deploy/ome/Server.generated.xml"]
+    command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/etc/bitriver-live/deploy/ome/Server.generated.xml"]
     user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"
     volumes:
       - ..:/workspace:ro

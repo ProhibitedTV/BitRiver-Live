@@ -29,7 +29,7 @@ BitRiver Live has one canonical deployment path: an operator `.env` rendered/val
   - Ubuntu archive/package lifecycle around the canonical Compose stack.
   - Separate program assets (`/opt/bitriver-live`), secret configuration (`/etc/bitriver-live`), and durable state (`/var/lib/bitriver-live`). Installation leaves the service disabled until `configure` and `activate` pass.
   - The installer persists `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` plus the numeric non-root Docker operator in `BITRIVER_HOST_UID`/`BITRIVER_HOST_GID`; the packaged unit supplies the same values. Direct and systemd Compose paths therefore resolve the installed workspace's absolute `.env`, OME, and SRS symlinks and run only bind-writing services as the owner of private config/data. Older env files gain the managed keys on upgrade; duplicate active entries are rejected before any operator configuration is rewritten.
-  - `srs-config`, `ome-config`, and `ome-health-token-check` mount program assets read-only. The two renderers can write only the separate config-root bind, and the SRS helper executes its CRLF-sanitized copy from container tmpfs. No extra Linux capability is granted to bypass host permissions.
+  - `srs-config`, `ome-config`, and `ome-health-token-check` mount program assets read-only. The two renderers write generated output directly through `/etc/bitriver-live/deploy` on the separate config-root bind, and the verifier reads the same path; the SRS helper executes its CRLF-sanitized copy from container tmpfs. No extra Linux capability is granted to bypass host permissions.
 - Generated files (verified in repository code paths)
   - `deploy/ome/Server.generated.xml`
     - Generated/validated by `cmd/bitriver ome render` and used by the `ome` container mount.

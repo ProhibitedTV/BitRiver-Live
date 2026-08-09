@@ -185,8 +185,9 @@ the selected Docker operator's numeric `BITRIVER_HOST_UID`/
 `BITRIVER_HOST_GID` in `bitriver.env`. The packaged unit supplies the same
 values. Compose can therefore map the private config directory into its three
 short-lived config helpers and run only config/data bind-writing services as
-the host owner. Program assets stay read-only in those helpers; only the
-separate config bind is writable during rendering. These values are
+the host owner. Program assets stay read-only in those helpers; renderers write
+through `/etc/bitriver-live/deploy` on the separate config bind and the token
+verifier reads that same path. These values are
 installer-managed: upgrades preserve every other operator setting and reject
 any duplicate managed key before rewriting the file. Keep using
 `bitriver-host activate` or the installed unit so durable config/data remains

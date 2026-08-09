@@ -72,6 +72,22 @@ func shellPath(path string) string {
 	return clean
 }
 
+func environmentWithout(keys ...string) []string {
+	blocked := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		blocked[key] = struct{}{}
+	}
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if _, found := blocked[key]; found {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return env
+}
+
 func copyQuickstartScripts(t *testing.T, repoRoot, tempDir string) string {
 	t.Helper()
 	scriptDir := filepath.Join(tempDir, "scripts")
@@ -189,12 +205,101 @@ func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 		t.Fatalf("quickstart Go CLI invocation not found in quickstart script")
 	}
 	for _, required := range []string{
-		`export BITRIVER_HOST_UID=${BITRIVER_HOST_UID:-$(id -u)}`,
-		`export BITRIVER_HOST_GID=${BITRIVER_HOST_GID:-$(id -g)}`,
+		`env_file_declares_host_identity "$selected_env_file"`,
+		`BITRIVER_HOST_UID="$(id -u)"`,
+		`BITRIVER_HOST_GID="$(id -g)"`,
+		`export BITRIVER_HOST_UID BITRIVER_HOST_GID`,
+		`--env-file=*`,
 	} {
 		if !strings.Contains(string(content), required) {
 			t.Fatalf("quickstart script missing Unix bind owner derivation %q", required)
 		}
+	}
+}
+
+func TestQuickstartSelectsHostIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix host identity derivation is not active on Windows")
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tests := []struct {
+		name        string
+		flagArgs    []string
+		envName     string
+		envContents string
+		wantPattern string
+	}{
+		{
+			name:        "preserve split flag",
+			flagArgs:    []string{"--env-file", "operator.env"},
+			envName:     "operator.env",
+			envContents: "BITRIVER_HOST_UID=1234\nBITRIVER_HOST_GID=2345\n",
+			wantPattern: `^unset:unset:run ./cmd/bitriver quickstart`,
+		},
+		{
+			name:        "preserve equals flag",
+			flagArgs:    []string{"--env-file=operator.env"},
+			envName:     "operator.env",
+			envContents: "BITRIVER_HOST_UID=1234\nBITRIVER_HOST_GID=2345\n",
+			wantPattern: `^unset:unset:run ./cmd/bitriver quickstart`,
+		},
+		{
+			name:        "derive for empty identity",
+			flagArgs:    []string{"--env-file", "empty.env"},
+			envName:     "empty.env",
+			envContents: "BITRIVER_HOST_UID=\nBITRIVER_HOST_GID=\n",
+			wantPattern: `^[0-9]+:[0-9]+:run ./cmd/bitriver quickstart`,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			quickstartDst := copyQuickstartScripts(t, repoRoot, tempDir)
+			if err := os.MkdirAll(filepath.Join(tempDir, "cmd", "bitriver"), 0o755); err != nil {
+				t.Fatalf("create fake CLI dir: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(tempDir, tc.envName), []byte(tc.envContents), 0o600); err != nil {
+				t.Fatalf("write selected env: %v", err)
+			}
+
+			logPath := filepath.Join(tempDir, "go-log.txt")
+			stubBin := filepath.Join(tempDir, "bin")
+			if err := os.MkdirAll(stubBin, 0o755); err != nil {
+				t.Fatalf("create stub bin: %v", err)
+			}
+			goStub := []byte("#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"$*\" == \"env GOVERSION\" ]]; then echo go1.26.5; exit 0; fi\nprintf '%s:%s:%s\\n' \"${BITRIVER_HOST_UID-unset}\" \"${BITRIVER_HOST_GID-unset}\" \"$*\" >\"$GO_LOG\"\n")
+			if err := os.WriteFile(filepath.Join(stubBin, "go"), goStub, 0o755); err != nil {
+				t.Fatalf("write go stub: %v", err)
+			}
+
+			bash := testBash(t)
+			cmd := exec.Command(bash, append([]string{shellPath(quickstartDst)}, tc.flagArgs...)...)
+			cmd.Dir = tempDir
+			cmd.Env = append(environmentWithout("BITRIVER_HOST_UID", "BITRIVER_HOST_GID"),
+				fmt.Sprintf("PATH=%s:%s", shellPath(stubBin), os.Getenv("PATH")),
+				fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", shellPath(tempDir)),
+				fmt.Sprintf("GO_LOG=%s", shellPath(logPath)),
+			)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("quickstart harness failed: %v\n%s", err, output)
+			}
+
+			logged, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("read go log: %v", err)
+			}
+			if matched, err := regexp.MatchString(tc.wantPattern, string(logged)); err != nil || !matched {
+				t.Fatalf("wrapper selected unexpected host identity: %q (pattern %q, err %v)", logged, tc.wantPattern, err)
+			}
+		})
 	}
 }
 
@@ -483,10 +588,21 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 		`user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"`,
 		`user: "${BITRIVER_HOST_UID:-65532}:${BITRIVER_HOST_GID:-65532}"`,
 		`user: "${BITRIVER_HOST_UID:-10001}:${BITRIVER_HOST_GID:-10001}"`,
-		`REPO_ROOT=/workspace exec bash /tmp/render-srs-config.sh`,
+		`REPO_ROOT=/workspace OUTPUT_FILE=/etc/bitriver-live/deploy/srs/conf/srs.generated.conf exec bash /tmp/render-srs-config.sh`,
+		`"--output", "/etc/bitriver-live/deploy/ome/Server.generated.xml"`,
+		`"--config", "/etc/bitriver-live/deploy/ome/Server.generated.xml"`,
 	} {
 		if !strings.Contains(compose, required) {
 			t.Fatalf("base compose missing bind-owner invariant %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		`OUTPUT_FILE=/workspace/`,
+		`"--output", "/workspace/`,
+		`"--config", "/workspace/deploy/ome/Server.generated.xml"`,
+	} {
+		if strings.Contains(compose, forbidden) {
+			t.Fatalf("config helpers must not write or verify generated output through read-only workspace path %q", forbidden)
 		}
 	}
 	if got := strings.Count(compose, `user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"`); got != 3 {

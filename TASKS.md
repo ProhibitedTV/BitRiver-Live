@@ -112,6 +112,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       hash; its public artifact is independently inspected and retained durably.
     - #1297/#1304 receive bounded evidence without closing external gates or
       enabling stable promotion prematurely.
+    - Config helpers write and verify generated files through the dedicated
+      config-root mount while the installed/source workspace remains read-only.
   - Check:
     - Local focused checks, the literal verifier, PR #1369 CI, its protected
       merge gate, and exact-main run `30819170684` passed. PR #1369 merged as
@@ -403,6 +405,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       unavailable in that pinned Linux verifier and are covered separately.
       Managed-key duplicate detection also rejects whitespace-obfuscated active
       entries before mutation. The private root `.env` remains byte-identical.
+    - PR #1381 protected run `31341715983` passed committed-secret, docs,
+      ShellCheck, native arm64 viewer, and blocking image-scan jobs. Its Ubuntu
+      smoke failed when `ome-config` named
+      `/workspace/deploy/ome/Server.generated.xml` after the workspace became
+      read-only; the aggregate gate failed as designed. Both renderers must now
+      target the existing writable `/etc/bitriver-live/deploy` alias and the
+      verifier must consume that same path before refreshed CI can merge.
+    - Compose now directs OME and SRS output through that writable alias and
+      verifies the OME token from the same path; no helper writes through
+      `/workspace`. The focused pinned-Linux Compose regression passed. An
+      isolated Docker Desktop config root then ran both real renderers and the
+      read-only token verifier successfully, produced 5,916-byte OME and
+      1,919-byte SRS outputs, left the tracked generated config unchanged, and
+      removed its exact temporary directory, containers, and network.
+    - Full pinned `go test ./scripts`, ShellCheck 0.11.0, Docker Compose render,
+      `git diff --check`, and the literal `./scripts/verify.sh` pass on the
+      corrected diff. The literal verifier covered all Go packages, installer,
+      release bundle/set, docs, architecture, contract, migration, and policy
+      checks; Docker/viewer were explicitly unavailable in that verifier and
+      the changed Docker renderer path was exercised separately above.
+    - Automated review's P1 renderer-path finding is fixed by the config-root
+      output change. Its P2 owner-precedence finding is also fixed: the Unix
+      quickstart wrapper inspects the selected env path without sourcing or
+      printing it, preserves a declared UID/GID pair for Compose, leaves a
+      partial declaration to validation, and derives both current IDs only
+      when process and file values are absent. Pinned Linux execution tests pass
+      for split/equal env-file flags and empty-value fallback; Bash syntax and
+      ShellCheck 0.11.0 pass for both modified shell entrypoints.
+    - The literal verifier was rerun after both review corrections and passed
+      the same complete applicable gate set on the final diff. No generated
+      config, private env, runtime media, or retained operator path changed.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
