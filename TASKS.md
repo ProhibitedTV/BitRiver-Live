@@ -342,6 +342,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       committed-secret guard, host `git diff --check`, and changed-script
       ShellCheck (apart from pre-existing SC2034) pass. The private `.env`
       remains byte-identical at its recorded SHA-256.
+    - PR #1380 opened at `c42f8210`. Protected run `31338627256` passed the
+      Ubuntu test-all gate, macOS/Windows Go, all three quickstart entrypoints,
+      remote ShellCheck, docs consistency, and committed-secret guard. The
+      aggregate Merge gate correctly failed because the initial PR body omitted
+      the mandatory high-risk release scorecard. No check was bypassed: the PR
+      body now records deployment/package/operator classification, high risk,
+      test/manual evidence, secret and rollback boundaries, and remaining
+      external gates; a fresh pull-request event is required before merge.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
