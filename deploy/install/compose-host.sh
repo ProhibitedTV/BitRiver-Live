@@ -205,11 +205,38 @@ resolve_operator() {
 run_as_operator() {
   if [[ ${EUID:-$(id -u)} -eq 0 && $operator_user != root ]]; then
     command -v sudo >/dev/null 2>&1 || die "sudo is required to run configuration as $operator_user"
-    sudo -u "$operator_user" -- env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
+    sudo -u "$operator_user" -- env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_CONFIG_ROOT="$config_dir" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
   else
-    env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
+    env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_CONFIG_ROOT="$config_dir" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
   fi
 }
+
+persist_env_value() (
+  local path=$1 key=$2 value=$3 line count=0 temporary
+  [[ -f $path ]] || die "cannot persist $key because the environment file is missing: $path"
+
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line == "$key="* ]]; then
+      count=$((count + 1))
+    fi
+  done <"$path"
+  (( count <= 1 )) || die "refusing to rewrite duplicate $key entries in $path"
+
+  temporary=$(mktemp "$(dirname "$path")/.bitriver.env.XXXXXX")
+  chmod 0600 "$temporary"
+  trap 'rm -f -- "$temporary"' EXIT
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line == "$key="* ]]; then
+      printf '%s=%s\n' "$key" "$value" >>"$temporary"
+    else
+      printf '%s\n' "$line" >>"$temporary"
+    fi
+  done <"$path"
+  if (( count == 0 )); then
+    printf '%s=%s\n' "$key" "$value" >>"$temporary"
+  fi
+  mv -f -- "$temporary" "$path"
+)
 
 replace_empty_path_with_symlink() {
   local link_path=$1 target=$2
@@ -289,6 +316,7 @@ stage_install() {
       --env-file "$env_file" \
       --example "$install_dir/deploy/.env.example" </dev/null
   fi
+  persist_env_value "$env_file" BITRIVER_CONFIG_ROOT "$config_dir"
   chmod 0600 "$env_file" "$config_dir/Server.generated.xml" "$config_dir/srs.generated.conf"
   if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
     chown "$operator_user:$operator_group" "$env_file" "$config_dir/Server.generated.xml" "$config_dir/srs.generated.conf"

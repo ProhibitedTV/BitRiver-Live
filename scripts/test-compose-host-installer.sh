@@ -29,8 +29,10 @@ if [[ ${1:-} == env && ${2:-} == init ]]; then
     esac
   done
   [[ -n $env_file ]]
+  test "${BITRIVER_CONFIG_ROOT:?}" = "$(dirname "$env_file")"
   cat >"$env_file" <<'SAFE_ENV'
 BITRIVER_DEPLOY_IMAGE_SOURCE=pull
+BITRIVER_CONFIG_ROOT=..
 BITRIVER_LIVE_IMAGE_TAG=test
 BITRIVER_VIEWER_IMAGE_TAG=test
 BITRIVER_SRS_CONTROLLER_IMAGE_TAG=test
@@ -104,10 +106,39 @@ if grep -Eq 'P0stgres-Example!|R3dis-Example!|OME-Example-(Pass|Access-Token)' "
   echo "installed environment retains release sample credentials" >&2
   exit 1
 fi
+if [[ $(grep -c '^BITRIVER_CONFIG_ROOT=' "$config_root/bitriver.env") -ne 1 ]] ||
+  ! grep -Fxq "BITRIVER_CONFIG_ROOT=$config_root" "$config_root/bitriver.env"; then
+  echo "installed environment does not persist exactly one absolute config root" >&2
+  exit 1
+fi
 
 printf '\nBITRIVER_TEST_PRESERVE=yes\n' >>"$config_root/bitriver.env"
 "$installer" install "${common_args[@]}"
 grep -q '^BITRIVER_TEST_PRESERVE=yes$' "$config_root/bitriver.env"
+[[ $(grep -c '^BITRIVER_CONFIG_ROOT=' "$config_root/bitriver.env") -eq 1 ]]
+grep -Fxq "BITRIVER_CONFIG_ROOT=$config_root" "$config_root/bitriver.env"
+
+# Older package environments predate BITRIVER_CONFIG_ROOT. Upgrade must append
+# the installer-owned value without replacing unrelated operator settings.
+grep -v '^BITRIVER_CONFIG_ROOT=' "$config_root/bitriver.env" >"$tmp_root/older-bitriver.env"
+mv "$tmp_root/older-bitriver.env" "$config_root/bitriver.env"
+"$installer" install "${common_args[@]}"
+grep -q '^BITRIVER_TEST_PRESERVE=yes$' "$config_root/bitriver.env"
+[[ $(grep -c '^BITRIVER_CONFIG_ROOT=' "$config_root/bitriver.env") -eq 1 ]]
+grep -Fxq "BITRIVER_CONFIG_ROOT=$config_root" "$config_root/bitriver.env"
+
+# Ambiguous duplicate path ownership must fail before mutating the env file.
+cp "$config_root/bitriver.env" "$tmp_root/bitriver.env.before-duplicate"
+printf 'BITRIVER_CONFIG_ROOT=/ambiguous-duplicate\n' >>"$config_root/bitriver.env"
+if "$installer" install "${common_args[@]}"; then
+  echo "installer unexpectedly accepted duplicate BITRIVER_CONFIG_ROOT entries" >&2
+  exit 1
+fi
+mv "$tmp_root/bitriver.env.before-duplicate" "$config_root/bitriver.env"
+if find "$config_root" -maxdepth 1 -name '.bitriver.env.*' -print -quit | grep -q .; then
+  echo "installer left a temporary environment file behind" >&2
+  exit 1
+fi
 
 fake_path="$tmp_root/fake path"
 custom_env="$tmp_root/custom config/bitriver.env"

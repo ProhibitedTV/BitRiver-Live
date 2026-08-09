@@ -156,6 +156,34 @@
   config root before `ensure_assets` created a custom env file's missing parent
   directory. Move derivation immediately after env seeding and lock that order
   in the wrapper regression so first-run custom paths remain supported.
+- PR #1379 passed refreshed protected run `31336273494`, squash-merged as exact
+  main `91525a32f43d202561a9cc12d9d5452f48813f16`, and exact-main run
+  `31336615980` passed. Immutable `v1.2.3-rc.15` published from that commit in
+  passed release run `31336980513`. Independent public verification accepted
+  all 46 assets, the release-set signature, and all five exact image signatures;
+  the signed-root SHA-256 is
+  `69acc96dae732fe9e6eea6f0a8953f57bd3796a5ddc373fec81872a81c9abb2e`
+  and the amd64 `.deb` SHA-256 is
+  `d54347660312ded8266387efa65a6abe543ac9ab3cd52532b6fdcf64942e4202`.
+- Clean-host run `31337618217` advanced RC15 through signed provenance,
+  package installation, disabled service staging, immutable production input
+  configuration, environment validation, and doctor. Systemd activation still
+  stopped because `srs-config` and `ome-config` both exited 1; sanitized
+  evidence upload and cleanup passed. RC15 remains immutable and rejected.
+- An exact downloaded-package reproduction proves the installed symlinks,
+  renderer commands, and `/etc/bitriver-live` mount work when the correct source
+  is selected. The remaining durable defect is that `bitriver env init` seeds
+  the source-checkout value `BITRIVER_CONFIG_ROOT=..` into the installed
+  `/etc/bitriver-live/bitriver.env`; only the systemd process and launcher
+  attempted to override it. Persist the absolute installer config directory in
+  that managed env file on install/upgrade, without printing or replacing other
+  operator values. Append the key for older package env files that predate it,
+  replace the single source default, and reject ambiguous duplicates.
+- Extend the installer lifecycle regression to require exactly one persisted
+  absolute config-root entry after first install and idempotent reinstall, while
+  retaining unrelated operator values. Repeat the exact installed-package
+  renderer proof, focused tests, literal verifier, protected PR/exact-main CI,
+  next unused immutable candidate, and no-checkout qualification.
 - Land the correction through a focused protected PR and exact-main CI. Publish
   only the next unused immutable candidate from that green commit, independently
   verify its signed public release set, and rerun the no-checkout qualification.
