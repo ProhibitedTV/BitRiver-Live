@@ -248,6 +248,7 @@ render_unit() {
     -e "s|@BITRIVER_OPERATOR_GROUP@|$operator_group|g" \
     -e "s|@BITRIVER_INSTALL_DIR@|$(printf '%s' "$install_dir" | sed 's/[&|\\]/\\&/g')|g" \
     -e "s|@BITRIVER_ENV_FILE@|$(printf '%s' "$env_file" | sed 's/[&|\\]/\\&/g')|g" \
+    -e "s|@BITRIVER_CONFIG_DIR@|$(printf '%s' "$config_dir" | sed 's/[&|\\]/\\&/g')|g" \
     "$template" >"$temporary"
   install -D -m 0644 "$temporary" "$unit_path"
   rm -f -- "$temporary"

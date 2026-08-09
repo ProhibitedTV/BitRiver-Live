@@ -22,6 +22,9 @@ $exampleEnv = Join-Path $assetsDir 'deploy/.env.example'
 $envFilePath = if ($EnvFile) { $EnvFile } elseif ($env:BITRIVER_ENV_FILE) { $env:BITRIVER_ENV_FILE } else { Join-Path $assetsDir '.env' }
 $binary = if ($BinaryPath) { $BinaryPath } elseif ($env:BITRIVER_BINARY) { $env:BITRIVER_BINARY } else { Join-Path $scriptDir 'bitriver.exe' }
 $env:BITRIVER_ROOT = $assetsDir
+if (-not $env:BITRIVER_CONFIG_ROOT) {
+  $env:BITRIVER_CONFIG_ROOT = Split-Path -Parent ([System.IO.Path]::GetFullPath($envFilePath))
+}
 
 function Require-Command {
   param([string]$Command)

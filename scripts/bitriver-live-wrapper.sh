@@ -35,6 +35,11 @@ ensure_assets() {
       fatal "No env file found and no example to copy from"
     fi
   fi
+
+  if [ -z "${BITRIVER_CONFIG_ROOT:-}" ]; then
+    BITRIVER_CONFIG_ROOT=$(CDPATH=; cd -- "$(dirname "$env_file")" && pwd -P)
+    export BITRIVER_CONFIG_ROOT
+  fi
 }
 
 check_prereqs() {
