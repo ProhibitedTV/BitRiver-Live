@@ -290,8 +290,66 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       it. Config-root derivation now occurs after env seeding, the static test
       requires that ordering, and the Linux lifecycle executes the launcher
       with a missing custom directory plus fake Docker/CLI boundaries. Focused
-      Go, shell syntax, and the complete installer lifecycle pass; refreshed
-      protected CI is required before merge.
+      Go, shell syntax, and the complete installer lifecycle pass.
+    - Refreshed protected run `31336273494` passed, PR #1379 squash-merged as
+      `91525a32f43d202561a9cc12d9d5452f48813f16`, exact-main run
+      `31336615980` passed, and the remote branch was deleted. The repository
+      again had zero open pull requests.
+    - Immutable `v1.2.3-rc.15` published in passed run `31336980513` from that
+      exact main commit. Independent public verification accepted all 46
+      assets, the signed release root, and all five exact image signatures; the
+      release-set SHA-256 is
+      `69acc96dae732fe9e6eea6f0a8953f57bd3796a5ddc373fec81872a81c9abb2e`
+      and the amd64 `.deb` SHA-256 is
+      `d54347660312ded8266387efa65a6abe543ac9ab3cd52532b6fdcf64942e4202`.
+    - No-checkout run `31337618217` passed provenance, package install, host
+      staging, immutable input configuration, environment validation, and
+      doctor, then failed activation when both config renderers exited 1.
+      Sanitized evidence and cleanup passed; RC15 remains immutable and
+      rejected. Issue #1297 was reopened because its XOA/NPM/reboot/media
+      acceptance criteria remain unmet.
+    - The exact public package renders SRS and OME successfully against its
+      installed absolute symlinks when `/etc/bitriver-live` is mounted. The
+      installed env still persists source default `BITRIVER_CONFIG_ROOT=..`,
+      leaving package/manual Compose dependent on a transient process override.
+      Persisting exactly one absolute installer-owned value, retaining all
+      unrelated operator values, and rerunning package/CI/release/qualification
+      evidence are in progress.
+    - The host installer now supplies `BITRIVER_CONFIG_ROOT` to every
+      operator-scoped command and atomically persists its absolute config
+      directory in `bitriver.env`. It replaces one managed value, appends the
+      key for older package env files, rejects duplicates before rewriting,
+      uses a mode-0600 temporary file, and never prints env contents.
+    - The Linux lifecycle regression now starts from source default `..`,
+      requires the absolute persisted value on first install and idempotent
+      reinstall, proves older-env append plus unrelated-value retention, and
+      proves duplicate refusal leaves no temporary secret file. Ubuntu,
+      deployment-contract, and deploy-map docs describe the persisted boundary.
+    - Pinned Linux shell syntax/lifecycle and full `go test ./scripts` pass.
+      Pinned nFPM built/inspected stable and prerelease amd64/arm64 `.deb`/`.rpm`
+      payloads. Applying the corrected installer to the exact public RC15
+      installed-layout volumes persisted exactly one absolute value; concurrent
+      SRS/OME render and read-only OME token verification then passed with the
+      exact signed RC15 helper digest. The three isolated volumes were removed.
+    - Literal `./scripts/verify.sh` passed with pinned Go 1.26.5, covering the
+      full Go suite, release bundle, installer lifecycle, release-set/docs/
+      architecture/contracts, and policy guards; Docker/viewer were explicitly
+      unavailable in that container. The first read-only worktree invocation
+      reached the Go suite but could not create the secret-scanner's designated
+      `.tmp` fixtures, so it was discarded and rerun with the verifier's normal
+      writable fixture boundary. Windows Docker Desktop 29.6.2 / Compose 5.3.1
+      rendered the canonical contract. Installer wording, generated docs,
+      committed-secret guard, host `git diff --check`, and changed-script
+      ShellCheck (apart from pre-existing SC2034) pass. The private `.env`
+      remains byte-identical at its recorded SHA-256.
+    - PR #1380 opened at `c42f8210`. Protected run `31338627256` passed the
+      Ubuntu test-all gate, macOS/Windows Go, all three quickstart entrypoints,
+      remote ShellCheck, docs consistency, and committed-secret guard. The
+      aggregate Merge gate correctly failed because the initial PR body omitted
+      the mandatory high-risk release scorecard. No check was bypassed: the PR
+      body now records deployment/package/operator classification, high risk,
+      test/manual evidence, secret and rollback boundaries, and remaining
+      external gates; a fresh pull-request event is required before merge.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

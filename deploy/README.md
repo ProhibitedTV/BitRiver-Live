@@ -57,9 +57,13 @@ preserving repo-relative path resolution used by the script; keep shell scripts 
 
 `BITRIVER_CONFIG_ROOT` is mounted at `/etc/bitriver-live` only in the SRS/OME
 renderers and OME token verifier. Source checkouts use `..` (the repository
-root). The packaged Compose unit supplies `/etc/bitriver-live`, allowing the
-installed absolute `.env` and generated-config symlinks to resolve inside those
-containers while keeping durable secrets out of `/opt/bitriver-live`.
+root). The packaged installer persists its absolute config directory in
+`bitriver.env`, and the Compose unit/launchers supply the same value, allowing
+the installed absolute `.env` and generated-config symlinks to resolve inside
+those containers while keeping durable secrets out of `/opt/bitriver-live`.
+Installer upgrades append the key for older env files, replace the single
+managed value, and refuse ambiguous duplicates while preserving every other
+operator setting.
 
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.

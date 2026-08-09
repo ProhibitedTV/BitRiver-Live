@@ -28,7 +28,7 @@ BitRiver Live has one canonical deployment path: an operator `.env` rendered/val
 - `deploy/install/compose-host.sh` and `deploy/systemd/bitriver-live-compose.service`
   - Ubuntu archive/package lifecycle around the canonical Compose stack.
   - Separate program assets (`/opt/bitriver-live`), secret configuration (`/etc/bitriver-live`), and durable state (`/var/lib/bitriver-live`). Installation leaves the service disabled until `configure` and `activate` pass.
-  - The packaged unit sets `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` so the config renderers can resolve the installed workspace's absolute `.env`, OME, and SRS symlinks inside their container namespace.
+  - The installer persists `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` in the managed env file and the packaged unit supplies the same value, so direct and systemd Compose paths resolve the installed workspace's absolute `.env`, OME, and SRS symlinks inside their container namespace. Older env files gain the key on upgrade; duplicate active entries are rejected without rewriting operator configuration.
 - Generated files (verified in repository code paths)
   - `deploy/ome/Server.generated.xml`
     - Generated/validated by `cmd/bitriver ome render` and used by the `ome` container mount.
@@ -48,7 +48,7 @@ Status meanings:
 
 | Variable | Default in template/compose | Required? | What breaks if wrong |
 | --- | --- | --- | --- |
-| `BITRIVER_CONFIG_ROOT` | `..` (source checkout); `/etc/bitriver-live` in the packaged systemd unit | Optional with topology-specific default | The packaged renderer containers cannot dereference `/workspace/.env` or generated OME/SRS symlinks, so activation stops before media services start. |
+| `BITRIVER_CONFIG_ROOT` | `..` (source checkout); `/etc/bitriver-live` persisted by the packaged installer and supplied by its systemd unit | Optional with topology-specific default | The packaged renderer containers cannot dereference `/workspace/.env` or generated OME/SRS symlinks, so activation stops before media services start. |
 
 ### A) Ports
 
