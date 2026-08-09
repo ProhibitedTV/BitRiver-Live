@@ -209,6 +209,23 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       The private `.env` was never edited or printed and retains SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
       Fresh Ubuntu PR CI remains mandatory before merge or RC14 publication.
+    - PR #1378 opened from the focused branch. After rebasing onto current main,
+      the Windows worktree rematerialized the systemd template as CRLF and the
+      strict Linux fixture correctly rejected the trailing carriage return.
+      Added an exact `.gitattributes` LF rule for the packaged Compose unit and
+      normalized the worktree; `git ls-files --eol` now reports `i/lf w/lf`,
+      and the complete Linux installer lifecycle passes again. Focused Go,
+      CI-contract, committed-secret, installer-language, and diff checks pass
+      on the rebased head.
+    - A first Docker-visible full-verifier attempt supplied missing Compose keys
+      as global process variables and correctly caused environment-isolation
+      unit tests to fail; it was discarded as harness contamination. The clean
+      literal `./scripts/verify.sh` rerun passes all applicable Go, policy,
+      bundle, docs, migration, and contract checks without overrides. A separate
+      `verify-windows-docker.ps1` run with an isolated credential-rotated temp
+      env passes Docker Desktop 29.6.2 / Compose 5.3.1 canonical config proof.
+      The changed Linux installer boundary passes in Docker, while fresh Ubuntu
+      PR CI remains the authoritative integrated gate.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

@@ -114,6 +114,12 @@
   from that exact green main commit and rerun the artifact-only qualification
   against RC14's signed release-set hash. RC13 and run `30827018880` remain
   bounded failure evidence; stable promotion and #1297/#1304 remain open.
+- The post-rebase Linux lifecycle exposed that the canonical `.service`
+  template is stored with CRLF because the repository attributes cover shell
+  scripts but not systemd units. Enforce LF for this exact packaged unit and
+  normalize its tracked bytes; keep the strict rendered-directive regression
+  so Windows checkouts cannot mask release-byte drift. Repeat the Linux
+  lifecycle, focused policy checks, and fresh PR CI before merge.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 
