@@ -179,6 +179,58 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       healthy OME/dependency/API/viewer smoke. Cleanup leaves zero isolated
       containers/volumes, preserves all six operator paths, and restores the
       private `.env` to its exact recorded hash.
+    - Optional-profile audit PR #1372 passed protected run `30825405672`, merged
+      as `d0c2825b760be346065e126522ce24ecf21a6bb0`, passed exact-main run
+      `30826129909`, and had its remote branch deleted.
+    - Live run `30827018880` passed signed release/package verification, public
+      `.deb` installation, disabled systemd staging, immutable environment
+      validation, doctor, and the complete signed-digest audit. Activation then
+      failed because the packaged unit rendered
+      `WorkingDirectory="/opt/bitriver-live"`; systemd treats the quotes as part
+      of the path and rejects it as non-absolute. Sanitized evidence upload and
+      cleanup passed. RC13 is rejected for clean-host qualification; the unit
+      template fix, rendered-unit regression, full gates, next immutable RC14,
+      and RC14 qualification are in progress without patching installed RC13.
+    - The canonical package template now renders an unquoted absolute
+      `WorkingDirectory`, and the installer lifecycle test requires the exact
+      fully substituted directive. Git Bash syntax, `git diff --check`, and the
+      complete installer lifecycle in the existing `golang:1.26.5-bookworm`
+      Linux container pass, including rerunnable install, retained uninstall,
+      guarded purge, and confirmed purge.
+    - Focused Go `./scripts` tests pass offline with the repository-required
+      Go 1.26.5 after the host-default Go 1.25.6 correctly refused the 1.26
+      module. CI contract, committed-secret, installer-language, and diff gates
+      pass. Literal `./scripts/verify.sh` passes Go, release bundle, contracts,
+      docs, migrations, and repository policy with the bundled Python runtime.
+    - A Docker-visible verifier rerun reached Compose validation but the private
+      operator `.env` predates `BITRIVER_OME_PUBLIC_LLHLS_BASE_URL`; no service
+      was started. A process-only retry supplying just missing non-secret keys
+      from the tracked example was blocked by the local execution usage limit.
+      The private `.env` was never edited or printed and retains SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`.
+      Fresh Ubuntu PR CI remains mandatory before merge or RC14 publication.
+    - PR #1378 opened from the focused branch. After rebasing onto current main,
+      the Windows worktree rematerialized the systemd template as CRLF and the
+      strict Linux fixture correctly rejected the trailing carriage return.
+      Added an exact `.gitattributes` LF rule for the packaged Compose unit and
+      normalized the worktree; `git ls-files --eol` now reports `i/lf w/lf`,
+      and the complete Linux installer lifecycle passes again. Focused Go,
+      CI-contract, committed-secret, installer-language, and diff checks pass
+      on the rebased head.
+    - A first Docker-visible full-verifier attempt supplied missing Compose keys
+      as global process variables and correctly caused environment-isolation
+      unit tests to fail; it was discarded as harness contamination. The clean
+      literal `./scripts/verify.sh` rerun passes all applicable Go, policy,
+      bundle, docs, migration, and contract checks without overrides. A separate
+      `verify-windows-docker.ps1` run with an isolated credential-rotated temp
+      env passes Docker Desktop 29.6.2 / Compose 5.3.1 canonical config proof.
+      The changed Linux installer boundary passes in Docker, while fresh Ubuntu
+      PR CI remains the authoritative integrated gate.
+    - Rebased PR #1378 head `e11f5767` passed protected run `31333507523`:
+      Ubuntu test-all, macOS/Windows Go tests, Ubuntu/macOS/Windows quickstart
+      entrypoints, ShellCheck, committed-secret guard, and the aggregate Merge
+      gate are green. A final ledger-only commit and fresh protected run precede
+      squash merge; RC14 remains untagged until exact-main CI also passes.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

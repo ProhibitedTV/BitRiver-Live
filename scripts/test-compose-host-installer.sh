@@ -84,6 +84,10 @@ if grep -q '@BITRIVER_' "$unit_file"; then
   echo "systemd unit still contains template placeholders" >&2
   exit 1
 fi
+if ! grep -Fxq "WorkingDirectory=$install_root" "$unit_file"; then
+  echo "systemd unit does not contain an absolute unquoted working directory" >&2
+  exit 1
+fi
 if grep -Eq 'P0stgres-Example!|R3dis-Example!|OME-Example-(Pass|Access-Token)' "$config_root/bitriver.env"; then
   echo "installed environment retains release sample credentials" >&2
   exit 1
