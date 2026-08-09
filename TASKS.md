@@ -226,6 +226,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       env passes Docker Desktop 29.6.2 / Compose 5.3.1 canonical config proof.
       The changed Linux installer boundary passes in Docker, while fresh Ubuntu
       PR CI remains the authoritative integrated gate.
+    - Rebased PR #1378 head `e11f5767` passed protected run `31333507523`:
+      Ubuntu test-all, macOS/Windows Go tests, Ubuntu/macOS/Windows quickstart
+      entrypoints, ShellCheck, committed-secret guard, and the aggregate Merge
+      gate are green. A final ledger-only commit and fresh protected run precede
+      squash merge; RC14 remains untagged until exact-main CI also passes.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
