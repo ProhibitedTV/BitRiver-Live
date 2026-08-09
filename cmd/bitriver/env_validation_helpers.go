@@ -794,6 +794,24 @@ func validateEnvWithRuntimeMode(values map[string]string, runtimeMode string) en
 		res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_LIVE_MODE must be set to production (current: %s)", modeRaw))
 	}
 
+	hostUID := strings.TrimSpace(values["BITRIVER_HOST_UID"])
+	hostGID := strings.TrimSpace(values["BITRIVER_HOST_GID"])
+	if (hostUID == "") != (hostGID == "") {
+		res.Errors = append(res.Errors, "BITRIVER_HOST_UID and BITRIVER_HOST_GID must both be set or both be empty.")
+	}
+	for _, entry := range []struct{ key, value string }{
+		{key: "BITRIVER_HOST_UID", value: hostUID},
+		{key: "BITRIVER_HOST_GID", value: hostGID},
+	} {
+		key, value := entry.key, entry.value
+		if value == "" {
+			continue
+		}
+		if _, err := strconv.ParseUint(value, 10, 32); err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("%s must be an unsigned 32-bit numeric ID (current: %s)", key, value))
+		}
+	}
+
 	if placeholderLoadErr != nil {
 		res.Errors = append(res.Errors, fmt.Sprintf("failed to load sample credentials from %s: %v", defaultExampleEnv(), placeholderLoadErr))
 	}

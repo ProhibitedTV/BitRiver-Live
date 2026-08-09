@@ -38,5 +38,12 @@ if [[ ! -d "$CODE_ROOT/cmd/bitriver" ]]; then
   exit 1
 fi
 
+case "$(uname -s 2>/dev/null || true)" in
+  Linux|Darwin)
+    export BITRIVER_HOST_UID=${BITRIVER_HOST_UID:-$(id -u)}
+    export BITRIVER_HOST_GID=${BITRIVER_HOST_GID:-$(id -g)}
+    ;;
+esac
+
 echo "Running BitRiver Live quickstart ..."
 (cd "$CODE_ROOT" && GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver quickstart "$@")

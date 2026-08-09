@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-program=bitriver-host
 unit_name=bitriver-live-compose.service
 
 usage() {
@@ -195,8 +194,12 @@ resolve_operator() {
   fi
   id "$operator_user" >/dev/null 2>&1 || die "operator user does not exist: $operator_user"
   operator_group=$(id -gn "$operator_user")
+  operator_uid=$(id -u "$operator_user")
+  operator_gid=$(id -g "$operator_user")
   [[ $operator_user =~ ^[A-Za-z0-9_.-]+$ ]] || die "unsupported operator user name: $operator_user"
   [[ $operator_group =~ ^[A-Za-z0-9_.-]+$ ]] || die "unsupported operator group name: $operator_group"
+  [[ $operator_uid =~ ^[0-9]+$ ]] || die "unsupported operator UID: $operator_uid"
+  [[ $operator_gid =~ ^[0-9]+$ ]] || die "unsupported operator GID: $operator_gid"
   if [[ $operator_user == root && -z $root_prefix ]]; then
     note "WARNING: root is selected as the Docker operator; prefer a dedicated non-root account with Docker access."
   fi
@@ -205,36 +208,57 @@ resolve_operator() {
 run_as_operator() {
   if [[ ${EUID:-$(id -u)} -eq 0 && $operator_user != root ]]; then
     command -v sudo >/dev/null 2>&1 || die "sudo is required to run configuration as $operator_user"
-    sudo -u "$operator_user" -- env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_CONFIG_ROOT="$config_dir" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
+    sudo -u "$operator_user" -- env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_CONFIG_ROOT="$config_dir" BITRIVER_HOST_UID="$operator_uid" BITRIVER_HOST_GID="$operator_gid" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
   else
-    env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_CONFIG_ROOT="$config_dir" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
+    env BITRIVER_ROOT="$install_dir" BITRIVER_LAUNCHER_ROOT="$install_dir" BITRIVER_ENV_FILE="$env_file" BITRIVER_CONFIG_ROOT="$config_dir" BITRIVER_HOST_UID="$operator_uid" BITRIVER_HOST_GID="$operator_gid" BITRIVER_BINARY="$install_dir/bin/bitriver" "$@"
   fi
 }
 
-persist_env_value() (
-  local path=$1 key=$2 value=$3 line count=0 temporary
-  [[ -f $path ]] || die "cannot persist $key because the environment file is missing: $path"
+persist_env_values() (
+  local path=$1 line value temporary index
+  shift
+  (( $# > 0 && $# % 2 == 0 )) || die "persist_env_values requires key/value pairs"
+  [[ -f $path ]] || die "cannot persist managed values because the environment file is missing: $path"
+
+  local -a keys=() values=() counts=() written=()
+  while (( $# > 0 )); do
+    keys+=("$1")
+    values+=("$2")
+    counts+=(0)
+    written+=(0)
+    shift 2
+  done
 
   while IFS= read -r line || [[ -n $line ]]; do
-    if [[ $line == "$key="* ]]; then
-      count=$((count + 1))
-    fi
+    for index in "${!keys[@]}"; do
+      if [[ $line =~ ^[[:space:]]*${keys[$index]}[[:space:]]*= ]]; then
+        counts[index]=$((counts[index] + 1))
+      fi
+    done
   done <"$path"
-  (( count <= 1 )) || die "refusing to rewrite duplicate $key entries in $path"
+  for index in "${!keys[@]}"; do
+    (( counts[index] <= 1 )) || die "refusing to rewrite duplicate ${keys[$index]} entries in $path"
+  done
 
   temporary=$(mktemp "$(dirname "$path")/.bitriver.env.XXXXXX")
   chmod 0600 "$temporary"
   trap 'rm -f -- "$temporary"' EXIT
   while IFS= read -r line || [[ -n $line ]]; do
-    if [[ $line == "$key="* ]]; then
-      printf '%s=%s\n' "$key" "$value" >>"$temporary"
-    else
-      printf '%s\n' "$line" >>"$temporary"
-    fi
+    for index in "${!keys[@]}"; do
+      if [[ $line =~ ^[[:space:]]*${keys[$index]}[[:space:]]*= ]]; then
+        value=${values[$index]}
+        printf '%s=%s\n' "${keys[$index]}" "$value" >>"$temporary"
+        written[index]=1
+        continue 2
+      fi
+    done
+    printf '%s\n' "$line" >>"$temporary"
   done <"$path"
-  if (( count == 0 )); then
-    printf '%s=%s\n' "$key" "$value" >>"$temporary"
-  fi
+  for index in "${!keys[@]}"; do
+    if (( written[index] == 0 )); then
+      printf '%s=%s\n' "${keys[$index]}" "${values[$index]}" >>"$temporary"
+    fi
+  done
   mv -f -- "$temporary" "$path"
 )
 
@@ -276,6 +300,8 @@ render_unit() {
     -e "s|@BITRIVER_INSTALL_DIR@|$(printf '%s' "$install_dir" | sed 's/[&|\\]/\\&/g')|g" \
     -e "s|@BITRIVER_ENV_FILE@|$(printf '%s' "$env_file" | sed 's/[&|\\]/\\&/g')|g" \
     -e "s|@BITRIVER_CONFIG_DIR@|$(printf '%s' "$config_dir" | sed 's/[&|\\]/\\&/g')|g" \
+    -e "s|@BITRIVER_HOST_UID@|$operator_uid|g" \
+    -e "s|@BITRIVER_HOST_GID@|$operator_gid|g" \
     "$template" >"$temporary"
   install -D -m 0644 "$temporary" "$unit_path"
   rm -f -- "$temporary"
@@ -316,7 +342,10 @@ stage_install() {
       --env-file "$env_file" \
       --example "$install_dir/deploy/.env.example" </dev/null
   fi
-  persist_env_value "$env_file" BITRIVER_CONFIG_ROOT "$config_dir"
+  persist_env_values "$env_file" \
+    BITRIVER_CONFIG_ROOT "$config_dir" \
+    BITRIVER_HOST_UID "$operator_uid" \
+    BITRIVER_HOST_GID "$operator_gid"
   chmod 0600 "$env_file" "$config_dir/Server.generated.xml" "$config_dir/srs.generated.conf"
   if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
     chown "$operator_user:$operator_group" "$env_file" "$config_dir/Server.generated.xml" "$config_dir/srs.generated.conf"

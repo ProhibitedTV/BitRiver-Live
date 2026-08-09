@@ -40,6 +40,19 @@ ensure_assets() {
     BITRIVER_CONFIG_ROOT=$(CDPATH=; cd -- "$(dirname "$env_file")" && pwd -P)
     export BITRIVER_CONFIG_ROOT
   fi
+
+  case "$(uname -s 2>/dev/null || true)" in
+    Linux|Darwin)
+      if [ -z "${BITRIVER_HOST_UID:-}" ]; then
+        BITRIVER_HOST_UID=$(id -u)
+        export BITRIVER_HOST_UID
+      fi
+      if [ -z "${BITRIVER_HOST_GID:-}" ]; then
+        BITRIVER_HOST_GID=$(id -g)
+        export BITRIVER_HOST_GID
+      fi
+      ;;
+  esac
 }
 
 check_prereqs() {

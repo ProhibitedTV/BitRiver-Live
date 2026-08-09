@@ -188,6 +188,14 @@ func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 	if !strings.Contains(string(content), "go run ./cmd/bitriver quickstart") {
 		t.Fatalf("quickstart Go CLI invocation not found in quickstart script")
 	}
+	for _, required := range []string{
+		`export BITRIVER_HOST_UID=${BITRIVER_HOST_UID:-$(id -u)}`,
+		`export BITRIVER_HOST_GID=${BITRIVER_HOST_GID:-$(id -g)}`,
+	} {
+		if !strings.Contains(string(content), required) {
+			t.Fatalf("quickstart script missing Unix bind owner derivation %q", required)
+		}
+	}
 }
 
 func TestUnixWrapperStartUsesCliQuickstart(t *testing.T) {
@@ -216,6 +224,16 @@ func TestUnixWrapperStartUsesCliQuickstart(t *testing.T) {
 	}
 	if strings.Index(wrapper, configRootDerivation) < strings.Index(wrapper, `cp "$example_env" "$env_file"`) {
 		t.Fatalf("unix wrapper must seed a first-run custom env path before resolving its parent directory")
+	}
+	for _, required := range []string{
+		`BITRIVER_HOST_UID=$(id -u)`,
+		`BITRIVER_HOST_GID=$(id -g)`,
+		`export BITRIVER_HOST_UID`,
+		`export BITRIVER_HOST_GID`,
+	} {
+		if !strings.Contains(wrapper, required) {
+			t.Fatalf("expected unix wrapper to derive bind owner identity: missing %q", required)
+		}
 	}
 }
 
@@ -449,7 +467,7 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	if !strings.Contains(string(content), "${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-live:") {
 		t.Fatalf("base compose file should use the owned, overridable official image namespace")
 	}
-	compose := string(content)
+	compose := strings.ReplaceAll(string(content), "\r\n", "\n")
 	configRootRW := `- "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live"`
 	configRootRO := `- "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live:ro"`
 	if got := strings.Count(compose, configRootRW); got != 2 {
@@ -458,12 +476,48 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	if got := strings.Count(compose, configRootRO); got != 1 {
 		t.Fatalf("base compose should mount the config root read-only into the token verifier, got %d", got)
 	}
+	if got := strings.Count(compose, `- ..:/workspace:ro`); got != 3 {
+		t.Fatalf("base compose should mount release assets read-only into all three config helpers, got %d", got)
+	}
+	for _, required := range []string{
+		`user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"`,
+		`user: "${BITRIVER_HOST_UID:-65532}:${BITRIVER_HOST_GID:-65532}"`,
+		`user: "${BITRIVER_HOST_UID:-10001}:${BITRIVER_HOST_GID:-10001}"`,
+		`REPO_ROOT=/workspace exec bash /tmp/render-srs-config.sh`,
+	} {
+		if !strings.Contains(compose, required) {
+			t.Fatalf("base compose missing bind-owner invariant %q", required)
+		}
+	}
+	if got := strings.Count(compose, `user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"`); got != 3 {
+		t.Fatalf("exactly three config helpers should run as the selected bind owner, got %d", got)
+	}
+	for _, boundary := range [][2]string{
+		{"srs-config", "ome-config"},
+		{"ome-config", "ome-health-token-check"},
+		{"ome-health-token-check", "ome"},
+	} {
+		start := strings.Index(compose, "\n  "+boundary[0]+":\n")
+		end := strings.Index(compose, "\n  "+boundary[1]+":\n")
+		if start == -1 || end == -1 || end <= start {
+			t.Fatalf("config helper boundaries missing for %s", boundary[0])
+		}
+		section := compose[start:end]
+		if !strings.Contains(section, "read_only: true") || !strings.Contains(section, `- ..:/workspace:ro`) {
+			t.Fatalf("%s must keep its root and release assets read-only", boundary[0])
+		}
+	}
 	envExample, err := os.ReadFile(filepath.Join(repoRoot, "deploy", ".env.example"))
 	if err != nil {
 		t.Fatalf("read env example: %v", err)
 	}
 	if !strings.Contains(string(envExample), "BITRIVER_CONFIG_ROOT=..") {
 		t.Fatalf("source checkout config root should default to the repository root")
+	}
+	for _, required := range []string{"BITRIVER_HOST_UID=", "BITRIVER_HOST_GID="} {
+		if !strings.Contains(string(envExample), required) {
+			t.Fatalf("env example missing optional managed bind owner %q", required)
+		}
 	}
 }
 

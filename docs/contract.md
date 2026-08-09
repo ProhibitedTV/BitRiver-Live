@@ -28,7 +28,8 @@ BitRiver Live has one canonical deployment path: an operator `.env` rendered/val
 - `deploy/install/compose-host.sh` and `deploy/systemd/bitriver-live-compose.service`
   - Ubuntu archive/package lifecycle around the canonical Compose stack.
   - Separate program assets (`/opt/bitriver-live`), secret configuration (`/etc/bitriver-live`), and durable state (`/var/lib/bitriver-live`). Installation leaves the service disabled until `configure` and `activate` pass.
-  - The installer persists `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` in the managed env file and the packaged unit supplies the same value, so direct and systemd Compose paths resolve the installed workspace's absolute `.env`, OME, and SRS symlinks inside their container namespace. Older env files gain the key on upgrade; duplicate active entries are rejected without rewriting operator configuration.
+  - The installer persists `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` plus the numeric non-root Docker operator in `BITRIVER_HOST_UID`/`BITRIVER_HOST_GID`; the packaged unit supplies the same values. Direct and systemd Compose paths therefore resolve the installed workspace's absolute `.env`, OME, and SRS symlinks and run only bind-writing services as the owner of private config/data. Older env files gain the managed keys on upgrade; duplicate active entries are rejected before any operator configuration is rewritten.
+  - `srs-config`, `ome-config`, and `ome-health-token-check` mount program assets read-only. The two renderers can write only the separate config-root bind, and the SRS helper executes its CRLF-sanitized copy from container tmpfs. No extra Linux capability is granted to bypass host permissions.
 - Generated files (verified in repository code paths)
   - `deploy/ome/Server.generated.xml`
     - Generated/validated by `cmd/bitriver ome render` and used by the `ome` container mount.
@@ -49,6 +50,12 @@ Status meanings:
 | Variable | Default in template/compose | Required? | What breaks if wrong |
 | --- | --- | --- | --- |
 | `BITRIVER_CONFIG_ROOT` | `..` (source checkout); `/etc/bitriver-live` persisted by the packaged installer and supplied by its systemd unit | Optional with topology-specific default | The packaged renderer containers cannot dereference `/workspace/.env` or generated OME/SRS symlinks, so activation stops before media services start. |
+| `BITRIVER_HOST_UID` | Empty (service-specific image UID fallback); numeric Docker operator UID persisted by the packaged installer and derived by Unix launch wrappers | Optional with topology-specific default | Config helpers cannot read/write mode-restricted operator config, and the API/transcoder cannot write packaged durable bind paths. |
+| `BITRIVER_HOST_GID` | Empty (service-specific image GID fallback); numeric Docker operator GID persisted by the packaged installer and derived by Unix launch wrappers | Optional with topology-specific default | Same ownership mismatch as `BITRIVER_HOST_UID`; arbitrary manual values can also create host files that the operator cannot manage. |
+
+When either host identity value is present, `env validate` requires both values
+to be unsigned 32-bit numeric IDs. Managed-install operators should rerun the
+installer with the intended account instead of editing these values by hand.
 
 ### A) Ports
 
@@ -267,6 +274,8 @@ _This section is generated from `deploy/.env.example` by `scripts/generate-contr
 | --- | --- |
 | `BITRIVER_DEPLOY_IMAGE_SOURCE` | `pull` |
 | `BITRIVER_CONFIG_ROOT` | `..` |
+| `BITRIVER_HOST_UID` | _(empty)_ |
+| `BITRIVER_HOST_GID` | _(empty)_ |
 | `BITRIVER_IMAGE_NAMESPACE` | `ghcr.io/prohibitedtv` |
 | `BITRIVER_LIVE_IMAGE_TAG` | `v1.2.3` |
 | `BITRIVER_RELEASE_COMMIT` | `unknown` |
