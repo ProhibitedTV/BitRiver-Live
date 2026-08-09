@@ -281,6 +281,17 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       pinned Linux container; Docker/viewer phases are explicitly unavailable
       there and Docker Compose rendering is proven separately. The private
       `.env` remains byte-identical at its recorded SHA-256.
+    - PR #1379 opened at `cf3cf297` with a strict high-risk release scorecard.
+      Run `31335824708` passed Ubuntu test-all, blocking image scans, viewer
+      lint/tests/build/audit, macOS/Windows Go, all entrypoint checks,
+      ShellCheck, docs, secret guard, and the aggregate Merge gate.
+    - Automated review then identified a valid first-run edge case: the Unix
+      wrapper resolved a custom env parent before `ensure_assets` could create
+      it. Config-root derivation now occurs after env seeding, the static test
+      requires that ordering, and the Linux lifecycle executes the launcher
+      with a missing custom directory plus fake Docker/CLI boundaries. Focused
+      Go, shell syntax, and the complete installer lifecycle pass; refreshed
+      protected CI is required before merge.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

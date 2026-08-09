@@ -210,8 +210,12 @@ func TestUnixWrapperStartUsesCliQuickstart(t *testing.T) {
 	if strings.Contains(wrapper, "compose_cmd up -d") {
 		t.Fatalf("expected unix wrapper start path not to call docker compose up directly")
 	}
-	if !strings.Contains(wrapper, `BITRIVER_CONFIG_ROOT=$(CDPATH=; cd -- "$(dirname "$env_file")" && pwd -P)`) {
+	configRootDerivation := `BITRIVER_CONFIG_ROOT=$(CDPATH=; cd -- "$(dirname "$env_file")" && pwd -P)`
+	if !strings.Contains(wrapper, configRootDerivation) {
 		t.Fatalf("expected unix wrapper to derive the Compose config root from its selected env file")
+	}
+	if strings.Index(wrapper, configRootDerivation) < strings.Index(wrapper, `cp "$example_env" "$env_file"`) {
+		t.Fatalf("unix wrapper must seed a first-run custom env path before resolving its parent directory")
 	}
 }
 

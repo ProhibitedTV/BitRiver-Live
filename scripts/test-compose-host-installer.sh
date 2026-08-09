@@ -44,6 +44,14 @@ SAFE_ENV
   chmod 0600 "$env_file"
   exit 0
 fi
+if [[ ${1:-} == doctor ]]; then
+  exit 0
+fi
+if [[ ${1:-} == quickstart ]]; then
+  test -f "${BITRIVER_ENV_FILE:?}"
+  test "${BITRIVER_CONFIG_ROOT:?}" = "$(dirname "$BITRIVER_ENV_FILE")"
+  exit 0
+fi
 echo "unexpected fake bitriver invocation: $*" >&2
 exit 1
 FAKE_BITRIVER
@@ -100,6 +108,25 @@ fi
 printf '\nBITRIVER_TEST_PRESERVE=yes\n' >>"$config_root/bitriver.env"
 "$installer" install "${common_args[@]}"
 grep -q '^BITRIVER_TEST_PRESERVE=yes$' "$config_root/bitriver.env"
+
+fake_path="$tmp_root/fake path"
+custom_env="$tmp_root/custom config/bitriver.env"
+mkdir -p "$fake_path"
+cat >"$fake_path/docker" <<'FAKE_DOCKER'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  version|"compose version") exit 0 ;;
+  *) echo "unexpected fake docker invocation: $*" >&2; exit 1 ;;
+esac
+FAKE_DOCKER
+chmod +x "$fake_path/docker"
+PATH="$fake_path:$PATH" \
+  BITRIVER_LAUNCHER_ROOT="$source_root" \
+  BITRIVER_ENV_FILE="$custom_env" \
+  BITRIVER_BINARY="$binary_dir/bitriver" \
+  "$binary_dir/bitriver-live" start
+test -f "$custom_env"
 
 touch "$config_root/keep-config" "$data_root/keep-data"
 "$installer" uninstall --root-prefix "$host_root" --operator-user "$operator_user"

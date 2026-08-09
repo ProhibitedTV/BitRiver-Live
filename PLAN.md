@@ -152,6 +152,10 @@
   focused Go/shell/contract checks, isolated Docker Compose rendering, and the
   literal verifier while preserving the private root `.env` and six unrelated
   operator paths.
+- Automated PR review identified that the Unix launcher initially derived the
+  config root before `ensure_assets` created a custom env file's missing parent
+  directory. Move derivation immediately after env seeding and lock that order
+  in the wrapper regression so first-run custom paths remain supported.
 - Land the correction through a focused protected PR and exact-main CI. Publish
   only the next unused immutable candidate from that green commit, independently
   verify its signed public release set, and rerun the no-checkout qualification.
