@@ -231,6 +231,56 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       entrypoints, ShellCheck, committed-secret guard, and the aggregate Merge
       gate are green. A final ledger-only commit and fresh protected run precede
       squash merge; RC14 remains untagged until exact-main CI also passes.
+    - The ledger update passed protected run `31333807382`; PR #1378 then
+      squash-merged as exact main
+      `9f97c1533613fd9a1cb40353c2df1d159c51a2aa`, exact-main run `31334103956`
+      passed, and the remote branch was deleted. Obsolete PR #1377 was closed
+      without merge after its ESLint-only workflow deletion was audited as an
+      incomplete and unsafe CI replacement. The repository now has zero open
+      pull requests.
+    - Immutable `v1.2.3-rc.14` published from exact green main in passed release
+      run `31334396479`. Independent verification accepted all 46 public assets;
+      the signed-root SHA-256 is
+      `ae27e14f4e3883e216c57c145e73d8571838e8b80098afd7145cc6ed9f5923f3`
+      and the amd64 `.deb` SHA-256 is
+      `ea29e57eac226a56a3de8dc718cc4305fe05b55f94690131f90b4eb0674ccd00`.
+    - No-checkout run `31334880405` passed signed provenance, public package
+      install, disabled service staging, production env validation, doctor,
+      and immutable-image audit. The corrected unit parsed and launched, then
+      activation failed because `srs-config` and `ome-config` both exited 1;
+      sanitized evidence and cleanup passed.
+    - Read-only diagnosis traced both exits to the package's intentional
+      absolute symlinks from `/opt/bitriver-live` into `/etc/bitriver-live`.
+      The renderer namespace currently mounts only the install root, leaving
+      its `/workspace/.env` and generated-config symlinks broken. The focused
+      config-root mount correction, contract tests, protected PR, next
+      immutable candidate, and qualification rerun are in progress; RC14 is
+      not patched or qualified.
+    - Compose now mounts topology-specific `BITRIVER_CONFIG_ROOT` at
+      `/etc/bitriver-live` writable in `srs-config`/`ome-config` and read-only in
+      `ome-health-token-check`. Source defaults remain the repository root;
+      the packaged systemd unit supplies its absolute config directory, and
+      both installed launchers derive the same boundary from their selected
+      env file when invoked directly.
+    - Installer and Go regressions require the fully substituted package unit,
+      exactly two writable renderer mounts, one read-only verifier mount, and
+      the source default. The generated contract index, deployment contract,
+      Ubuntu guide, and deploy map describe the new value and secret boundary.
+    - An isolated named-volume fixture reproduced the package's absolute
+      `/opt`-to-`/etc` symlinks with the exact signed RC14 OME helper digest:
+      SRS render, OME render, and read-only OME token verification all passed,
+      wrote durable config outputs, and removed both temporary volumes. The
+      first fixture attempt copied the Windows worktree's CRLF example env and
+      was discarded after Bash rejected its carriage returns; normalized
+      release-shaped bytes passed without a product change.
+    - Pinned Go 1.26.5 focused and full `./scripts` tests, Linux installer
+      lifecycle, shell and PowerShell parsing, CI/secret/docs/contract guards,
+      generated-doc check, host `git diff --check`, and Docker Desktop 29.6.2 /
+      Compose 5.3.1 rendering pass. Literal `./scripts/verify.sh` passes all Go,
+      policy, release-bundle, installer, docs, and contract checks in the
+      pinned Linux container; Docker/viewer phases are explicitly unavailable
+      there and Docker Compose rendering is proven separately. The private
+      `.env` remains byte-identical at its recorded SHA-256.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

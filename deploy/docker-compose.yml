@@ -335,6 +335,7 @@ services:
     command: ["bash", "-lc", "mkdir -p /workspace/.tmp && tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /workspace/.tmp/render-srs-config.sh && chmod +x /workspace/.tmp/render-srs-config.sh && exec /workspace/.tmp/render-srs-config.sh --env-file /workspace/.env --force"]
     volumes:
       - ..:/workspace
+      - "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live"
     env_file:
       - ../.env
     restart: "no"
@@ -357,6 +358,7 @@ services:
     command: ["ome", "render", "--env-file", "/workspace/.env", "--force"]
     volumes:
       - ..:/workspace
+      - "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live"
     env_file:
       - ../.env
     restart: "no"
@@ -374,6 +376,7 @@ services:
     command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/workspace/deploy/ome/Server.generated.xml"]
     volumes:
       - ..:/workspace
+      - "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live:ro"
     env_file:
       - ../.env
     depends_on:

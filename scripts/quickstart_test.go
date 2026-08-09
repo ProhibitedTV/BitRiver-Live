@@ -210,6 +210,9 @@ func TestUnixWrapperStartUsesCliQuickstart(t *testing.T) {
 	if strings.Contains(wrapper, "compose_cmd up -d") {
 		t.Fatalf("expected unix wrapper start path not to call docker compose up directly")
 	}
+	if !strings.Contains(wrapper, `BITRIVER_CONFIG_ROOT=$(CDPATH=; cd -- "$(dirname "$env_file")" && pwd -P)`) {
+		t.Fatalf("expected unix wrapper to derive the Compose config root from its selected env file")
+	}
 }
 
 func TestPowerShellWrapperStartUsesCliQuickstart(t *testing.T) {
@@ -231,6 +234,9 @@ func TestPowerShellWrapperStartUsesCliQuickstart(t *testing.T) {
 	}
 	if strings.Contains(wrapper, "Invoke-Compose up -d") {
 		t.Fatalf("expected PowerShell wrapper start path not to call docker compose up directly")
+	}
+	if !strings.Contains(wrapper, `$env:BITRIVER_CONFIG_ROOT = Split-Path -Parent ([System.IO.Path]::GetFullPath($envFilePath))`) {
+		t.Fatalf("expected PowerShell wrapper to derive the Compose config root from its selected env file")
 	}
 }
 
@@ -438,6 +444,22 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-live:") {
 		t.Fatalf("base compose file should use the owned, overridable official image namespace")
+	}
+	compose := string(content)
+	configRootRW := `- "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live"`
+	configRootRO := `- "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live:ro"`
+	if got := strings.Count(compose, configRootRW); got != 2 {
+		t.Fatalf("base compose should mount the config root writable into exactly two renderers, got %d", got)
+	}
+	if got := strings.Count(compose, configRootRO); got != 1 {
+		t.Fatalf("base compose should mount the config root read-only into the token verifier, got %d", got)
+	}
+	envExample, err := os.ReadFile(filepath.Join(repoRoot, "deploy", ".env.example"))
+	if err != nil {
+		t.Fatalf("read env example: %v", err)
+	}
+	if !strings.Contains(string(envExample), "BITRIVER_CONFIG_ROOT=..") {
+		t.Fatalf("source checkout config root should default to the repository root")
 	}
 }
 

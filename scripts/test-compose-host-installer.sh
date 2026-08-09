@@ -88,6 +88,10 @@ if ! grep -Fxq "WorkingDirectory=$install_root" "$unit_file"; then
   echo "systemd unit does not contain an absolute unquoted working directory" >&2
   exit 1
 fi
+if ! grep -Fxq "Environment=\"BITRIVER_CONFIG_ROOT=$config_root\"" "$unit_file"; then
+  echo "systemd unit does not expose the absolute operator config root to Compose" >&2
+  exit 1
+fi
 if grep -Eq 'P0stgres-Example!|R3dis-Example!|OME-Example-(Pass|Access-Token)' "$config_root/bitriver.env"; then
   echo "installed environment retains release sample credentials" >&2
   exit 1

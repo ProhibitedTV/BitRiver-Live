@@ -180,6 +180,12 @@ The filesystem contract is:
 | `/var/lib/bitriver-live` | Postgres-backed application/media state mounted by the stack | Preserved by default |
 | `/etc/systemd/system/bitriver-live-compose.service` | Bounded Compose lifecycle unit | Removed on uninstall |
 
+The packaged unit maps `/etc/bitriver-live` into the three short-lived config
+renderer/verification containers through `BITRIVER_CONFIG_ROOT`. This is
+installer-managed; keep using `bitriver-host activate` or the installed unit so
+the durable `.env`, OME, and SRS files remain reachable without copying secrets
+back into `/opt/bitriver-live`.
+
 ## 4. Configure public values
 
 Run the guided wizard:

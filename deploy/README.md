@@ -55,6 +55,12 @@ The `srs-config` helper is invoked via `bash` and sanitized into `/workspace/.tm
 preserving repo-relative path resolution used by the script; keep shell scripts checked out with LF line endings
 (`.gitattributes` enforces this for `*.sh` files).
 
+`BITRIVER_CONFIG_ROOT` is mounted at `/etc/bitriver-live` only in the SRS/OME
+renderers and OME token verifier. Source checkouts use `..` (the repository
+root). The packaged Compose unit supplies `/etc/bitriver-live`, allowing the
+installed absolute `.env` and generated-config symlinks to resolve inside those
+containers while keeping durable secrets out of `/opt/bitriver-live`.
+
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
 

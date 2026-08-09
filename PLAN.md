@@ -120,6 +120,43 @@
   normalize its tracked bytes; keep the strict rendered-directive regression
   so Windows checkouts cannot mask release-byte drift. Repeat the Linux
   lifecycle, focused policy checks, and fresh PR CI before merge.
+- PR #1378 passed protected run `31333807382`, squash-merged as exact main
+  `9f97c1533613fd9a1cb40353c2df1d159c51a2aa`, and exact-main run
+  `31334103956` passed. Immutable `v1.2.3-rc.14` was published from that commit;
+  release run `31334396479` passed all 46 public assets and the independently
+  verified signed-root SHA-256 is
+  `ae27e14f4e3883e216c57c145e73d8571838e8b80098afd7145cc6ed9f5923f3`.
+- Clean-host run `31334880405` proved RC14 provenance, public `.deb` install,
+  disabled systemd staging, production environment validation, doctor, and
+  the complete immutable-image audit. The corrected systemd unit parsed and
+  invoked the package launcher, but activation stopped because both
+  `srs-config` and `ome-config` exited 1. RC14 remains immutable and rejected
+  for clean-host qualification; do not patch its installed bytes or move its
+  tag.
+- The package intentionally keeps `.env`, OME output, and SRS output under
+  `/etc/bitriver-live` and exposes them in `/opt/bitriver-live` as absolute
+  symlinks. The renderer containers mount `/opt/bitriver-live` at `/workspace`,
+  so `/workspace/.env` and both generated paths resolve to container-local
+  `/etc/bitriver-live`, which is currently absent. This explains the paired
+  renderer failure before SRS/OME consumers can start.
+- Add one Compose contract value, `BITRIVER_CONFIG_ROOT`, defaulting to the
+  source checkout root. Mount it at `/etc/bitriver-live` only in `srs-config`,
+  `ome-config`, and `ome-health-token-check`; the two renderers receive a
+  writable bind while the verifier receives it read-only. The packaged
+  installer must idempotently set the value to its absolute operator config
+  directory, while source checkouts retain the relative default and existing
+  generated-file consumer mounts.
+- Extend installer and Compose contract tests to require the managed package
+  value, exact renderer/verifier mounts, read-only verification, source-default
+  rendering, and no credential output. Re-run the Linux package lifecycle,
+  focused Go/shell/contract checks, isolated Docker Compose rendering, and the
+  literal verifier while preserving the private root `.env` and six unrelated
+  operator paths.
+- Land the correction through a focused protected PR and exact-main CI. Publish
+  only the next unused immutable candidate from that green commit, independently
+  verify its signed public release set, and rerun the no-checkout qualification.
+  A hosted pass still does not close #1297/#1304 or prove XOA reboot,
+  Nginx Proxy Manager, firewall/NAT, browser playback, or target-host media.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 

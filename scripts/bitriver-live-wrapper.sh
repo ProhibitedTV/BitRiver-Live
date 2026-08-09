@@ -9,6 +9,10 @@ example_env="$assets_dir/deploy/.env.example"
 env_file=${BITRIVER_ENV_FILE:-$assets_dir/.env}
 binary_path=${BITRIVER_BINARY:-"$script_dir/bitriver"}
 export BITRIVER_ROOT="$assets_dir"
+if [ -z "${BITRIVER_CONFIG_ROOT:-}" ]; then
+  BITRIVER_CONFIG_ROOT=$(CDPATH=; cd -- "$(dirname "$env_file")" && pwd -P)
+  export BITRIVER_CONFIG_ROOT
+fi
 
 fatal() {
   printf '%s\n' "$1" >&2
