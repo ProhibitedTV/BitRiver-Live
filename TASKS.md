@@ -436,6 +436,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The literal verifier was rerun after both review corrections and passed
       the same complete applicable gate set on the final diff. No generated
       config, private env, runtime media, or retained operator path changed.
+    - Corrected head `c5dc3165` passed protected PR run `31342402729`: Ubuntu
+      test-all and its previously failing real source renderer path, viewer
+      lint/tests/build/audit, blocking image scans, native arm64 viewer, macOS/
+      Windows Go, all three quickstart entrypoints, docs, ShellCheck, secret
+      guard, and the aggregate Merge gate are green. Both automated review
+      threads have evidence replies and are resolved. A final ledger-only run
+      precedes squash merge; RC17 remains untagged until exact-main CI passes.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 
