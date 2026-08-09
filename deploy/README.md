@@ -51,7 +51,7 @@ container runtime is now `scratch`, so the helper image only contains the static
 entrypoint (no shell or Debian userland packages).
 Compose also renders `srs/conf/srs.generated.conf` via the `srs-config` helper, replacing `${BITRIVER_SRS_TOKEN}` from `.env`
 before starting SRS so the ingest hooks always share the same token as the API.
-The `srs-config` helper is invoked via `bash` and sanitized into `/workspace/.tmp/` to avoid Windows CRLF issues while
+The `srs-config` helper is invoked via `bash` and sanitized into container tmpfs at `/tmp/` to avoid Windows CRLF issues while
 preserving repo-relative path resolution used by the script; keep shell scripts checked out with LF line endings
 (`.gitattributes` enforces this for `*.sh` files).
 
@@ -64,6 +64,17 @@ those containers while keeping durable secrets out of `/opt/bitriver-live`.
 Installer upgrades append the key for older env files, replace the single
 managed value, and refuse ambiguous duplicates while preserving every other
 operator setting.
+
+On managed Linux installs, `BITRIVER_HOST_UID` and `BITRIVER_HOST_GID` are
+persisted beside the config root and supplied by systemd. They select the
+non-root owner only for services that write the operator's config/data bind
+mounts; image-specific users remain the fallback elsewhere. Unix source and
+archive launch wrappers derive the current numeric IDs when the variables are
+empty. All three config helpers mount `/workspace` read-only, render/verify the
+generated files through `/etc/bitriver-live/deploy`, and keep the SRS temporary
+script on tmpfs. Only the two renderer config-root mounts are writable. Do not
+solve permission failures by making `bitriver.env` world readable or granting
+renderer containers new capabilities.
 
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.

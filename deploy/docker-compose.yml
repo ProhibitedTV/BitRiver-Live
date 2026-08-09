@@ -26,8 +26,9 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
     read_only: true
-    # Runtime image sets USER appuser (uid 65532); keep explicit for compose clarity.
-    user: "65532:65532"
+    # Managed Linux hosts run bind-writing services as the Docker operator.
+    # Source/desktop starts retain the image UID when no host identity is set.
+    user: "${BITRIVER_HOST_UID:-65532}:${BITRIVER_HOST_GID:-65532}"
     env_file:
       - ../.env
     ports:
@@ -331,18 +332,21 @@ services:
     image: debian:12-slim${BITRIVER_DEBIAN_IMAGE_DIGEST:-}
     container_name: bitriver-srs-config
     working_dir: /workspace
-    # Render via a sanitized copy under /workspace so script path resolution still points at repo-root deploy assets.
-    command: ["bash", "-lc", "mkdir -p /workspace/.tmp && tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /workspace/.tmp/render-srs-config.sh && chmod +x /workspace/.tmp/render-srs-config.sh && exec /workspace/.tmp/render-srs-config.sh --env-file /workspace/.env --force"]
+    # Render via a sanitized tmpfs copy while keeping installed/source assets read-only.
+    command: ["bash", "-lc", "tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /tmp/render-srs-config.sh && REPO_ROOT=/workspace OUTPUT_FILE=/etc/bitriver-live/deploy/srs/conf/srs.generated.conf exec bash /tmp/render-srs-config.sh --env-file /workspace/.env --force"]
+    user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"
     volumes:
-      - ..:/workspace
+      - ..:/workspace:ro
       - "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live"
     env_file:
       - ../.env
     restart: "no"
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    # Exception: config render job needs writable bind-mounted repository workspace.
-    # Exception: keep root because this job chmods generated script paths in mounted workspace.
+    read_only: true
+    tmpfs:
+      - /tmp
+    # The only writable bind is the operator-owned generated-config directory.
     networks:
       - internal
 
@@ -355,17 +359,18 @@ services:
         GOSUMDB: ${GOSUMDB:-off}
     image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     working_dir: /workspace
-    command: ["ome", "render", "--env-file", "/workspace/.env", "--force"]
+    command: ["ome", "render", "--env-file", "/workspace/.env", "--output", "/etc/bitriver-live/deploy/ome/Server.generated.xml", "--force"]
+    user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"
     volumes:
-      - ..:/workspace
+      - ..:/workspace:ro
       - "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live"
     env_file:
       - ../.env
     restart: "no"
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    # Exception: OME render writes generated config back into the repository workspace.
-    # Exception: keep image default root for repository workspace write permissions.
+    read_only: true
+    # The only writable bind is the operator-owned generated-config directory.
     networks:
       - internal
 
@@ -373,9 +378,10 @@ services:
     image: ${BITRIVER_IMAGE_NAMESPACE:-ghcr.io/prohibitedtv}/bitriver-ome-config:${BITRIVER_OME_CONFIG_IMAGE_TAG:-${BITRIVER_LIVE_IMAGE_TAG:?set via .env}}${BITRIVER_OME_CONFIG_IMAGE_DIGEST:-}
     container_name: bitriver-ome-health-token-check
     working_dir: /workspace
-    command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/workspace/deploy/ome/Server.generated.xml"]
+    command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/etc/bitriver-live/deploy/ome/Server.generated.xml"]
+    user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"
     volumes:
-      - ..:/workspace
+      - ..:/workspace:ro
       - "${BITRIVER_CONFIG_ROOT:-..}:/etc/bitriver-live:ro"
     env_file:
       - ../.env
@@ -386,7 +392,6 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
     read_only: true
-    # Exception: keep image default user for CLI/image parity with ome-config helper image.
     tmpfs:
       - /tmp
     networks:
@@ -503,8 +508,9 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
     read_only: true
-    # Runtime image sets USER appuser (uid 10001); keep explicit for compose clarity.
-    user: "10001:10001"
+    # Managed Linux hosts run bind-writing services as the Docker operator.
+    # Source/desktop starts retain the image UID when no host identity is set.
+    user: "${BITRIVER_HOST_UID:-10001}:${BITRIVER_HOST_GID:-10001}"
     ports:
       - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
     environment:

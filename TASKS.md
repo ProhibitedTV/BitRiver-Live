@@ -112,6 +112,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       hash; its public artifact is independently inspected and retained durably.
     - #1297/#1304 receive bounded evidence without closing external gates or
       enabling stable promotion prematurely.
+    - Config helpers write and verify generated files through the dedicated
+      config-root mount while the installed/source workspace remains read-only.
   - Check:
     - Local focused checks, the literal verifier, PR #1369 CI, its protected
       merge gate, and exact-main run `30819170684` passed. PR #1369 merged as
@@ -350,6 +352,97 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       body now records deployment/package/operator classification, high risk,
       test/manual evidence, secret and rollback boundaries, and remaining
       external gates; a fresh pull-request event is required before merge.
+    - Refreshed run `31338969678` passed every protected check. PR #1380
+      squash-merged as `0a6be1600b08bcf2a4caeca6c580698f7e2f8ce4`, exact-main
+      run `31339266505` passed, and its remote branch was deleted. The
+      repository again had zero open pull requests.
+    - Immutable RC16 published from that exact main commit in passed release
+      run `31339591099`. Independent inspection verified all 46 public assets,
+      signed-root SHA-256
+      `c4d34bd82264995723a679b88e497c1a02aa192a99ac8bf3458de771b7b34b79`,
+      amd64 package SHA-256
+      `a8e02419b1fbc51e2477030e32cca69145aa25d3be259dca513c3f77cdd5363a`,
+      and all five exact image signatures.
+    - No-checkout run `31340245262` passed provenance, public package install,
+      disabled host staging, persisted config-root selection, immutable input
+      configuration, validation, doctor, and complete digest rendering. Both
+      renderer jobs still exited 1 during activation; sanitized evidence and
+      cleanup passed, so RC16 is immutable and rejected.
+    - Read-only diagnosis identifies the remaining Linux-only ownership defect:
+      private config/data binds are owned by the non-root operator, while
+      renderer, API, and transcoder services use unrelated container UIDs with
+      every capability dropped. Persisting the operator UID/GID, applying it
+      only to bind-writing services, and narrowing renderer mounts are now the
+      next top-to-bottom correction before RC17.
+    - The focused correction now persists `BITRIVER_HOST_UID`/
+      `BITRIVER_HOST_GID` atomically with the config root, supplies all three
+      values to operator commands and systemd, and uses image-specific UID/GID
+      fallbacks outside managed Linux starts. API/transcoder and all three
+      config helpers use the selected owner; renderer workspaces are read-only,
+      the SRS sanitized copy runs from tmpfs, and no capability or secret mode
+      was loosened. Bash syntax and the complete pinned-Linux installer
+      lifecycle pass, including first install, idempotent reinstall, legacy-env
+      append, unrelated-setting retention, multi-key duplicate refusal before
+      mutation, wrapper derivation, retained uninstall, and guarded purge.
+    - A permission-faithful named-volume fixture extracted the exact public
+      RC16 amd64 package layout, reproduced mode-0750/0600 UID/GID-1001 config
+      and data ownership, and ran the exact signed RC16 Debian dependency, OME
+      helper, API, and transcoder images as `1001:1001` with all capabilities
+      dropped and read-only roots/assets. SRS render, OME render, read-only token
+      verification, API durable write, and transcoder durable write passed;
+      every output remained owned by 1001 and all four exact fixture volumes
+      were removed. The first tmpfs attempt correctly exposed `noexec`; the
+      product now invokes the sanitized SRS file through Bash instead of
+      weakening the tmpfs mount.
+    - The required contract-doc generator and contract snapshot include both
+      host-identity keys. Full pinned `go test ./scripts`, focused environment
+      validation, Docker Desktop Compose rendering with explicit `1234:2345`,
+      production third-party digest enforcement against the signed RC16 set,
+      changed-script ShellCheck 0.11.0, installer wording, and committed-secret
+      guards pass. Literal `./scripts/verify.sh` passes the full Go suite,
+      release bundle, installer, release-set, Markdown, architecture, contract,
+      migration, and repository policy gates; Docker/viewer are explicitly
+      unavailable in that pinned Linux verifier and are covered separately.
+      Managed-key duplicate detection also rejects whitespace-obfuscated active
+      entries before mutation. The private root `.env` remains byte-identical.
+    - PR #1381 protected run `31341715983` passed committed-secret, docs,
+      ShellCheck, native arm64 viewer, and blocking image-scan jobs. Its Ubuntu
+      smoke failed when `ome-config` named
+      `/workspace/deploy/ome/Server.generated.xml` after the workspace became
+      read-only; the aggregate gate failed as designed. Both renderers must now
+      target the existing writable `/etc/bitriver-live/deploy` alias and the
+      verifier must consume that same path before refreshed CI can merge.
+    - Compose now directs OME and SRS output through that writable alias and
+      verifies the OME token from the same path; no helper writes through
+      `/workspace`. The focused pinned-Linux Compose regression passed. An
+      isolated Docker Desktop config root then ran both real renderers and the
+      read-only token verifier successfully, produced 5,916-byte OME and
+      1,919-byte SRS outputs, left the tracked generated config unchanged, and
+      removed its exact temporary directory, containers, and network.
+    - Full pinned `go test ./scripts`, ShellCheck 0.11.0, Docker Compose render,
+      `git diff --check`, and the literal `./scripts/verify.sh` pass on the
+      corrected diff. The literal verifier covered all Go packages, installer,
+      release bundle/set, docs, architecture, contract, migration, and policy
+      checks; Docker/viewer were explicitly unavailable in that verifier and
+      the changed Docker renderer path was exercised separately above.
+    - Automated review's P1 renderer-path finding is fixed by the config-root
+      output change. Its P2 owner-precedence finding is also fixed: the Unix
+      quickstart wrapper inspects the selected env path without sourcing or
+      printing it, preserves a declared UID/GID pair for Compose, leaves a
+      partial declaration to validation, and derives both current IDs only
+      when process and file values are absent. Pinned Linux execution tests pass
+      for split/equal env-file flags and empty-value fallback; Bash syntax and
+      ShellCheck 0.11.0 pass for both modified shell entrypoints.
+    - The literal verifier was rerun after both review corrections and passed
+      the same complete applicable gate set on the final diff. No generated
+      config, private env, runtime media, or retained operator path changed.
+    - Corrected head `c5dc3165` passed protected PR run `31342402729`: Ubuntu
+      test-all and its previously failing real source renderer path, viewer
+      lint/tests/build/audit, blocking image scans, native arm64 viewer, macOS/
+      Windows Go, all three quickstart entrypoints, docs, ShellCheck, secret
+      guard, and the aggregate Merge gate are green. Both automated review
+      threads have evidence replies and are resolved. A final ledger-only run
+      precedes squash merge; RC17 remains untagged until exact-main CI passes.
 
 ## Scoped change: immutable release sets and stable promotion (#1301, #1271, #1302)
 

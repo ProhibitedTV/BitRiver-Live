@@ -189,6 +189,67 @@
   verify its signed public release set, and rerun the no-checkout qualification.
   A hosted pass still does not close #1297/#1304 or prove XOA reboot,
   Nginx Proxy Manager, firewall/NAT, browser playback, or target-host media.
+- PR #1380 passed refreshed protected run `31338969678`, squash-merged as exact
+  main `0a6be1600b08bcf2a4caeca6c580698f7e2f8ce4`, and passed exact-main run
+  `31339266505`. Immutable `v1.2.3-rc.16` published from that commit in passed
+  release run `31339591099`; all 46 public assets, the signed release root, and
+  all five exact image signatures independently verify. The release-set
+  SHA-256 is
+  `c4d34bd82264995723a679b88e497c1a02aa192a99ac8bf3458de771b7b34b79`
+  and the amd64 `.deb` SHA-256 is
+  `a8e02419b1fbc51e2477030e32cca69145aa25d3be259dca513c3f77cdd5363a`.
+- Clean-host run `31340245262` proved RC16 signed provenance, public package
+  installation, disabled systemd staging, persisted config-root resolution,
+  production environment validation, doctor, and the all-profile immutable
+  image audit. Activation still stopped when both config renderers exited 1;
+  sanitized evidence upload and cleanup passed. RC16 remains immutable and
+  rejected for clean-host qualification.
+- The remaining paired failure is a Unix ownership boundary. The installer
+  correctly keeps `/etc/bitriver-live` and durable bind data mode-restricted and
+  owned by the non-root Docker operator, but Compose forces the renderer jobs,
+  API, and transcoder to unrelated image UIDs. With all capabilities dropped,
+  the renderer jobs cannot traverse the private config directory; the API and
+  transcoder would likewise be unable to write their durable package paths.
+- Add optional `BITRIVER_HOST_UID`/`BITRIVER_HOST_GID` Compose inputs. The
+  packaged installer must atomically persist the resolved operator IDs, while
+  Unix launch wrappers derive them for source/archive starts when absent.
+  Apply them only to services that write operator-owned bind mounts:
+  `srs-config`, `ome-config`, `ome-health-token-check`, `bitriver-live`, and
+  `transcoder`. Preserve each image's existing UID fallback when the values are
+  absent outside the managed installer.
+- Reduce the renderer namespace while correcting ownership: mount the installed
+  workspace read-only, move the sanitized SRS helper copy to tmpfs, and keep
+  only `/etc/bitriver-live` writable for the two render jobs. Do not grant new
+  Linux capabilities, loosen mode `0600` secrets, chown operator config to a
+  container-only account, or upload renderer logs containing credentials.
+- Extend Compose, installer, wrapper, and release-contract regressions for exact
+  UID/GID persistence, idempotent upgrade, duplicate refusal, image-specific
+  fallbacks, read-only workspaces, tmpfs execution, and arbitrary non-root
+  bind writes. Run Linux lifecycle/package fixtures, permission-faithful exact
+  image rendering, Docker Compose validation, focused Go/shell tests, literal
+  `./scripts/verify.sh`, protected PR/exact-main CI, and then publish only the
+  next unused immutable candidate (RC17) for another no-checkout qualification.
+- Protected PR run `31341715983` proved the ownership, docs, ShellCheck, native
+  arm64 viewer, and blocking image-scan gates, but the Ubuntu smoke exposed a
+  path-alias regression: `ome-config` still writes the generated file through
+  the now-read-only `/workspace` mount. The writable config-root mount already
+  aliases the same source-checkout or installed target, so make both renderers
+  write directly under `/etc/bitriver-live/deploy`, make the verifier read from
+  that same canonical mount, and keep templates/assets read-only. Add a static
+  Compose assertion plus a real source-checkout render that proves the host
+  generated path changes without granting workspace write access. Re-run the
+  focused renderer tests, literal verifier, and fresh protected CI; do not
+  weaken mounts or bypass the failed gate.
+- Automated review also identified that `scripts/quickstart.sh` derives process
+  UID/GID values before Compose reads the selected env file. Because process
+  values win over `--env-file`, an explicit operator owner in `.env` can be
+  silently replaced by the invoking account. Detect both supported env-file
+  flag forms without sourcing or printing the file; if either managed identity
+  key has a non-empty env-file value, export neither fallback and let Compose
+  plus `env validate` retain or reject the pair. Derive both current IDs only
+  when neither the process nor selected file declares an identity. Exercise
+  the wrapper with stubbed Go for default derivation and both explicit flag
+  forms, then rerun shell/static/full verification.
 
 ## Current scope - publish and inspect the first signed release-set candidate (#1271, #1301) (2026-08-03)
 

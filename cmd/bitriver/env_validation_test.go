@@ -203,6 +203,41 @@ func TestValidateEnvRejectsDevelopmentMode(t *testing.T) {
 	}
 }
 
+func TestValidateEnvRequiresPairedNumericHostIdentity(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+
+	t.Run("paired numeric values", func(t *testing.T) {
+		values := baseEnvValues(cert, key)
+		values["BITRIVER_HOST_UID"] = "1001"
+		values["BITRIVER_HOST_GID"] = "1001"
+		res := validateEnv(values)
+		for _, message := range res.Errors {
+			if strings.Contains(message, "BITRIVER_HOST_UID") || strings.Contains(message, "BITRIVER_HOST_GID") {
+				t.Fatalf("numeric host identity should be accepted, got %q", message)
+			}
+		}
+	})
+
+	t.Run("missing pair", func(t *testing.T) {
+		values := baseEnvValues(cert, key)
+		values["BITRIVER_HOST_UID"] = "1001"
+		res := validateEnv(values)
+		if !strings.Contains(strings.Join(res.Errors, " "), "must both be set or both be empty") {
+			t.Fatalf("expected paired host identity error, got %v", res.Errors)
+		}
+	})
+
+	t.Run("non numeric", func(t *testing.T) {
+		values := baseEnvValues(cert, key)
+		values["BITRIVER_HOST_UID"] = "operator"
+		values["BITRIVER_HOST_GID"] = "1001"
+		res := validateEnv(values)
+		if !strings.Contains(strings.Join(res.Errors, " "), "unsigned 32-bit numeric ID") {
+			t.Fatalf("expected numeric host identity error, got %v", res.Errors)
+		}
+	})
+}
+
 func TestValidateEnvRuntimeDevelopmentOverrideKeepsSavedProductionMode(t *testing.T) {
 	values := buildValidProductionEnv(t)
 	values["BITRIVER_LIVE_MODE"] = "production"

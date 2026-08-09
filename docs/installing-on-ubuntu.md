@@ -180,13 +180,23 @@ The filesystem contract is:
 | `/var/lib/bitriver-live` | Postgres-backed application/media state mounted by the stack | Preserved by default |
 | `/etc/systemd/system/bitriver-live-compose.service` | Bounded Compose lifecycle unit | Removed on uninstall |
 
-The packaged installer persists `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` in
-`bitriver.env`, and the packaged unit maps that directory into the three
-short-lived config renderer/verification containers. This value is
-installer-managed; upgrades preserve every other operator setting and reject
-duplicate config-root entries. Keep using `bitriver-host activate` or the
-installed unit so the durable `.env`, OME, and SRS files remain reachable
-without copying secrets back into `/opt/bitriver-live`.
+The packaged installer persists `BITRIVER_CONFIG_ROOT=/etc/bitriver-live` and
+the selected Docker operator's numeric `BITRIVER_HOST_UID`/
+`BITRIVER_HOST_GID` in `bitriver.env`. The packaged unit supplies the same
+values. Compose can therefore map the private config directory into its three
+short-lived config helpers and run only config/data bind-writing services as
+the host owner. Program assets stay read-only in those helpers; renderers write
+through `/etc/bitriver-live/deploy` on the separate config bind and the token
+verifier reads that same path. These values are
+installer-managed: upgrades preserve every other operator setting and reject
+any duplicate managed key before rewriting the file. Keep using
+`bitriver-host activate` or the installed unit so durable config/data remains
+reachable without loosening mode `0600` secrets or copying them into
+`/opt/bitriver-live`.
+
+Do not copy numeric IDs from another machine. If the Docker operator changes,
+rerun `sudo bitriver-host install --operator-user NEW_USER` from the installed
+release so all three managed values and the unit are regenerated together.
 
 ## 4. Configure public values
 
