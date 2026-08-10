@@ -75,6 +75,12 @@ services:
     user: "${host_uid}:${host_gid}"
   ome-health-token-check:
     user: "${host_uid}:${host_gid}"
+  srs:
+    group_add:
+      - "${host_gid}"
+  ome:
+    group_add:
+      - "${host_gid}"
   # The transcoder image owns /work as its non-root image user. Do not replace
   # that UID when /work is an isolated named volume.
   transcoder:

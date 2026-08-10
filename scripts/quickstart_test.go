@@ -699,6 +699,18 @@ func TestQuickstartSmokePreservesContainerEnvironmentPathsOnWindows(t *testing.T
 	if linuxOverride == "" {
 		t.Fatal("expected Linux quickstart smoke override")
 	}
+	for _, required := range []string{
+		`srs:
+    group_add:
+      - "${host_gid}"`,
+		`ome:
+    group_add:
+      - "${host_gid}"`,
+	} {
+		if !strings.Contains(linuxOverride, required) {
+			t.Fatalf("Linux smoke must give the media consumers the renderer group: missing %q", required)
+		}
+	}
 	if strings.Contains(linuxOverride, `transcoder:
     user:`) {
 		t.Fatal("Linux smoke must retain the transcoder image UID for its isolated named /work volume")

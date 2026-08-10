@@ -42,6 +42,14 @@
   the read-only OME/SRS consumers. Do not add capabilities or make either
   runtime mount writable. Both renderers must enforce the final mode on every
   render, including existing files.
+- Corrected run `31346863473` proved the runtime group-read design in the base
+  Compose file but exposed a Linux smoke-fixture mismatch: its override assigns
+  the runner UID/GID to the config renderers without persisting or exporting
+  `BITRIVER_HOST_GID`, so the base SRS/OME supplementary group resolves to `0`.
+  Keep the production/package contract unchanged and add the fixture's own
+  `host_gid` to only its SRS/OME services. Do not export host identity globally,
+  because this smoke intentionally retains the transcoder image UID on its
+  isolated named volume.
 - Upgrade migration must be fail-safe under interruption and must not erase a
   modified operator config. Use same-filesystem moves where possible, create
   parents before migration, apply the established `0600` file and operator

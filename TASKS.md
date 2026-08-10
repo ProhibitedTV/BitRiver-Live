@@ -123,6 +123,15 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       UID/GID 1001, `cap_drop: ALL`, and only supplementary GID 1001. Its exact
       containers and volumes were removed. Literal `./scripts/verify.sh` also
       passes again; protected CI rerun remains pending.
+    - Corrected run `31346863473` again passed every independent check but the
+      Ubuntu smoke still gave SRS group `0`: its Linux-only override assigns the
+      runner GID to renderers without supplying that synthetic GID to the media
+      consumers. The installed-host env contract is unaffected. Align only the
+      smoke SRS/OME `group_add` values with its local `host_gid`, retain the
+      transcoder image UID, and rerun the protected matrix.
+    - The aligned smoke override passes focused Linux Go coverage, ShellCheck
+      0.11.0, syntax/diff hygiene, and another literal `./scripts/verify.sh` run.
+      A third protected run is pending.
 
 ## Scoped change: live-room chat target and gap reconciliation (#1272)
 
