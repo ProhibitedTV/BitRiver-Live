@@ -175,8 +175,8 @@ The filesystem contract is:
 | --- | --- | --- |
 | `/opt/bitriver-live` | Versioned program assets, binaries, and Compose workspace | Replaced on upgrade; removed on uninstall |
 | `/etc/bitriver-live/bitriver.env` | Operator environment and secrets, mode `0600` | Preserved by default |
-| `/etc/bitriver-live/deploy/ome/Server.generated.xml` | Deployment-time OME config | Preserved by default; never publish it |
-| `/etc/bitriver-live/deploy/srs/conf/srs.generated.conf` | Deployment-time SRS config | Preserved by default; never publish it |
+| `/etc/bitriver-live/deploy/ome/Server.generated.xml` | Deployment-time OME config, mode `0640`, operator UID/GID | Preserved by default; never publish it |
+| `/etc/bitriver-live/deploy/srs/conf/srs.generated.conf` | Deployment-time SRS config, mode `0640`, operator UID/GID | Preserved by default; never publish it |
 | `/var/lib/bitriver-live` | Postgres-backed application/media state mounted by the stack | Preserved by default |
 | `/etc/systemd/system/bitriver-live-compose.service` | Bounded Compose lifecycle unit | Removed on uninstall |
 
@@ -201,6 +201,9 @@ into the source-shaped tree and leave a compatibility link at the former path.
 If both old and new locations contain different regular files, installation
 stops before staging new program assets. Compare and reconcile those private
 files locally, then rerun the upgrade; do not post their contents in an issue.
+The OME and SRS containers receive the selected operator GID only as a
+supplementary read group; their config mounts stay read-only and all Linux
+capabilities remain dropped. Keep `/etc/bitriver-live/bitriver.env` mode `0600`.
 
 Do not copy numeric IDs from another machine. If the Docker operator changes,
 rerun `sudo bitriver-host install --operator-user NEW_USER` from the installed

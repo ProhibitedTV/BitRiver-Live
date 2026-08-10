@@ -81,6 +81,9 @@ Managed Ubuntu installs persist those outputs at
 `/etc/bitriver-live/deploy/srs/conf/srs.generated.conf`. The installer migrates
 the former flat paths without changing their bytes and rejects divergent dual
 copies before it stages new program assets.
+The generated files are operator-owned mode `0640`; OME and SRS receive only
+that operator GID as a supplementary read group. The environment stays mode
+`0600`, runtime mounts stay read-only, and no Linux capability is added.
 
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.

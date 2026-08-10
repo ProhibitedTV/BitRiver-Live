@@ -588,6 +588,8 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 		`user: "${BITRIVER_HOST_UID:-0}:${BITRIVER_HOST_GID:-0}"`,
 		`user: "${BITRIVER_HOST_UID:-65532}:${BITRIVER_HOST_GID:-65532}"`,
 		`user: "${BITRIVER_HOST_UID:-10001}:${BITRIVER_HOST_GID:-10001}"`,
+		`group_add:
+      - "${BITRIVER_HOST_GID:-0}"`,
 		`REPO_ROOT=/workspace OUTPUT_FILE=/etc/bitriver-live/deploy/srs/conf/srs.generated.conf exec bash /tmp/render-srs-config.sh`,
 		`"--output", "/etc/bitriver-live/deploy/ome/Server.generated.xml"`,
 		`"--config", "/etc/bitriver-live/deploy/ome/Server.generated.xml"`,
@@ -649,7 +651,8 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 		`migrate_generated_config OME`,
 		`migrate_generated_config SRS`,
 		`has divergent legacy and canonical files`,
-		`chmod 0600 "$env_file" "$ome_config_file" "$srs_config_file"`,
+		`chmod 0600 "$env_file"`,
+		`chmod 0640 "$ome_config_file" "$srs_config_file"`,
 	} {
 		if !strings.Contains(installer, required) {
 			t.Fatalf("Compose host installer missing generated-config migration invariant %q", required)
@@ -664,14 +667,15 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read SRS renderer: %v", err)
 	}
-	if !strings.Contains(string(srsRendererBytes), `chmod 0600 "$OUTPUT_FILE"`) {
+	if !strings.Contains(string(srsRendererBytes), `chmod 0640 "$OUTPUT_FILE"`) {
 		t.Fatal("SRS renderer must create secret-bearing generated output with private mode")
 	}
 	omeRendererBytes, err := os.ReadFile(filepath.Join(repoRoot, "cmd", "bitriver", "ome_render.go"))
 	if err != nil {
 		t.Fatalf("read OME renderer: %v", err)
 	}
-	if !strings.Contains(string(omeRendererBytes), "os.WriteFile(cfg.OutputPath, []byte(replaced), 0o600)") {
+	if !strings.Contains(string(omeRendererBytes), "os.WriteFile(cfg.OutputPath, []byte(replaced), 0o640)") ||
+		!strings.Contains(string(omeRendererBytes), "os.Chmod(cfg.OutputPath, 0o640)") {
 		t.Fatal("OME renderer must create secret-bearing generated output with private mode")
 	}
 }

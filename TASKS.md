@@ -33,7 +33,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - A sole legacy flat file migrates byte-for-byte; compatibility paths remain
       bounded and reruns are idempotent.
     - Divergent legacy and canonical files are rejected without data loss.
-    - Modes and ownership remain private and assigned to the Docker operator.
+    - Modes and ownership remain private and assigned to the Docker operator;
+      read-only media consumers receive only the operator group needed to read
+      generated runtime config while all capabilities remain dropped.
   - Check:
     - The installer now owns source-shaped OME/SRS targets under
       `$config_dir/deploy/...`; the installed `/opt` paths and bounded former
@@ -42,8 +44,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       files, accepts only the expected compatibility link, and rejects an
       unexpected link, non-file, canonical symlink, or divergent copies before
       staging new program assets.
-    - Fresh and migrated files retain mode `0600`, operator UID/GID ownership,
-      and mode `0750` parents. Linux lifecycle tests preserve legacy hashes,
+    - Fresh and migrated files retain mode `0640`, operator UID/GID ownership,
+      and mode `0750` parents. The environment remains mode `0600`. Linux
+      lifecycle tests preserve legacy hashes,
       prove fresh/idempotent layouts, reject conflicts without changing either
       config or env bytes, and pass end-to-end in the pinned Go 1.26.5 container.
       Git Bash syntax checks pass.
@@ -62,11 +65,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       targets, private parents/files, operator ownership, fresh installs,
       idempotent reruns, equal-copy collapse, and conflict refusal without env
       or config mutation.
-    - OME now creates a missing secret-bearing output with mode `0600`; the SRS
-      renderer explicitly applies the same mode. Focused Go tests cover the OME
+    - OME now creates or refreshes secret-bearing output with mode `0640`; the
+      SRS renderer explicitly applies the same mode. Focused Go tests cover the OME
       mode and static installer/Compose/SRS invariants; the complete Linux
       lifecycle passes after the hardening.
-    - An isolated package-shaped volume with UID/GID 1001, mode-`0600` seeded
+    - An isolated package-shaped volume with UID/GID 1001, mode-`0640` seeded
       files, and the exact signed RC17 OME helper digest rendered SRS and OME,
       verified the OME health token, and produced non-empty 5913-byte/1859-byte
       consumer paths. All exact fixture volumes and its synthetic env were
@@ -106,6 +109,20 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       and all six operator-owned untracked paths remain excluded.
     - Protected PR CI, exact-main CI, RC18 publication, independent public-asset
       verification, and the no-checkout Ubuntu qualification remain pending.
+    - Protected run `31346223822` passed secrets, docs, ShellCheck, image scan,
+      and native arm64 viewer checks, then failed the Ubuntu smoke because SRS
+      correctly lacked permission to read an operator-owned mode-`0600` config
+      with all capabilities dropped. The merge gate failed closed. Forward fix:
+      enforce mode `0640` on every OME/SRS render and give only the selected
+      operator GID to the read-only OME/SRS consumers; rerun the complete gate.
+    - The forward fix passes focused Linux Go tests, the complete installer
+      lifecycle, ShellCheck 0.11.0, the regenerated 40,877-byte contract
+      snapshot, Docker Desktop Compose rendering, the production digest guard,
+      and a capability-dropped runtime fixture. In that fixture actual SRS and
+      OME processes remained running with read-only mode-`0640` configs owned by
+      UID/GID 1001, `cap_drop: ALL`, and only supplementary GID 1001. Its exact
+      containers and volumes were removed. Literal `./scripts/verify.sh` also
+      passes again; protected CI rerun remains pending.
 
 ## Scoped change: live-room chat target and gap reconciliation (#1272)
 

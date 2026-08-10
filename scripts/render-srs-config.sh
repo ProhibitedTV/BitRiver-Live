@@ -105,7 +105,7 @@ fi
 
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 printf '%s\n' "$rendered" > "$OUTPUT_FILE"
-chmod 0600 "$OUTPUT_FILE"
+chmod 0640 "$OUTPUT_FILE"
 
 if [[ $quiet -eq 0 ]]; then
   echo "Rendered SRS config to $OUTPUT_FILE"

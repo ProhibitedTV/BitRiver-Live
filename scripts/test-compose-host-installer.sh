@@ -117,8 +117,8 @@ test -L "$legacy_ome_config"
 test -L "$legacy_srs_config"
 test "$(readlink "$legacy_ome_config")" = "$ome_config"
 test "$(readlink "$legacy_srs_config")" = "$srs_config"
-test "$(stat -c '%a' "$ome_config")" = 600
-test "$(stat -c '%a' "$srs_config")" = 600
+test "$(stat -c '%a' "$ome_config")" = 640
+test "$(stat -c '%a' "$srs_config")" = 640
 test "$(stat -c '%u:%g' "$ome_config")" = "$operator_uid:$operator_gid"
 test "$(stat -c '%u:%g' "$srs_config")" = "$operator_uid:$operator_gid"
 test "$(stat -c '%a' "$config_root/deploy/ome")" = 750

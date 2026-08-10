@@ -368,10 +368,10 @@ stage_install() {
 
   migrate_generated_config OME \
     "$legacy_ome_config_file" "$ome_config_file" \
-    "$source_root/deploy/ome/Server.xml" 0600
+    "$source_root/deploy/ome/Server.xml" 0640
   migrate_generated_config SRS \
     "$legacy_srs_config_file" "$srs_config_file" \
-    "$source_root/deploy/srs/conf/srs.conf" 0600
+    "$source_root/deploy/srs/conf/srs.conf" 0640
 
   bash "$source_root/scripts/stage-release-assets.sh" --output "$install_dir"
   install -m 0755 "$binary_dir/bitriver" "$install_dir/bin/bitriver"
@@ -383,11 +383,11 @@ stage_install() {
   replace_file_with_symlink \
     "$install_dir/deploy/ome/Server.generated.xml" \
     "$ome_config_file" \
-    "$source_root/deploy/ome/Server.xml" 0600
+    "$source_root/deploy/ome/Server.xml" 0640
   replace_file_with_symlink \
     "$install_dir/deploy/srs/conf/srs.generated.conf" \
     "$srs_config_file" \
-    "$source_root/deploy/srs/conf/srs.conf" 0600
+    "$source_root/deploy/srs/conf/srs.conf" 0640
 
   if [[ ! -f $env_file ]]; then
     run_as_operator "$install_dir/bin/bitriver" env init \
@@ -398,7 +398,8 @@ stage_install() {
     BITRIVER_CONFIG_ROOT "$config_dir" \
     BITRIVER_HOST_UID "$operator_uid" \
     BITRIVER_HOST_GID "$operator_gid"
-  chmod 0600 "$env_file" "$ome_config_file" "$srs_config_file"
+  chmod 0600 "$env_file"
+  chmod 0640 "$ome_config_file" "$srs_config_file"
   if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
     chown "$operator_user:$operator_group" "$env_file" "$ome_config_file" "$srs_config_file"
   fi

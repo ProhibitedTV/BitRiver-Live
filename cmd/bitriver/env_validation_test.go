@@ -554,8 +554,8 @@ func TestRenderOMEConfigFromEnv(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stat rendered config: %v", err)
 		}
-		if got := info.Mode().Perm(); got != 0o600 {
-			t.Fatalf("expected new secret-bearing OME config mode 0600, got %04o", got)
+		if got := info.Mode().Perm(); got != 0o640 {
+			t.Fatalf("expected secret-bearing OME config mode 0640, got %04o", got)
 		}
 	}
 }

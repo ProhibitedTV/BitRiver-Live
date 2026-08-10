@@ -32,6 +32,16 @@
   missing parent directories, while the OME Go renderer uses `os.WriteFile`
   and failed on the absent parent. Creating the OME directory alone would be
   unsafe because the OME consumer would still read the old flat file.
+- Protected PR run `31346223822` exposed a second contract edge after the path
+  fix: SRS cannot read an operator-owned mode-`0600` generated config while it
+  runs with all Linux capabilities dropped. The tracked OME placeholder masked
+  the equivalent fresh-install risk because an existing file keeps its prior
+  mode when `os.WriteFile` truncates it. Preserve `bitriver.env` as owner-only,
+  but make the two generated runtime configs mode `0640`, owned by the selected
+  Docker operator UID/GID, and add only that GID as a supplementary group for
+  the read-only OME/SRS consumers. Do not add capabilities or make either
+  runtime mount writable. Both renderers must enforce the final mode on every
+  render, including existing files.
 - Upgrade migration must be fail-safe under interruption and must not erase a
   modified operator config. Use same-filesystem moves where possible, create
   parents before migration, apply the established `0600` file and operator
@@ -51,6 +61,9 @@
   symlinks, and documented paths all name the same source-shaped files. Run an
   exact package-style Docker fixture using arbitrary non-root UID/GID and prove
   SRS render, OME render, token verification, and consumer-visible file bytes.
+- Exercise actual SRS/OME consumer startup under dropped capabilities so the
+  renderer mode, operator group, and runtime supplementary-group contract is
+  proven rather than inferred from a renderer-only fixture.
 - Run focused installer/Go/shell/docs checks, literal `./scripts/verify.sh`,
   protected PR CI, and exact-main CI. Publish only the next unused immutable
   candidate, `v1.2.3-rc.18`, from that green main commit; independently verify
