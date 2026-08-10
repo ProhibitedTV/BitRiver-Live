@@ -26,7 +26,11 @@ bitriver smoke
 ## What it checks
 
 1. **Docker + Docker Compose availability**
-   - Reuses `doctor` checks for `docker` and `docker compose`.
+   - Reuses `doctor`'s required-binary and supported Docker/Compose version
+     checks.
+   - Does not rerun pre-start port availability, host sizing, or bind-mount
+     writability checks after the stack is running. BitRiver owns those ports
+     during smoke; run `bitriver doctor` before startup for the full preflight.
 
 2. **Compose stack reachability**
    - Runs `docker compose ps --format json` using the selected compose/env files.
@@ -76,6 +80,8 @@ go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file
 ## Notes
 
 - `bitriver smoke` validates the running stack state; it does not mutate data or restart services.
+- Run `bitriver doctor` before first startup or after changing ports, paths, or
+  host resources. Run `bitriver smoke` after startup or upgrade.
 - If `.env` is missing, initialize it first:
 
 ```bash

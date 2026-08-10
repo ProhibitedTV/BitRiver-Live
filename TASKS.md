@@ -1,5 +1,91 @@
 # TASKS
 
+## Scoped change: post-start smoke after RC18 rejection (#1297, #1304)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose and bound the immutable RC18 qualification failure
+  - Acceptance criteria:
+    - Exact public candidate identity and checksums are verified independently.
+    - Sanitized no-checkout evidence identifies the failed phase without
+      exposing credentials or altering the published candidate.
+    - `PLAN.md` records the correction and rollout plan before implementation.
+  - Check:
+    - Release run `31348429963` published 46 assets from exact green main
+      `4e496e389d2a606976a55a89cd08ef79762eed2f`; `CHECKSUMS.txt` has exactly
+      45 unique entries with zero missing, extra, or mismatched files. The
+      signed release-set SHA-256 is
+      `2de0cb71af2af8d41d7a535d28478003987d6b180568a84bc5dc3eae680ef014`.
+    - Clean-host run `31348986535` used no checkout, verified the public
+      signature/package, installed Ubuntu 24.04.4 x86_64, passed preflight, and
+      activated the pull-only systemd stack. Sanitized evidence retained no
+      secrets and records failure only at `smoke-and-ome-control`.
+    - Failed logs show `bitriver smoke` invokes full default `doctor` after
+      activation. Doctor reports BitRiver's own 23 occupied TCP/UDP ports, so
+      smoke retries the same impossible pre-start condition and never reaches
+      Compose/endpoint verification. `PLAN.md` was updated before code.
+
+- [x] Task 2 - Make smoke prerequisites phase-correct and add regressions
+  - Acceptance criteria:
+    - Standalone `doctor` and quickstart still fail on real pre-start host-port
+      conflicts.
+    - Post-start smoke checks Docker/Compose availability and supported
+      versions without requiring the running stack's ports to be free.
+    - Smoke still fails for missing/stopped Docker, unreachable Compose state,
+      unreadable env files, and unhealthy required endpoints.
+  - Check:
+    - `bitriver smoke` now calls a dedicated prerequisite runner that reuses
+      doctor's required-binary and Docker/Compose version checks only. Doctor,
+      quickstart host-port refusal, host sizing, and mount checks are unchanged.
+    - Failure output now names Docker prerequisite failure rather than claiming
+      an arbitrary full-doctor failure.
+    - A regression replaces the host-port checker with a fatal test callback;
+      smoke prerequisites pass with supported synthetic Docker 28.0.4 and
+      Compose 2.38.2 without invoking it. The complete `./cmd/bitriver` suite
+      passed on Go 1.26.5 (`-count=1 -timeout=120s`).
+
+- [x] Task 3 - Align smoke documentation and run local gates
+  - Acceptance criteria:
+    - Operator docs distinguish doctor/preflight from post-start smoke.
+    - Focused Go, Markdown/link, diff, secret, and literal verification gates
+      pass without changing operator-owned files.
+    - A running Docker Desktop stack proves smoke accepts its own occupied
+      ports and reaches Compose plus endpoint checks.
+  - Check:
+    - `docs/smoke-test.md` and `docs/contract.md` now distinguish full
+      pre-start doctor from post-start smoke and state why a running stack's
+      own ports are not conflicts. Markdown links, committed-secret guard,
+      generated contract docs, and `git diff --check` pass.
+    - Literal `./scripts/verify.sh` passed with Go 1.26.5 and Python 3.12.13
+      after safely sidelining and hash-restoring the private legacy `.env` so
+      the verifier could use its tracked fixture. All first-party Go packages,
+      release bundle, Postgres migration lifecycle, contract, Compose render,
+      rebuilt Docker quickstart, OME/API health, and viewer reachability passed;
+      the unchanged viewer lint/test phase was explicitly skipped.
+    - An isolated Docker Desktop project then started nine services from a
+      disposable env copy. The corrected CLI reached running Compose state and
+      returned `PASS (7/7)` for Docker/Compose, API readiness/health, SRS,
+      transcoder, and OME HTTP while the stack owned all configured ports.
+    - The exact project containers, networks, volumes, credential-bearing temp
+      env, and OME backup were removed/restored. The private `.env` is restored
+      byte-for-byte at SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`;
+      the OME worktree object equals `HEAD` and the six operator-owned untracked
+      paths remain excluded.
+
+- [-] Task 4 - Publish RC19 and rerun complete clean-host qualification
+  - Acceptance criteria:
+    - Focused PR and exact-main CI are fully green before tagging.
+    - Immutable RC19 public assets, checksums, signed release set, and five
+      image identities verify independently.
+    - No-checkout qualification passes smoke/authenticated OME, same-tag
+      upgrade, OME/Docker/systemd recovery, retained uninstall, sanitized
+      evidence, and cleanup, or yields a new bounded forward-fix failure.
+  - Check:
+    - Local implementation, documentation, literal verification, and running
+      Docker smoke evidence are complete. PR, protected CI, exact-main CI,
+      RC19 publication, and no-checkout qualification remain pending.
+
 ## Scoped change: installed generated-config layout after RC17 rejection (#1297, #1304)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -79,7 +165,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       40,841-byte contract snapshot, Markdown links, shell syntax, and diff
       hygiene pass.
 
-- [-] Task 4 - Verify, merge, publish RC18, and rerun qualification
+- [x] Task 4 - Verify, merge, publish RC18, and rerun qualification
   - Acceptance criteria:
     - Focused checks, literal verifier, secret guard, protected PR CI, and
       exact-main CI pass without touching operator-owned files.
@@ -107,8 +193,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`;
       the regenerated tracked OME placeholder has the exact `HEAD` object hash,
       and all six operator-owned untracked paths remain excluded.
-    - Protected PR CI, exact-main CI, RC18 publication, independent public-asset
-      verification, and the no-checkout Ubuntu qualification remain pending.
+    - Protected run `31347682245` passed every required job after the PR
+      scorecard was corrected. PR #1386 was squash-merged as exact main commit
+      `4e496e389d2a606976a55a89cd08ef79762eed2f`; exact-main CI run
+      `31348092520` also passed every required job.
     - Protected run `31346223822` passed secrets, docs, ShellCheck, image scan,
       and native arm64 viewer checks, then failed the Ubuntu smoke because SRS
       correctly lacked permission to read an operator-owned mode-`0600` config
@@ -135,8 +223,17 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       all three quickstart entrypoint checks, scans, ShellCheck, docs, and secret
       checks. Its merge gate failed only because the PR body did not use the
       machine-checked release-scorecard template. PR #1386 now contains the
-      exact headings and explicit high-risk/evidence checkboxes; one fresh
-      synchronize run remains pending.
+      exact headings and explicit high-risk/evidence checkboxes; the fresh
+      synchronize run passed before merge.
+    - RC18 release run `31348429963` passed all 33 jobs and published 46 public
+      assets. Independent download verification matched all 45 checksum-covered
+      files; release-set SHA-256 is
+      `2de0cb71af2af8d41d7a535d28478003987d6b180568a84bc5dc3eae680ef014`.
+    - No-checkout run `31348986535` verified/install/activated RC18, proving the
+      generated-config path and runtime group-read correction. It then exposed
+      a new bounded post-start smoke defect: full doctor rejects the stack's own
+      occupied ports. Sanitized evidence and cleanup passed; RC18 is rejected
+      and the forward fix is the next scoped change above.
 
 ## Scoped change: live-room chat target and gap reconciliation (#1272)
 

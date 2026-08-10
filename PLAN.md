@@ -1,5 +1,61 @@
 # PLAN
 
+## Current scope - separate post-start smoke from pre-start port readiness after RC18 rejection (#1297, #1304) (2026-08-09)
+
+- Treat immutable `v1.2.3-rc.18` as rejected clean-host evidence. Release run
+  `31348429963` published 46 public assets from exact green main commit
+  `4e496e389d2a606976a55a89cd08ef79762eed2f`; all 45 checksum entries match,
+  the signed release-set SHA-256 is
+  `2de0cb71af2af8d41d7a535d28478003987d6b180568a84bc5dc3eae680ef014`,
+  and its five first-party images are digest-bound. Do not patch RC18 or move
+  its tag.
+- Hosted no-checkout run `31348986535` verified the public signature and
+  package checksum, installed on Ubuntu 24.04.4 x86_64, staged immutable
+  inputs, passed production preflight, and activated the pull-only systemd
+  stack. It then failed `smoke-and-ome-control` because `bitriver smoke` calls
+  the complete pre-start `doctor` with default paths after the stack is
+  running; doctor correctly sees BitRiver's own 23 TCP/UDP listeners as port
+  conflicts, so the post-start command can never advance to its Compose and
+  endpoint checks on a normal installation.
+- Preserve `bitriver doctor` and quickstart host-port refusal as pre-start
+  safety gates. Narrow only the smoke prerequisite stage to the Docker CLI,
+  daemon, and Compose availability/version checks it claims to perform; smoke
+  must then use its caller-selected Compose/env files for running-stack state
+  and endpoint checks. Do not add a public bypass flag or weaken preflight.
+
+### Risks and boundaries
+
+- Skipping all doctor logic would hide a stopped Docker daemon or unsupported
+  Compose version. Reuse the existing binary/version check implementations and
+  minimums while excluding pre-start-only port availability, host sizing, and
+  bind-mount writability from the post-start phase.
+- Keep `verify` ordering intact: doctor remains first, before Compose config and
+  smoke. A standalone post-start smoke must not require ports to be free.
+- Update the smoke command documentation to state the phase boundary. This is
+  a CLI behavior correction, not a deployment-contract, Compose, env, or OME
+  configuration change.
+- Preserve the private root `.env`, tracked generated OME placeholder bytes,
+  and the six operator-owned untracked paths.
+
+### Test and rollout plan
+
+- Add focused Go coverage proving the smoke prerequisite checks reject missing
+  Docker/Compose but do not invoke host-port availability checks, and retain
+  existing running-stack/endpoint failure coverage.
+- Run focused `./cmd/bitriver` tests, documentation/link checks, diff/secret
+  hygiene, and literal `./scripts/verify.sh`. Exercise the running-stack smoke
+  against Docker Desktop so occupied BitRiver ports are accepted only after
+  Compose state and health endpoints pass.
+- Publish through a focused PR and protected CI, merge only when the aggregate
+  gate is green, rerun exact-main CI, and cut only the next unused immutable
+  candidate (`v1.2.3-rc.19`). Independently verify its public release set and
+  rerun the complete no-checkout clean-host qualification through smoke,
+  authenticated OME control, upgrade, restart recovery, retained uninstall,
+  sanitized evidence, and cleanup.
+- A hosted pass remains bounded evidence. Keep #1297/#1304 and stable epic
+  #1293 open for the real XOA/NPM/firewall/host-reboot/media path and the other
+  state, capacity, resilience, SLO, security, and browser gates.
+
 ## Current scope - align installed generated config after RC17 rejection (#1297, #1304) (2026-08-09)
 
 - Treat immutable `v1.2.3-rc.17` as rejected clean-host evidence. Hosted run
