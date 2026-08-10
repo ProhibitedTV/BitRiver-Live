@@ -1,5 +1,58 @@
 # PLAN
 
+## Current scope - define and reconcile the live-room chat target (#1272) (2026-08-09)
+
+- Add one product-source-of-truth specification under `docs/` that turns the
+  ivlog-inspired direction into an adapted BitRiver Live target state. Cover
+  desktop and mobile layout, dense message anatomy, the room roster, roles and
+  badges, system and moderation rows, accessibility, busy-room performance,
+  and an MVP-versus-later boundary without copying ivlog.tv assets, branding,
+  CSS, or exact visual treatment.
+- Audit each visible feature against the current `/api/chat/ws` protocol, Go
+  gateway, viewer chat panel, and responsive channel page. Mark each item as
+  shipped, protocol-only/partially wired, or requiring a backend/viewer change;
+  do not treat closed implementation issues as proof when the production call
+  path is absent.
+- Link the completed foundation issues #1273, #1274, and #1275, then create
+  focused follow-up issues for concrete gaps discovered by the audit. Keep one
+  canonical chat stack: existing business and transport behavior stays in the
+  Go service/chat/API boundaries, and the Next.js viewer consumes that protocol.
+- Link the specification from the contributor-facing architecture/UI docs so a
+  future implementation PR can find the target state without chat history.
+
+### Findings, risks, and boundaries
+
+- The viewer already ships the video-first desktop dock and mobile-below-video
+  layout, dense bounded transcript, follow-versus-read scroll behavior,
+  loading/retry/empty/auth states, a scoped accessible live log, reports,
+  moderator row actions, and supported slash-command parsing.
+- The Go gateway already emits de-duplicated `presence_snapshot`,
+  `presence_join`, and `presence_leave` events and carries normalized role and
+  badge metadata. The viewer does not currently consume these presence events;
+  its visible roster is inferred from recent messages, and badge payloads are
+  parsed but not rendered as real badge elements.
+- `BroadcastSystemEvent` and the `system` envelope exist and the viewer can
+  render live system rows, but no production service currently calls the
+  broadcaster for stream lifecycle or pinned-room notices. `/me`, persistent
+  message removal/room clearing, slow mode, and title/announcement management
+  remain unsupported protocol/product decisions and must not be implied as MVP.
+- This slice is documentation and issue decomposition only. It does not change
+  the deployment contract, chat wire format, authorization rules, persistence,
+  or user-supplied content rendering. The private root `.env` and the six
+  operator-owned untracked paths remain untouched.
+
+### Test and rollout plan
+
+- Validate every shipped/partial/missing claim against named source files and
+  existing tests, then run the repository Markdown-link checker and
+  `git diff --check`.
+- Run the focused Go chat tests and viewer chat-panel tests because the spec is
+  a product contract derived from those behaviors; run literal
+  `./scripts/verify.sh` before publication as required by repository policy.
+- Publish through a focused protected PR. Merge only after required checks are
+  green, verify exact-main CI, and close #1272 only when the checked-in spec and
+  linked follow-up issue set satisfy every epic acceptance criterion.
+
 ## Current scope - artifact-only Ubuntu host qualification (#1297, #1304) (2026-08-03)
 
 - Add a manual, least-privilege Ubuntu 24.04 amd64 qualification workflow that

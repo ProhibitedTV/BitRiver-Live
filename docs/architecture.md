@@ -54,6 +54,7 @@ BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker
 - `web/viewer` is an independent UI delivery layer.
 - Viewer code should consume stable API contracts and avoid importing backend Go concepts directly.
 - Backend behaviour changes that alter payload shape or semantics must update viewer-facing docs and migration notes in the same PR.
+- Live-room chat changes must follow the [live-room chat product contract](live-room-chat.md) and extend the existing `/api/chat/ws` stack rather than introduce a parallel realtime service.
 
 ## Data/control flow expectations
 
