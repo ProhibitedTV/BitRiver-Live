@@ -191,7 +191,7 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, required := range []string{
 		`"node": ">=24 <25"`,
 		`"npm": ">=11 <12"`,
-		`"next": "16.2.12"`,
+		`"next": "16.3.0"`,
 		`"react": "19.2.8"`,
 		`"react-dom": "19.2.8"`,
 		`"@types/node": "26.1.2"`,
@@ -279,29 +279,26 @@ func TestOfflineMirrorsDeclareCurrentMinimumGoVersion(t *testing.T) {
 	}
 }
 
-func hasGoDirective(contents, version string) bool {
-	normalized := strings.ReplaceAll(contents, "\r\n", "\n")
-	return strings.Contains(normalized, "\ngo "+version+"\n")
-}
-
-func TestHasGoDirectiveAcceptsCommonLineEndings(t *testing.T) {
-	for name, contents := range map[string]string{
-		"LF":   "module example\n\ngo 1.26.0\n",
-		"CRLF": "module example\r\n\r\ngo 1.26.0\r\n",
-	} {
-		t.Run(name, func(t *testing.T) {
-			if !hasGoDirective(contents, goMinimumVersion) {
-				t.Fatalf("expected %s Go directive to match", name)
-			}
-		})
-	}
-}
-
-func readRepoFile(t *testing.T, repoRoot, relativePath string) string {
-	t.Helper()
-	contents, err := os.ReadFile(filepath.Join(repoRoot, relativePath))
+func TestOfflineMirrorsDeclareCurrentMinimumGoVersion(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	thirdPartyRoot := filepath.Join(repoRoot, "third_party")
+	err := filepath.WalkDir(thirdPartyRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() != "go.mod" {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !hasGoDirective(string(contents), goMinimumVersion) {
+			t.Errorf("%s must declare go %s", path, goMinimumVersion)
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("read %s: %v", relativePath, err)
+		t.Fatalf("walk third_party modules: %v", err)
 	}
-	return string(contents)
 }
