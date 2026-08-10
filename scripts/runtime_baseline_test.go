@@ -278,27 +278,3 @@ func TestOfflineMirrorsDeclareCurrentMinimumGoVersion(t *testing.T) {
 		t.Fatalf("walk third_party modules: %v", err)
 	}
 }
-
-func TestOfflineMirrorsDeclareCurrentMinimumGoVersion(t *testing.T) {
-	repoRoot := filepath.Dir(mustGetwd(t))
-	thirdPartyRoot := filepath.Join(repoRoot, "third_party")
-	err := filepath.WalkDir(thirdPartyRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || entry.Name() != "go.mod" {
-			return nil
-		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if !hasGoDirective(string(contents), goMinimumVersion) {
-			t.Errorf("%s must declare go %s", path, goMinimumVersion)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk third_party modules: %v", err)
-	}
-}
