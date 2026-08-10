@@ -278,3 +278,30 @@ func TestOfflineMirrorsDeclareCurrentMinimumGoVersion(t *testing.T) {
 		t.Fatalf("walk third_party modules: %v", err)
 	}
 }
+
+func hasGoDirective(contents, version string) bool {
+	normalized := strings.ReplaceAll(contents, "\r\n", "\n")
+	return strings.Contains(normalized, "\ngo "+version+"\n")
+}
+
+func TestHasGoDirectiveAcceptsCommonLineEndings(t *testing.T) {
+	for name, contents := range map[string]string{
+		"LF":   "module example\n\ngo 1.26.0\n",
+		"CRLF": "module example\r\n\r\ngo 1.26.0\r\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !hasGoDirective(contents, goMinimumVersion) {
+				t.Fatalf("expected %s Go directive to match", name)
+			}
+		})
+	}
+}
+
+func readRepoFile(t *testing.T, repoRoot, relativePath string) string {
+	t.Helper()
+	contents, err := os.ReadFile(filepath.Join(repoRoot, relativePath))
+	if err != nil {
+		t.Fatalf("read %s: %v", relativePath, err)
+	}
+	return string(contents)
+}
