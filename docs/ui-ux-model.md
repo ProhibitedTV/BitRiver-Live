@@ -3,6 +3,9 @@
 ## Purpose
 This document defines the core UX model for BitRiver Live by clarifying who the primary users are, what success looks like for each user type, what they worry about, and which actions are mission-critical.
 
+The channel-page chat target is specified separately in the
+[live-room chat product contract](live-room-chat.md).
+
 ## User Roles
 
 ### 1) Operator (infrastructure + platform owner)

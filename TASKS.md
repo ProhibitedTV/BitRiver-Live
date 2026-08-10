@@ -1,5 +1,90 @@
 # TASKS
 
+## Scoped change: live-room chat target and gap reconciliation (#1272)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the epic against the shipped chat stack
+  - Acceptance criteria:
+    - #1272 and its existing follow-ups are inspected live.
+    - Viewer, protocol, gateway, responsive layout, and tests are inspected
+      read-only before planning or implementation.
+    - `PLAN.md` records scope, evidence boundaries, risks, and tests first.
+  - Check:
+    - #1272 is open; foundation issues #1273, #1274, and #1275 are closed as
+      completed. No checked-in target-state spec currently satisfies the epic.
+    - The viewer ships the compact dock/mobile layout, bounded transcript,
+      accessible live log, scroll preservation, system/moderation rows, reports,
+      row actions, and supported slash commands over the existing gateway.
+    - The backend ships presence, role/badge, and system event shapes, but the
+      viewer roster still derives from recent messages, badges are not visibly
+      rendered, and `BroadcastSystemEvent` has no production caller.
+    - Updated `PLAN.md` before changing product documentation or issue state.
+
+- [x] Task 2 - Check in the human-readable target-state specification
+  - Acceptance criteria:
+    - The spec explicitly defines an adapted BitRiver Live experience, not an
+      ivlog.tv clone, and covers all eleven scope areas in #1272.
+    - A feature-to-protocol matrix distinguishes shipped, partial, missing, and
+      later behavior without overstating current implementation.
+    - Architecture ownership and the prohibition on a second chat stack are
+      explicit; discoverability links are added to current product docs.
+  - Check:
+    - Added `docs/live-room-chat.md` with an explicit adapted-not-copied
+      boundary, responsive layout, message/roster/role/system/moderation
+      anatomy, accessibility, busy-room performance, MVP/later scope, and
+      architecture ownership.
+    - The feature matrix maps each visible target to named current protocol,
+      gateway, viewer, and layout sources and labels it shipped, partial,
+      required, or later. It records the recent-chatter roster, unrendered badge
+      data, history metadata loss, missing production system-event caller, and
+      moderation-event audience policy as gaps.
+    - Linked the product contract from `docs/ui-ux-model.md` and the canonical
+      frontend architecture boundary. The local-link check for tracked docs and
+      `git diff --check` pass; the new spec is validated again after staging so
+      the repository checker includes it.
+
+- [x] Task 3 - Create and link focused follow-up issues
+  - Acceptance criteria:
+    - Existing foundation issues remain linked with their completed scope.
+    - Each verified current gap has one bounded, testable follow-up rather than
+      an unowned aspirational bullet.
+    - The spec links the resulting issue numbers and gives an implementation
+      sequence for the current MVP and later extensions.
+  - Check:
+    - Filed #1382 for authoritative viewer presence, counts, badges, and safe
+      history metadata parity; #1383 for server-enforced moderation/automod
+      audience policy; and #1384 for de-duplicated production live/offline room
+      notices.
+    - Each issue links #1272 and the product contract, names the verified
+      current gap, preserves the single chat stack, and has testable backend,
+      viewer, compatibility, performance, or failure-path acceptance criteria.
+    - The spec links completed foundation #1273-#1275 and sequences remaining
+      MVP #1382, #1383, then #1384. Later commands, message management, pinned
+      announcements, and room modes stay outside MVP until separately approved.
+
+- [-] Task 4 - Verify, publish, merge, and reconcile the epic
+  - Acceptance criteria:
+    - Markdown links, focused chat tests, literal verifier, secret guard, diff
+      review, protected PR checks, and exact-main CI pass.
+    - The change excludes credentials and the six operator-owned untracked
+      paths and does not mutate the deployment or chat protocol contract.
+    - #1272 is closed only after its checked-in spec, mapping, architecture
+      boundary, and linked follow-ups meet every acceptance criterion.
+  - Check:
+    - Focused viewer `chatPanel` tests pass (24/24), pinned Go 1.26.5
+      `./internal/chat` tests pass, and the staged Markdown checker includes all
+      89 tracked public files with no broken local link.
+    - Literal `./scripts/verify.sh` passes with pinned Go 1.26.5 and bundled
+      Python: release bundle, all first-party Go packages, architecture,
+      dependency, CI, hygiene, secret/example, release-set, docs, and generated
+      contract gates are green. Docker is deliberately absent from that
+      docs-only tool path and the viewer suite is proven separately above.
+    - `git diff --check` passes; root `.env` remains byte-identical at SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`;
+      all six operator-owned untracked paths remain excluded. Protected PR,
+      exact-main CI, and epic reconciliation remain pending.
+
 ## Scoped change: artifact-only Ubuntu host qualification (#1297, #1304)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
