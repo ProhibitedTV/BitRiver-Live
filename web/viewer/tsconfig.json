@@ -33,7 +33,7 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  // Dedicated Jest/Playwright CI covers test-only sources outside Next's production type-check.
+  // Dedicated Jest/Playwright CI covers test-only sources outside Next's production build type-check.
   "exclude": [
     "node_modules",
     "__tests__",
