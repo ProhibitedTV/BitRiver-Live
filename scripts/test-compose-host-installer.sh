@@ -79,12 +79,26 @@ common_args=(
   --operator-user "$operator_user"
 )
 
+# Reproduce the flat generated-config layout created by RC17 and older packages.
+# Installation must preserve these bytes while moving them into the canonical
+# source-shaped tree.
+legacy_config_root="$host_root/etc/bitriver-live"
+mkdir -p "$legacy_config_root"
+printf 'legacy-ome-config\n' >"$legacy_config_root/Server.generated.xml"
+printf 'legacy-srs-config\n' >"$legacy_config_root/srs.generated.conf"
+legacy_ome_sha=$(sha256sum "$legacy_config_root/Server.generated.xml" | awk '{print $1}')
+legacy_srs_sha=$(sha256sum "$legacy_config_root/srs.generated.conf" | awk '{print $1}')
+
 "$installer" install "${common_args[@]}"
 
 install_root="$host_root/opt/bitriver-live"
 config_root="$host_root/etc/bitriver-live"
 data_root="$host_root/var/lib/bitriver-live"
 unit_file="$host_root/etc/systemd/system/bitriver-live-compose.service"
+ome_config="$config_root/deploy/ome/Server.generated.xml"
+srs_config="$config_root/deploy/srs/conf/srs.generated.conf"
+legacy_ome_config="$config_root/Server.generated.xml"
+legacy_srs_config="$config_root/srs.generated.conf"
 
 test -x "$install_root/bin/bitriver"
 test -x "$install_root/bin/bitriver-live"
@@ -93,6 +107,22 @@ test -L "$install_root/deploy/data"
 test -L "$install_root/deploy/transcoder-data"
 test -L "$install_root/deploy/ome/Server.generated.xml"
 test -L "$install_root/deploy/srs/conf/srs.generated.conf"
+test "$(readlink "$install_root/deploy/ome/Server.generated.xml")" = "$ome_config"
+test "$(readlink "$install_root/deploy/srs/conf/srs.generated.conf")" = "$srs_config"
+test -f "$ome_config"
+test -f "$srs_config"
+test "$(sha256sum "$ome_config" | awk '{print $1}')" = "$legacy_ome_sha"
+test "$(sha256sum "$srs_config" | awk '{print $1}')" = "$legacy_srs_sha"
+test -L "$legacy_ome_config"
+test -L "$legacy_srs_config"
+test "$(readlink "$legacy_ome_config")" = "$ome_config"
+test "$(readlink "$legacy_srs_config")" = "$srs_config"
+test "$(stat -c '%a' "$ome_config")" = 600
+test "$(stat -c '%a' "$srs_config")" = 600
+test "$(stat -c '%u:%g' "$ome_config")" = "$operator_uid:$operator_gid"
+test "$(stat -c '%u:%g' "$srs_config")" = "$operator_uid:$operator_gid"
+test "$(stat -c '%a' "$config_root/deploy/ome")" = 750
+test "$(stat -c '%a' "$config_root/deploy/srs/conf")" = 750
 test -f "$config_root/bitriver.env"
 test -f "$unit_file"
 
@@ -132,6 +162,26 @@ grep -q '^BITRIVER_TEST_PRESERVE=yes$' "$config_root/bitriver.env"
 grep -Fxq "BITRIVER_CONFIG_ROOT=$config_root" "$config_root/bitriver.env"
 grep -Fxq "BITRIVER_HOST_UID=$operator_uid" "$config_root/bitriver.env"
 grep -Fxq "BITRIVER_HOST_GID=$operator_gid" "$config_root/bitriver.env"
+test "$(sha256sum "$ome_config" | awk '{print $1}')" = "$legacy_ome_sha"
+test "$(sha256sum "$srs_config" | awk '{print $1}')" = "$legacy_srs_sha"
+
+# A fresh host without legacy files creates the same canonical tree and bounded
+# compatibility links.
+fresh_host_root="$tmp_root/fresh host root"
+fresh_args=(
+  --source-root "$source_root"
+  --binary-dir "$binary_dir"
+  --root-prefix "$fresh_host_root"
+  --operator-user "$operator_user"
+)
+"$installer" install "${fresh_args[@]}"
+fresh_config_root="$fresh_host_root/etc/bitriver-live"
+test -f "$fresh_config_root/deploy/ome/Server.generated.xml"
+test -f "$fresh_config_root/deploy/srs/conf/srs.generated.conf"
+test "$(readlink "$fresh_config_root/Server.generated.xml")" = \
+  "$fresh_config_root/deploy/ome/Server.generated.xml"
+test "$(readlink "$fresh_config_root/srs.generated.conf")" = \
+  "$fresh_config_root/deploy/srs/conf/srs.generated.conf"
 
 # Older package environments predate the managed config/ownership keys. Upgrade
 # must append them without replacing unrelated operator settings.
@@ -158,6 +208,28 @@ if find "$config_root" -maxdepth 1 -name '.bitriver.env.*' -print -quit | grep -
   echo "installer left a temporary environment file behind" >&2
   exit 1
 fi
+
+# Equal dual copies collapse back to the compatibility link. Divergent copies
+# fail before config bytes or the managed environment can be changed.
+rm -f -- "$legacy_srs_config"
+cp "$srs_config" "$legacy_srs_config"
+"$installer" install "${common_args[@]}"
+test -L "$legacy_srs_config"
+
+rm -f -- "$legacy_ome_config"
+printf 'divergent-legacy-ome\n' >"$legacy_ome_config"
+cp "$legacy_ome_config" "$tmp_root/divergent-legacy-ome"
+cp "$ome_config" "$tmp_root/canonical-ome-before-conflict"
+cp "$config_root/bitriver.env" "$tmp_root/env-before-config-conflict"
+if "$installer" install "${common_args[@]}"; then
+  echo "installer unexpectedly accepted divergent OME generated configs" >&2
+  exit 1
+fi
+cmp "$tmp_root/divergent-legacy-ome" "$legacy_ome_config"
+cmp "$tmp_root/canonical-ome-before-conflict" "$ome_config"
+cmp "$tmp_root/env-before-config-conflict" "$config_root/bitriver.env"
+rm -f -- "$legacy_ome_config"
+ln -s "$ome_config" "$legacy_ome_config"
 
 fake_path="$tmp_root/fake path"
 custom_env="$tmp_root/custom config/bitriver.env"

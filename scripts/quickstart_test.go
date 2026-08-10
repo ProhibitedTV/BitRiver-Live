@@ -635,6 +635,45 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 			t.Fatalf("env example missing optional managed bind owner %q", required)
 		}
 	}
+
+	installerBytes, err := os.ReadFile(filepath.Join(repoRoot, "deploy", "install", "compose-host.sh"))
+	if err != nil {
+		t.Fatalf("read Compose host installer: %v", err)
+	}
+	installer := strings.ReplaceAll(string(installerBytes), "\r\n", "\n")
+	for _, required := range []string{
+		`ome_config_file="$config_dir/deploy/ome/Server.generated.xml"`,
+		`srs_config_file="$config_dir/deploy/srs/conf/srs.generated.conf"`,
+		`legacy_ome_config_file="$config_dir/Server.generated.xml"`,
+		`legacy_srs_config_file="$config_dir/srs.generated.conf"`,
+		`migrate_generated_config OME`,
+		`migrate_generated_config SRS`,
+		`has divergent legacy and canonical files`,
+		`chmod 0600 "$env_file" "$ome_config_file" "$srs_config_file"`,
+	} {
+		if !strings.Contains(installer, required) {
+			t.Fatalf("Compose host installer missing generated-config migration invariant %q", required)
+		}
+	}
+	migrateIndex := strings.Index(installer, "migrate_generated_config OME")
+	stageIndex := strings.Index(installer, `bash "$source_root/scripts/stage-release-assets.sh"`)
+	if migrateIndex == -1 || stageIndex == -1 || migrateIndex >= stageIndex {
+		t.Fatal("generated-config conflict validation must finish before new program assets are staged")
+	}
+	srsRendererBytes, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "render-srs-config.sh"))
+	if err != nil {
+		t.Fatalf("read SRS renderer: %v", err)
+	}
+	if !strings.Contains(string(srsRendererBytes), `chmod 0600 "$OUTPUT_FILE"`) {
+		t.Fatal("SRS renderer must create secret-bearing generated output with private mode")
+	}
+	omeRendererBytes, err := os.ReadFile(filepath.Join(repoRoot, "cmd", "bitriver", "ome_render.go"))
+	if err != nil {
+		t.Fatalf("read OME renderer: %v", err)
+	}
+	if !strings.Contains(string(omeRendererBytes), "os.WriteFile(cfg.OutputPath, []byte(replaced), 0o600)") {
+		t.Fatal("OME renderer must create secret-bearing generated output with private mode")
+	}
 }
 
 func TestQuickstartSmokePreservesContainerEnvironmentPathsOnWindows(t *testing.T) {

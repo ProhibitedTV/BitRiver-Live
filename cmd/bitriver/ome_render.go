@@ -237,7 +237,7 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 	replaced = stampImageTag(replaced, cfg.ImageTag)
 	replaced = collapseBlankLines(replaced)
 
-	if err := os.WriteFile(cfg.OutputPath, []byte(replaced), 0o644); err != nil {
+	if err := os.WriteFile(cfg.OutputPath, []byte(replaced), 0o600); err != nil {
 		return fmt.Errorf("write generated config: %w", err)
 	}
 

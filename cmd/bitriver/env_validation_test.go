@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -547,6 +548,15 @@ func TestRenderOMEConfigFromEnv(t *testing.T) {
 	}
 	if !strings.Contains(data, "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.16.0 -->") {
 		t.Fatalf("expected image tag marker in output")
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(out)
+		if err != nil {
+			t.Fatalf("stat rendered config: %v", err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("expected new secret-bearing OME config mode 0600, got %04o", got)
+		}
 	}
 }
 

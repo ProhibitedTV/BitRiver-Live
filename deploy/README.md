@@ -76,6 +76,12 @@ script on tmpfs. Only the two renderer config-root mounts are writable. Do not
 solve permission failures by making `bitriver.env` world readable or granting
 renderer containers new capabilities.
 
+Managed Ubuntu installs persist those outputs at
+`/etc/bitriver-live/deploy/ome/Server.generated.xml` and
+`/etc/bitriver-live/deploy/srs/conf/srs.generated.conf`. The installer migrates
+the former flat paths without changing their bytes and rejects divergent dual
+copies before it stages new program assets.
+
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
 

@@ -34,8 +34,16 @@ The command is best-effort: if Docker is unavailable or the stack is stopped, it
 Boot-managed Ubuntu installs use the same Compose contract with these host paths:
 
 - program/workspace: `/opt/bitriver-live`
-- environment and generated OME/SRS config: `/etc/bitriver-live`
+- environment: `/etc/bitriver-live/bitriver.env`
+- generated OME config: `/etc/bitriver-live/deploy/ome/Server.generated.xml`
+- generated SRS config: `/etc/bitriver-live/deploy/srs/conf/srs.generated.conf`
 - durable state: `/var/lib/bitriver-live`
+
+The host manager migrates the older flat OME/SRS paths into this source-shaped
+tree and retains compatibility links. A sole legacy file is moved without
+changing its bytes. If both legacy and canonical files exist with different
+content, the upgrade fails before staging program assets so the operator can
+reconcile the conflict without data loss.
 
 After completing the backup checklist, install/extract the new published artifact and stage it through the host manager:
 
