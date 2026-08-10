@@ -18,9 +18,31 @@ type smokeCheckResult struct {
 	details string
 }
 
-var smokeDoctorRunner = runDoctor
+var smokePrerequisiteRunner = runSmokePrerequisites
 var smokeComposePSRunner = runComposePS
 var smokeHTTPClient = &http.Client{Timeout: 4 * time.Second}
+
+func runSmokePrerequisites() error {
+	opts, err := parseDoctorArgs(nil)
+	if err != nil {
+		return fmt.Errorf("load Docker prerequisite policy: %w", err)
+	}
+
+	for _, result := range []doctorResult{
+		checkRequiredBinaries(),
+		checkDockerAndCompose(opts),
+	} {
+		if result.Status != doctorStatusFail {
+			continue
+		}
+		if strings.TrimSpace(result.Remediation) != "" {
+			return fmt.Errorf("%s: %s; %s", result.Name, result.Details, result.Remediation)
+		}
+		return fmt.Errorf("%s: %s", result.Name, result.Details)
+	}
+
+	return nil
+}
 
 func runSmoke(args []string) error {
 	fs := flag.NewFlagSet("smoke", flag.ContinueOnError)
@@ -36,7 +58,7 @@ func runSmoke(args []string) error {
 	fmt.Fprintf(os.Stdout, "Compose file: %s\n", *composeFile)
 	fmt.Fprintf(os.Stdout, "Env file: %s\n", *envFile)
 
-	if smokeDoctorRunner(nil) {
+	if err := smokePrerequisiteRunner(); err == nil {
 		results = append(results, smokeCheckResult{
 			name:    "Docker + Docker Compose availability",
 			passed:  true,
@@ -46,7 +68,7 @@ func runSmoke(args []string) error {
 		results = append(results, smokeCheckResult{
 			name:    "Docker + Docker Compose availability",
 			passed:  false,
-			details: "doctor checks failed. Fix: start Docker Desktop/Engine and verify `docker version` and `docker compose version` both succeed.",
+			details: fmt.Sprintf("Docker prerequisite checks failed: %v", err),
 		})
 		printSmokeSummary(results)
 		return errors.New("smoke checks failed")

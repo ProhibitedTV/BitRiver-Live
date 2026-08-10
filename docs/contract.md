@@ -234,7 +234,10 @@ curl -fsS -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:${BITRIVER_OME_HTTP
 go run ./cmd/bitriver smoke --compose-file deploy/docker-compose.yml --env-file ./.env
 ```
 
-`bitriver smoke` is the canonical single-command equivalent and checks compose reachability plus the same host health endpoints.
+`bitriver smoke` is the canonical single-command equivalent and checks
+Docker/Compose availability, compose reachability, and the same host health
+endpoints. It is a post-start check and therefore does not require the running
+stack's host ports to be free; use `bitriver doctor` for that pre-start gate.
 
 For a media acceptance run, publish a non-sensitive test source with a freshly
 created channel key, then verify the viewer-facing URLs returned by the API. At

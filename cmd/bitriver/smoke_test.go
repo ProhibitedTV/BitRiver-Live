@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,11 +12,11 @@ import (
 )
 
 func TestRunSmokePasses(t *testing.T) {
-	originalDoctor := smokeDoctorRunner
+	originalPrerequisites := smokePrerequisiteRunner
 	originalPS := smokeComposePSRunner
 	originalHTTP := smokeHTTPClient
 	defer func() {
-		smokeDoctorRunner = originalDoctor
+		smokePrerequisiteRunner = originalPrerequisites
 		smokeComposePSRunner = originalPS
 		smokeHTTPClient = originalHTTP
 	}()
@@ -34,7 +35,7 @@ func TestRunSmokePasses(t *testing.T) {
 		"BITRIVER_TRANSCODER_HOST_PORT=19091",
 	})
 
-	smokeDoctorRunner = func([]string) bool { return true }
+	smokePrerequisiteRunner = func() error { return nil }
 	smokeComposePSRunner = func(string, string) ([]byte, error) {
 		return []byte(`[
 			{"Service":"bitriver-live","State":"running","Status":"Up","Health":"healthy"},
@@ -47,17 +48,47 @@ func TestRunSmokePasses(t *testing.T) {
 	}
 }
 
-func TestRunSmokeFailsWhenDoctorFails(t *testing.T) {
-	originalDoctor := smokeDoctorRunner
-	defer func() { smokeDoctorRunner = originalDoctor }()
-	smokeDoctorRunner = func([]string) bool { return false }
+func TestRunSmokeFailsWhenPrerequisitesFail(t *testing.T) {
+	originalPrerequisites := smokePrerequisiteRunner
+	defer func() { smokePrerequisiteRunner = originalPrerequisites }()
+	smokePrerequisiteRunner = func() error { return errors.New("Docker daemon unavailable") }
 
 	err := runSmoke(nil)
 	if err == nil {
-		t.Fatal("expected smoke to fail when doctor fails")
+		t.Fatal("expected smoke to fail when Docker prerequisites fail")
 	}
 	if !strings.Contains(err.Error(), "smoke checks failed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunSmokePrerequisitesDoNotCheckPrestartPortAvailability(t *testing.T) {
+	originalLookPath := doctorLookPath
+	originalCommandOutput := doctorCommandOutput
+	originalHostPortChecker := doctorHostPortChecker
+	defer func() {
+		doctorLookPath = originalLookPath
+		doctorCommandOutput = originalCommandOutput
+		doctorHostPortChecker = originalHostPortChecker
+	}()
+
+	doctorLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	doctorCommandOutput = func(name string, args ...string) (string, error) {
+		if name != "docker" {
+			return "", fmt.Errorf("unexpected command %s", name)
+		}
+		if len(args) > 0 && args[0] == "compose" {
+			return "2.38.2", nil
+		}
+		return "28.0.4", nil
+	}
+	doctorHostPortChecker = func(string, int) error {
+		t.Fatal("post-start smoke prerequisites must not check whether stack ports are free")
+		return nil
+	}
+
+	if err := runSmokePrerequisites(); err != nil {
+		t.Fatalf("runSmokePrerequisites failed: %v", err)
 	}
 }
 
