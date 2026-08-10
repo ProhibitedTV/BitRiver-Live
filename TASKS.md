@@ -131,7 +131,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       transcoder image UID, and rerun the protected matrix.
     - The aligned smoke override passes focused Linux Go coverage, ShellCheck
       0.11.0, syntax/diff hygiene, and another literal `./scripts/verify.sh` run.
-      A third protected run is pending.
+      Third run `31347182741` passed Ubuntu test-all in 5m23s, Windows/macOS Go,
+      all three quickstart entrypoint checks, scans, ShellCheck, docs, and secret
+      checks. Its merge gate failed only because the PR body did not use the
+      machine-checked release-scorecard template. PR #1386 now contains the
+      exact headings and explicit high-risk/evidence checkboxes; one fresh
+      synchronize run remains pending.
 
 ## Scoped change: live-room chat target and gap reconciliation (#1272)
 

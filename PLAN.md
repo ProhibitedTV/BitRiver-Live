@@ -50,6 +50,12 @@
   `host_gid` to only its SRS/OME services. Do not export host identity globally,
   because this smoke intentionally retains the transcoder image UID on its
   isolated named volume.
+- Third run `31347182741` passed the complete product matrix after that fixture
+  alignment, including Ubuntu test-all and cross-platform Go/entrypoint checks.
+  Its merge gate failed only because PR #1386's prose risk section did not use
+  the repository's machine-checked scorecard headings/checkboxes. Preserve the
+  high-risk classification and evidence, update the PR body to the exact
+  template shape, and trigger one fresh synchronize run before merging.
 - Upgrade migration must be fail-safe under interruption and must not erase a
   modified operator config. Use same-filesystem moves where possible, create
   parents before migration, apply the established `0600` file and operator
