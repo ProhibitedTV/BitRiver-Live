@@ -284,6 +284,8 @@ services:
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
+    group_add:
+      - "${BITRIVER_HOST_GID:-0}"
     # Exception: upstream SRS image writes process/log artifacts under /usr/local/srs.
     # Exception: retain image default root user; upstream image is not documented for non-root startup.
     ports:
@@ -404,6 +406,8 @@ services:
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
+    group_add:
+      - "${BITRIVER_HOST_GID:-0}"
     # Exception: OME runtime uses writable paths inside its image layout.
     # Exception: retain image default root user; vendor image startup expectations are root-based.
     entrypoint:

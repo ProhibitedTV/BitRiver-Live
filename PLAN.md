@@ -1,5 +1,90 @@
 # PLAN
 
+## Current scope - align installed generated config after RC17 rejection (#1297, #1304) (2026-08-09)
+
+- Treat immutable `v1.2.3-rc.17` as rejected clean-host evidence. Hosted run
+  `31344257847` passed the no-checkout boundary, signed provenance, public
+  package install, disabled-service staging, immutable production inputs,
+  doctor, and preflight, then failed systemd activation because `ome-config`
+  exited 1. Do not patch RC17, move its tag, or weaken activation.
+- Align the managed Ubuntu configuration layout with the source-shaped path
+  already used by the read-only Compose helpers: persist OME output at
+  `/etc/bitriver-live/deploy/ome/Server.generated.xml` and SRS output at
+  `/etc/bitriver-live/deploy/srs/conf/srs.generated.conf`, while the installed
+  `/opt/bitriver-live/deploy/...` paths remain symlinks to those operator-owned
+  files.
+- Migrate the former flat `/etc/bitriver-live/Server.generated.xml` and
+  `/etc/bitriver-live/srs.generated.conf` files without replacing operator
+  content. Move a sole legacy file into the canonical tree, retain bounded
+  compatibility symlinks, accept an idempotent already-migrated layout, and
+  reject divergent dual copies instead of guessing which one to discard.
+- Keep the private environment at `/etc/bitriver-live/bitriver.env`, data under
+  `/var/lib/bitriver-live`, and the existing `BITRIVER_CONFIG_ROOT` mount. This
+  is an installed generated-config path correction, not a new deployment
+  topology or another OME/SRS render path.
+
+### Root cause, risks, and boundaries
+
+- PR #1381 correctly moved helper writes off the read-only `/workspace` mount
+  and into `/etc/bitriver-live/deploy/...`. Source checkouts passed because
+  those directories already exist. The package installer still stored the two
+  generated files flat under `/etc/bitriver-live`; SRS happened to create its
+  missing parent directories, while the OME Go renderer uses `os.WriteFile`
+  and failed on the absent parent. Creating the OME directory alone would be
+  unsafe because the OME consumer would still read the old flat file.
+- Protected PR run `31346223822` exposed a second contract edge after the path
+  fix: SRS cannot read an operator-owned mode-`0600` generated config while it
+  runs with all Linux capabilities dropped. The tracked OME placeholder masked
+  the equivalent fresh-install risk because an existing file keeps its prior
+  mode when `os.WriteFile` truncates it. Preserve `bitriver.env` as owner-only,
+  but make the two generated runtime configs mode `0640`, owned by the selected
+  Docker operator UID/GID, and add only that GID as a supplementary group for
+  the read-only OME/SRS consumers. Do not add capabilities or make either
+  runtime mount writable. Both renderers must enforce the final mode on every
+  render, including existing files.
+- Corrected run `31346863473` proved the runtime group-read design in the base
+  Compose file but exposed a Linux smoke-fixture mismatch: its override assigns
+  the runner UID/GID to the config renderers without persisting or exporting
+  `BITRIVER_HOST_GID`, so the base SRS/OME supplementary group resolves to `0`.
+  Keep the production/package contract unchanged and add the fixture's own
+  `host_gid` to only its SRS/OME services. Do not export host identity globally,
+  because this smoke intentionally retains the transcoder image UID on its
+  isolated named volume.
+- Third run `31347182741` passed the complete product matrix after that fixture
+  alignment, including Ubuntu test-all and cross-platform Go/entrypoint checks.
+  Its merge gate failed only because PR #1386's prose risk section did not use
+  the repository's machine-checked scorecard headings/checkboxes. Preserve the
+  high-risk classification and evidence, update the PR body to the exact
+  template shape, and trigger one fresh synchronize run before merging.
+- Upgrade migration must be fail-safe under interruption and must not erase a
+  modified operator config. Use same-filesystem moves where possible, create
+  parents before migration, apply the established `0600` file and operator
+  ownership boundary, and make reruns deterministic.
+- Keep `/etc/bitriver-live` mode-restricted; do not loosen credentials, grant
+  capabilities, make the helper workspace writable, or retain raw renderer
+  logs in qualification evidence.
+- Update `docs/contract.md` and operator/install guidance in the same change.
+  Preserve the private root `.env` and the six operator-owned untracked paths.
+
+### Test and rollout plan
+
+- Extend the Linux installer lifecycle for a fresh structured layout, migration
+  from legacy flat files, compatibility symlinks, byte preservation, exact
+  ownership/modes, idempotent reinstall, and divergent-copy refusal.
+- Add static release/Compose contracts that the helper outputs, installed
+  symlinks, and documented paths all name the same source-shaped files. Run an
+  exact package-style Docker fixture using arbitrary non-root UID/GID and prove
+  SRS render, OME render, token verification, and consumer-visible file bytes.
+- Exercise actual SRS/OME consumer startup under dropped capabilities so the
+  renderer mode, operator group, and runtime supplementary-group contract is
+  proven rather than inferred from a renderer-only fixture.
+- Run focused installer/Go/shell/docs checks, literal `./scripts/verify.sh`,
+  protected PR CI, and exact-main CI. Publish only the next unused immutable
+  candidate, `v1.2.3-rc.18`, from that green main commit; independently verify
+  its public signed release set and rerun the no-checkout qualification.
+- A hosted pass remains bounded evidence. Keep #1297/#1304 open until the real
+  XOA/NPM/firewall/reboot/media requirements assigned to those issues pass.
+
 ## Current scope - define and reconcile the live-room chat target (#1272) (2026-08-09)
 
 - Add one product-source-of-truth specification under `docs/` that turns the
@@ -52,6 +137,18 @@
 - Publish through a focused protected PR. Merge only after required checks are
   green, verify exact-main CI, and close #1272 only when the checked-in spec and
   linked follow-up issue set satisfy every epic acceptance criterion.
+
+### Completion evidence
+
+- Added `docs/live-room-chat.md` with the adapted-not-copied boundary, all
+  eleven requested product areas, a source-backed feature/protocol matrix,
+  MVP/later scope, and the single-stack architecture contract. Filed remaining
+  MVP #1382, #1383, and #1384 after auditing closed foundation #1273-#1275.
+- Focused chat/viewer/docs checks and literal repository verification passed.
+  PR #1385 passed protected run `31344956999`, squash-merged as exact main
+  `8e9f46f146e7e065cb097a53103a5317fd77230e`, and exact-main run
+  `31345003256` passed. #1272 closed as completed and the repository returned
+  to zero open pull requests.
 
 ## Current scope - artifact-only Ubuntu host qualification (#1297, #1304) (2026-08-03)
 

@@ -98,6 +98,10 @@ unit_dir=${unit_dir:-$(prefix_path /etc/systemd/system)}
 manager_path=${manager_path:-$(prefix_path /usr/local/sbin/bitriver-host)}
 env_file="$config_dir/bitriver.env"
 unit_path="$unit_dir/$unit_name"
+ome_config_file="$config_dir/deploy/ome/Server.generated.xml"
+srs_config_file="$config_dir/deploy/srs/conf/srs.generated.conf"
+legacy_ome_config_file="$config_dir/Server.generated.xml"
+legacy_srs_config_file="$config_dir/srs.generated.conf"
 
 validate_path() {
   local label=$1 value=$2
@@ -290,6 +294,41 @@ replace_file_with_symlink() {
   ln -s "$target" "$link_path"
 }
 
+migrate_generated_config() {
+  local label=$1 legacy_path=$2 canonical_path=$3 seed=$4 mode=$5 link_target
+
+  if [[ -L $canonical_path ]]; then
+    die "$label canonical path must be a regular file, not a symlink: $canonical_path"
+  elif [[ -e $canonical_path && ! -f $canonical_path ]]; then
+    die "$label canonical path is not a regular file: $canonical_path"
+  fi
+
+  if [[ -L $legacy_path ]]; then
+    link_target=$(readlink -- "$legacy_path")
+    [[ $link_target == "$canonical_path" ]] ||
+      die "$label legacy compatibility link has an unexpected target: $legacy_path -> $link_target"
+  elif [[ -f $legacy_path ]]; then
+    if [[ -f $canonical_path ]]; then
+      if cmp -s -- "$legacy_path" "$canonical_path"; then
+        rm -f -- "$legacy_path"
+      else
+        die "$label has divergent legacy and canonical files; reconcile them before retrying: $legacy_path and $canonical_path"
+      fi
+    else
+      mv -- "$legacy_path" "$canonical_path"
+    fi
+  elif [[ -e $legacy_path ]]; then
+    die "$label legacy path is not a regular file or compatibility symlink: $legacy_path"
+  fi
+
+  if [[ ! -f $canonical_path ]]; then
+    install -D -m "$mode" "$seed" "$canonical_path"
+  fi
+  if [[ ! -L $legacy_path ]]; then
+    ln -s "$canonical_path" "$legacy_path"
+  fi
+}
+
 render_unit() {
   local template="$install_dir/deploy/systemd/bitriver-live-compose.service"
   local temporary
@@ -313,29 +352,42 @@ stage_install() {
   resolve_operator
 
   install -d -m 0755 "$install_dir" "$install_dir/bin" "$unit_dir" "$(dirname "$manager_path")"
+
+  if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    install -d -m 0750 -o "$operator_user" -g "$operator_group" \
+      "$config_dir" "$config_dir/deploy" "$config_dir/deploy/ome" \
+      "$config_dir/deploy/srs" "$config_dir/deploy/srs/conf" \
+      "$data_dir" "$data_dir/api" "$data_dir/transcoder"
+  else
+    [[ $operator_user == "$(id -un)" ]] || die "non-root --root-prefix tests must use the current operator user"
+    install -d -m 0750 \
+      "$config_dir" "$config_dir/deploy" "$config_dir/deploy/ome" \
+      "$config_dir/deploy/srs" "$config_dir/deploy/srs/conf" \
+      "$data_dir" "$data_dir/api" "$data_dir/transcoder"
+  fi
+
+  migrate_generated_config OME \
+    "$legacy_ome_config_file" "$ome_config_file" \
+    "$source_root/deploy/ome/Server.xml" 0640
+  migrate_generated_config SRS \
+    "$legacy_srs_config_file" "$srs_config_file" \
+    "$source_root/deploy/srs/conf/srs.conf" 0640
+
   bash "$source_root/scripts/stage-release-assets.sh" --output "$install_dir"
   install -m 0755 "$binary_dir/bitriver" "$install_dir/bin/bitriver"
   install -m 0755 "$binary_dir/bitriver-live" "$install_dir/bin/bitriver-live"
   install -m 0755 "$source_root/deploy/install/compose-host.sh" "$manager_path"
 
-  if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-    install -d -m 0750 -o "$operator_user" -g "$operator_group" \
-      "$config_dir" "$data_dir" "$data_dir/api" "$data_dir/transcoder"
-  else
-    [[ $operator_user == "$(id -un)" ]] || die "non-root --root-prefix tests must use the current operator user"
-    install -d -m 0750 "$config_dir" "$data_dir" "$data_dir/api" "$data_dir/transcoder"
-  fi
-
   replace_empty_path_with_symlink "$install_dir/deploy/data" "$data_dir/api"
   replace_empty_path_with_symlink "$install_dir/deploy/transcoder-data" "$data_dir/transcoder"
   replace_file_with_symlink \
     "$install_dir/deploy/ome/Server.generated.xml" \
-    "$config_dir/Server.generated.xml" \
-    "$source_root/deploy/ome/Server.xml" 0600
+    "$ome_config_file" \
+    "$source_root/deploy/ome/Server.xml" 0640
   replace_file_with_symlink \
     "$install_dir/deploy/srs/conf/srs.generated.conf" \
-    "$config_dir/srs.generated.conf" \
-    "$source_root/deploy/srs/conf/srs.conf" 0600
+    "$srs_config_file" \
+    "$source_root/deploy/srs/conf/srs.conf" 0640
 
   if [[ ! -f $env_file ]]; then
     run_as_operator "$install_dir/bin/bitriver" env init \
@@ -346,9 +398,10 @@ stage_install() {
     BITRIVER_CONFIG_ROOT "$config_dir" \
     BITRIVER_HOST_UID "$operator_uid" \
     BITRIVER_HOST_GID "$operator_gid"
-  chmod 0600 "$env_file" "$config_dir/Server.generated.xml" "$config_dir/srs.generated.conf"
+  chmod 0600 "$env_file"
+  chmod 0640 "$ome_config_file" "$srs_config_file"
   if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-    chown "$operator_user:$operator_group" "$env_file" "$config_dir/Server.generated.xml" "$config_dir/srs.generated.conf"
+    chown "$operator_user:$operator_group" "$env_file" "$ome_config_file" "$srs_config_file"
   fi
 
   if [[ -L $install_dir/.env || -f $install_dir/.env ]]; then

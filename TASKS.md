@@ -1,5 +1,143 @@
 # TASKS
 
+## Scoped change: installed generated-config layout after RC17 rejection (#1297, #1304)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose the immutable RC17 clean-host failure
+  - Acceptance criteria:
+    - Public candidate bytes and the caller-supplied release root verify before
+      qualification evidence is trusted.
+    - The failed step and sanitized artifact identify a source-backed root cause
+      without exposing credentials or patching the installed candidate.
+    - `PLAN.md` records the correction, migration risks, and test plan first.
+  - Check:
+    - All 45 entries in RC17 `CHECKSUMS.txt` match the 45 downloaded public
+      assets; there are no missing, extra, duplicate, or mismatched entries.
+      The signed release-set SHA-256 is
+      `38c4937f86b0c77cbe46044e224cd1569e5d88ddc1ef3ae5539b9f43e10be3e5`.
+    - Run `31344257847` used no checkout and passed signed provenance, public
+      `.deb` install, host staging, immutable input validation, and doctor. It
+      failed activation when only `ome-config` exited 1; sanitized evidence and
+      cleanup passed.
+    - The helper now writes `/etc/bitriver-live/deploy/ome/...`, while the
+      installer still creates and the OME consumer still follows the flat
+      `/etc/bitriver-live/Server.generated.xml`. Source checkouts hide the
+      mismatch because their source-shaped parents already exist. Updated
+      `PLAN.md` before installer, contract, test, or documentation changes.
+
+- [x] Task 2 - Migrate the installer to one canonical generated-config tree
+  - Acceptance criteria:
+    - Fresh installs create OME/SRS targets in the source-shaped config tree and
+      installed `/opt` links resolve to those exact files.
+    - A sole legacy flat file migrates byte-for-byte; compatibility paths remain
+      bounded and reruns are idempotent.
+    - Divergent legacy and canonical files are rejected without data loss.
+    - Modes and ownership remain private and assigned to the Docker operator;
+      read-only media consumers receive only the operator group needed to read
+      generated runtime config while all capabilities remain dropped.
+  - Check:
+    - The installer now owns source-shaped OME/SRS targets under
+      `$config_dir/deploy/...`; the installed `/opt` paths and bounded former
+      flat paths resolve to those same regular files.
+    - A migration helper moves a sole flat file, collapses byte-identical dual
+      files, accepts only the expected compatibility link, and rejects an
+      unexpected link, non-file, canonical symlink, or divergent copies before
+      staging new program assets.
+    - Fresh and migrated files retain mode `0640`, operator UID/GID ownership,
+      and mode `0750` parents. The environment remains mode `0600`. Linux
+      lifecycle tests preserve legacy hashes,
+      prove fresh/idempotent layouts, reject conflicts without changing either
+      config or env bytes, and pass end-to-end in the pinned Go 1.26.5 container.
+      Git Bash syntax checks pass.
+
+- [x] Task 3 - Update tests and the deployment/operator contract
+  - Acceptance criteria:
+    - Installer lifecycle tests cover fresh, legacy, idempotent, conflict, path,
+      mode, and ownership behavior.
+    - A package-style non-root fixture proves both renders, token verification,
+      and consumer-visible config use through the canonical paths.
+    - Contract and operator docs name one generated-config layout and include
+      the upgrade compatibility behavior.
+  - Check:
+    - Extended the Linux lifecycle to seed RC17-style flat files, require
+      byte-identical migration, verify exact `/opt` and compatibility link
+      targets, private parents/files, operator ownership, fresh installs,
+      idempotent reruns, equal-copy collapse, and conflict refusal without env
+      or config mutation.
+    - OME now creates or refreshes secret-bearing output with mode `0640`; the
+      SRS renderer explicitly applies the same mode. Focused Go tests cover the OME
+      mode and static installer/Compose/SRS invariants; the complete Linux
+      lifecycle passes after the hardening.
+    - An isolated package-shaped volume with UID/GID 1001, mode-`0640` seeded
+      files, and the exact signed RC17 OME helper digest rendered SRS and OME,
+      verified the OME health token, and produced non-empty 5913-byte/1859-byte
+      consumer paths. All exact fixture volumes and its synthetic env were
+      removed.
+    - Updated the deployment contract, Ubuntu path table/migration guidance,
+      upgrade runbook, and deploy map. Generated contract docs, a disposable
+      40,841-byte contract snapshot, Markdown links, shell syntax, and diff
+      hygiene pass.
+
+- [-] Task 4 - Verify, merge, publish RC18, and rerun qualification
+  - Acceptance criteria:
+    - Focused checks, literal verifier, secret guard, protected PR CI, and
+      exact-main CI pass without touching operator-owned files.
+    - Immutable RC18 is published only from exact green main; all public assets,
+      signed release root, and five image signatures verify independently.
+    - No-checkout clean-host qualification advances through activation, OME,
+      smoke, recovery, upgrade, and retained uninstall or produces a new bounded
+      forward-fix failure. External XOA/NPM/reboot/media gates remain open.
+  - Check:
+    - Literal `./scripts/verify.sh` passed with pinned Go 1.26.5 and the bundled
+      Python interpreter: release-bundle, all Go packages, architecture,
+      dependency, release-set, Markdown, contract, and hygiene gates are green.
+      Docker checks were deliberately separated from that invocation; the
+      unchanged viewer was not forced.
+    - Docker Desktop 4.85.0 (Linux amd64 engine 29.6.2, Compose 5.3.1) built and
+      started the canonical source stack from an ephemeral environment copy.
+      Migrations completed, all critical services including OME became healthy,
+      and `/healthz`, `/readyz`, `/viewer`, and `/admin` returned HTTP 200. The
+      exact test stack and its newly-created volumes were removed afterward.
+    - The final pinned Linux installer lifecycle, focused Go tests, package-style
+      UID/GID 1001 render fixture, ShellCheck 0.11.0, production/pull third-party
+      digest guard using RC17's public dependency manifest, generated-contract
+      check, contract snapshot, Markdown links, and `git diff --check` pass.
+    - The root `.env` remains byte-identical at SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`;
+      the regenerated tracked OME placeholder has the exact `HEAD` object hash,
+      and all six operator-owned untracked paths remain excluded.
+    - Protected PR CI, exact-main CI, RC18 publication, independent public-asset
+      verification, and the no-checkout Ubuntu qualification remain pending.
+    - Protected run `31346223822` passed secrets, docs, ShellCheck, image scan,
+      and native arm64 viewer checks, then failed the Ubuntu smoke because SRS
+      correctly lacked permission to read an operator-owned mode-`0600` config
+      with all capabilities dropped. The merge gate failed closed. Forward fix:
+      enforce mode `0640` on every OME/SRS render and give only the selected
+      operator GID to the read-only OME/SRS consumers; rerun the complete gate.
+    - The forward fix passes focused Linux Go tests, the complete installer
+      lifecycle, ShellCheck 0.11.0, the regenerated 40,877-byte contract
+      snapshot, Docker Desktop Compose rendering, the production digest guard,
+      and a capability-dropped runtime fixture. In that fixture actual SRS and
+      OME processes remained running with read-only mode-`0640` configs owned by
+      UID/GID 1001, `cap_drop: ALL`, and only supplementary GID 1001. Its exact
+      containers and volumes were removed. Literal `./scripts/verify.sh` also
+      passes again; protected CI rerun remains pending.
+    - Corrected run `31346863473` again passed every independent check but the
+      Ubuntu smoke still gave SRS group `0`: its Linux-only override assigns the
+      runner GID to renderers without supplying that synthetic GID to the media
+      consumers. The installed-host env contract is unaffected. Align only the
+      smoke SRS/OME `group_add` values with its local `host_gid`, retain the
+      transcoder image UID, and rerun the protected matrix.
+    - The aligned smoke override passes focused Linux Go coverage, ShellCheck
+      0.11.0, syntax/diff hygiene, and another literal `./scripts/verify.sh` run.
+      Third run `31347182741` passed Ubuntu test-all in 5m23s, Windows/macOS Go,
+      all three quickstart entrypoint checks, scans, ShellCheck, docs, and secret
+      checks. Its merge gate failed only because the PR body did not use the
+      machine-checked release-scorecard template. PR #1386 now contains the
+      exact headings and explicit high-risk/evidence checkboxes; one fresh
+      synchronize run remains pending.
+
 ## Scoped change: live-room chat target and gap reconciliation (#1272)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -63,7 +201,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       MVP #1382, #1383, then #1384. Later commands, message management, pinned
       announcements, and room modes stay outside MVP until separately approved.
 
-- [-] Task 4 - Verify, publish, merge, and reconcile the epic
+- [x] Task 4 - Verify, publish, merge, and reconcile the epic
   - Acceptance criteria:
     - Markdown links, focused chat tests, literal verifier, secret guard, diff
       review, protected PR checks, and exact-main CI pass.
@@ -82,8 +220,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       docs-only tool path and the viewer suite is proven separately above.
     - `git diff --check` passes; root `.env` remains byte-identical at SHA-256
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`;
-      all six operator-owned untracked paths remain excluded. Protected PR,
-      exact-main CI, and epic reconciliation remain pending.
+      all six operator-owned untracked paths remain excluded.
+    - PR #1385 passed protected run `31344956999`, squash-merged as exact main
+      `8e9f46f146e7e065cb097a53103a5317fd77230e`, and exact-main run
+      `31345003256` passed. #1272 closed as completed, its local/remote topic
+      branches were deleted, and the repository returned to zero open PRs.
 
 ## Scoped change: artifact-only Ubuntu host qualification (#1297, #1304)
 
