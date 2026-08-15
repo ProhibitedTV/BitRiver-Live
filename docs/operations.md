@@ -273,21 +273,48 @@ Use these defaults unless compliance or customer SLAs demand stricter controls:
 - **RTO target:** 2 hours (restore latest backup, run smoke checks, re-point API).
 - **Restore drill cadence:** at least once every 30 days and after any schema-heavy release.
 
-Record each drill with backup timestamp, restore timestamp, smoke query results, and operator sign-off.
+The restore report records observed RPO (backup age) and RTO (script runtime). Attach the report and operator sign-off to the
+release or recovery ticket; the targets above remain the pass/fail thresholds even when the script itself succeeds.
+
+### Durable recovery inventory
+
+A Postgres dump is necessary, but it is not a complete host backup. Inventory and protect each recovery input independently:
+
+| Recovery input | What it protects | Recovery rule |
+| --- | --- | --- |
+| Postgres backup set | Accounts, channels, schedules, auth state, moderation/legal records, settings, and media metadata | Keep the archive, manifest, and checksum together; rehearse the exact set before promotion. |
+| `/etc/bitriver-live` on packaged hosts | Operator environment, secrets, and generated SRS/OME configuration | Store encrypted with restricted access. Restore to the same path; never attach its contents to public evidence. |
+| `/var/lib/bitriver-live` on packaged hosts | Durable application and local media data | Snapshot with filesystem ownership and permissions preserved. |
+| `deploy/transcoder-data` on checkout-based Compose hosts | HLS, upload, and recording objects stored locally | Snapshot in the same recovery window as Postgres so metadata and objects agree. |
+| External object storage | Upload and recording objects when object storage is enabled | Enable provider versioning/replication and record bucket, prefix, and retention policy without recording credentials. |
+| Immutable release set | The launcher/package, Compose bundle, images, signatures, and release-set digests used by the recovered host | Retain or reference the exact verified release set; do not rebuild a historical release during recovery. |
+| Redis | Ephemeral chat fan-out, rate-limit, and cache state in the default deployment | No backup is required in the default cache-only mode; expect this transient state to reset. |
+
+Document where every applicable item lives, its retention, its encryption/access policy, and the person responsible for a
+restore. A lost-host drill is incomplete until configuration, Postgres, media/object data, and the immutable release inputs
+have all been exercised together.
 
 ### Scheduled backup, pruning, and object upload scripts
 
 The repository includes operator scripts under `scripts/`:
 
-- `./scripts/backup-postgres.sh`: creates a gzip-compressed logical backup (`pg_dump`), writes a SHA256 checksum, and can upload to S3-compatible object storage.
-- `./scripts/prune-backups.sh`: prunes local backup files older than the configured retention window while preserving a minimum backup count.
-- `./scripts/restore-postgres.sh`: restore rehearsal helper that loads a backup into an isolated database and runs smoke queries.
+- `./scripts/backup-postgres.sh`: atomically publishes a gzip-compressed logical dump, JSON manifest, and SHA-256 checksum set, and can upload all three to S3-compatible object storage.
+- `./scripts/prune-backups.sh`: prunes complete local backup sets older than the configured retention window while preserving a minimum backup count.
+- `./scripts/restore-postgres.sh`: verifies the backup set before mutation, restores into a fresh isolated database, compares migration and exact public-table row-count invariants, and writes a non-secret JSON report.
+- `./scripts/test-backup-restore.sh`: runs the positive rehearsal and pre-mutation refusal cases against a disposable Postgres 15 container.
+
+The backup manifest has schema `bitriver.postgres-backup/v1`. It binds the archive name/hash/size, source release and commit,
+database/server/tool versions, applied migration ledger and fingerprint, and exact public-table row counts. The dump and all
+manifest invariants use one exported repeatable-read snapshot. The checksum file covers the archive and manifest exactly;
+copy, upload, retain, and prune the three files as one set.
 
 Common environment variables:
 
 - `BITRIVER_BACKUP_DIR` (default `./data/backups/postgres`)
 - `BITRIVER_BACKUP_RETENTION_DAYS` (default `14`)
 - `BITRIVER_BACKUP_KEEP_MIN` (default `3`)
+- `BITRIVER_BACKUP_SOURCE_RELEASE` (exact `vMAJOR.MINOR.PATCH[-PRERELEASE]`; release evidence must not use `unknown`)
+- `BITRIVER_BACKUP_SOURCE_COMMIT` (full lowercase 40-character commit SHA; release evidence must not use `unknown`)
 - `BITRIVER_BACKUP_UPLOAD_ENABLED` (`1` to enable upload)
 - `BITRIVER_BACKUP_UPLOAD_BUCKET`, `BITRIVER_BACKUP_UPLOAD_PREFIX`, `BITRIVER_BACKUP_UPLOAD_REGION`, `BITRIVER_BACKUP_UPLOAD_ENDPOINT`
 
@@ -298,26 +325,49 @@ BITRIVER_BACKUP_POSTGRES_HOST=postgres \
 BITRIVER_BACKUP_POSTGRES_USER="$BITRIVER_POSTGRES_USER" \
 BITRIVER_BACKUP_POSTGRES_PASSWORD="$BITRIVER_POSTGRES_PASSWORD" \
 BITRIVER_BACKUP_POSTGRES_DB="$BITRIVER_POSTGRES_DB" \
+BITRIVER_BACKUP_SOURCE_RELEASE="$release_version" \
+BITRIVER_BACKUP_SOURCE_COMMIT="$release_commit" \
 ./scripts/backup-postgres.sh
 
 ./scripts/prune-backups.sh
 ```
 
-### Restore rehearsal (isolated DB + smoke queries)
+Set `release_version` and `release_commit` from the approved immutable release metadata, not from an unverified working tree.
+A backup is not valid release evidence until the archive, manifest, and checksum are all durably stored.
 
-Use the latest backup in `BITRIVER_BACKUP_DIR`:
+### Restore rehearsal (isolated DB + invariant report)
+
+Keep the matching `.manifest.json` and `.sha256` files beside the selected archive. Read the migration fingerprint from the
+manifest approved for the release, choose a fresh rehearsal database name, and require both release and schema identity:
 
 ```bash
+backup=./data/backups/postgres/bitriver-postgres-20260815T020000Z.sql.gz
+expected_fingerprint=<64-lowercase-hex-from-approved-manifest>
+
 BITRIVER_BACKUP_POSTGRES_HOST=postgres \
 BITRIVER_BACKUP_POSTGRES_USER="$BITRIVER_POSTGRES_USER" \
 BITRIVER_BACKUP_POSTGRES_PASSWORD="$BITRIVER_POSTGRES_PASSWORD" \
-./scripts/restore-postgres.sh
+BITRIVER_RESTORE_REHEARSAL_DB=bitr_restore_20260815 \
+BITRIVER_RESTORE_EXPECT_RELEASE="$release_version" \
+BITRIVER_RESTORE_EXPECT_SCHEMA_FINGERPRINT="$expected_fingerprint" \
+BITRIVER_RESTORE_REPORT_PATH=./data/backups/postgres/restore-20260815.json \
+./scripts/restore-postgres.sh "$backup"
 ```
 
-Or pass an explicit archive path:
+The script validates the checksum and manifest before creating the rehearsal database, refuses an existing/protected/source
+database, restores into the isolated database, and compares every public-table row count plus the migration fingerprint. It
+drops the rehearsal database by default and atomically writes a `bitriver.postgres-restore-report/v1` report containing
+release/schema compatibility, hashes, invariant results, table count, and observed RPO/RTO. Set
+`BITRIVER_RESTORE_KEEP_DB=1` only when an operator needs the isolated database for further inspection.
+
+Backups created by the old archive-only workflow are intentionally refused because their source identity and consistency
+cannot be proved. Create a fresh manifest-bound backup and rehearse it outside production. Never point the script at the
+source or production database.
+
+Run the repository-owned rehearsal test after changing the scripts:
 
 ```bash
-./scripts/restore-postgres.sh ./data/backups/postgres/bitriver-postgres-20240101T020000Z.sql.gz
+./scripts/test-backup-restore.sh
 ```
 
 ### Scheduling examples (Compose + Kubernetes + Helm)

@@ -1,5 +1,64 @@
 # PLAN
 
+## Current scope - manifest-bound Postgres backup/restore rehearsal foundation (#1299) (2026-08-15)
+
+- Harden the existing `backup-postgres.sh` / `restore-postgres.sh` path instead
+  of creating a parallel recovery implementation. Current backups are compressed
+  and checksummed, but restore treats the checksum as optional, captures no
+  release/schema/database/tool identity, checks only table presence, emits no
+  machine-readable result, and has no automated corruption or compatibility
+  regression.
+- Produce an atomic gzip archive, mandatory checksum, and adjacent JSON manifest
+  for each successful backup. Bind the manifest to operator-supplied release and
+  commit identity, the database/server and pg tool versions, a deterministic
+  applied-migration fingerprint, and exact row counts for every public base
+  table. Refuse backup while the migration ledger is absent or non-applied.
+- Before creating a rehearsal database, restore must require and verify the
+  checksum/manifest, archive identity, manifest schema, and optional expected
+  release/schema fingerprint. Restore only into a fresh isolated database,
+  then compare the restored migration set and exact public-table row counts with
+  the signed-by-checksum backup manifest.
+- Emit a secret-safe JSON report with backup age (observed RPO), restore duration
+  (observed RTO), compatibility/invariant results, and cleanup/retention state.
+  This evidence is a release input, not proof of off-host storage or a complete
+  lost-host recovery by itself.
+
+### Risks and boundaries
+
+- Never include passwords, DSNs, object credentials, host addresses, row data,
+  or operator configuration contents in manifests/reports. Database/table names,
+  release identity, schema checksums, counts, tool versions, timings, and result
+  booleans are the only evidence fields in scope.
+- Missing checksum or manifest becomes a hard restore refusal. Document that
+  legacy dumps must be revalidated/repackaged outside production rather than
+  silently restored; checksum or compatibility failure must occur before any
+  rehearsal database is created or dropped.
+- Keep database identifiers strictly validated before interpolation. Preserve
+  cleanup traps, allow explicit retained rehearsal databases, and never restore
+  over the source database.
+- This slice covers Postgres only. Operator configuration/secrets/certificates,
+  `/var/lib/bitriver-live`, local transcoder/media state, and object-storage
+  versioning/replication remain required durable inputs; Redis stays explicitly
+  ephemeral in the default contract. Do not claim #1299 complete until an
+  artifact-only lost-host rebuild plus media/object invariants and the production
+  golden path pass.
+- Do not change Compose, root env, generated OME, package layout, CI workflows,
+  or deployment topology in this slice.
+
+### Test and rollout plan
+
+- Add a Docker-backed real-Postgres integration test with non-empty role/auth,
+  channel, schedule, moderation/legal, chat-filter, upload/recording, and
+  migration fixtures. Require backup, isolated restore, exact schema/row-count
+  invariants, a measured JSON report, and cleanup.
+- Add negative cases proving archive corruption, missing checksum/manifest,
+  mismatched expected release, and mismatched schema fingerprint fail before
+  the named rehearsal database exists.
+- Run shell/static checks, focused integration, Markdown/link, diff/secret
+  hygiene, and literal `./scripts/verify.sh`. Publish through a focused PR and
+  protected CI; keep #1299 open for the remaining lost-host/media/object/golden
+  path acceptance after this foundation lands.
+
 ## Current scope - prime aggregate ingest health after RC19 rejection (#1297, #1304) (2026-08-09)
 
 - Treat immutable `v1.2.3-rc.19` as rejected clean-host evidence. Release run
