@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -779,6 +780,10 @@ func RunRepositoryIngestHealthSnapshots(t *testing.T, factory RepositoryFactory)
 	}
 	fake := &fakeIngestController{healthResponses: responses}
 	repo := runRepository(t, factory, WithIngestController(fake))
+	initial, initialAt := repo.LastIngestHealth()
+	if len(initial) != 0 || !initialAt.IsZero() {
+		t.Fatalf("expected no cached ingest health before the first probe, got %+v at %s", initial, initialAt)
+	}
 
 	first := repo.IngestHealth(context.Background())
 	if fake.healthCalls == 0 {
@@ -812,6 +817,29 @@ func RunRepositoryIngestHealthSnapshots(t *testing.T, factory RepositoryFactory)
 	if ts2.Before(ts1) {
 		t.Fatal("expected subsequent health timestamp to be >= initial timestamp")
 	}
+
+	disabledRepo := runRepository(t, factory)
+	disabledInitial, disabledInitialAt := disabledRepo.LastIngestHealth()
+	if len(disabledInitial) != 0 || !disabledInitialAt.IsZero() {
+		t.Fatalf("expected disabled repository cache to start empty, got %+v at %s", disabledInitial, disabledInitialAt)
+	}
+	disabled := disabledRepo.IngestHealth(context.Background())
+	if len(disabled) != 1 || disabled[0].Component != "ingest" || disabled[0].Status != "disabled" {
+		t.Fatalf("expected first no-op probe to report ingest disabled, got %+v", disabled)
+	}
+	disabledCached, disabledAt := disabledRepo.LastIngestHealth()
+	if !reflect.DeepEqual(disabledCached, disabled) || disabledAt.IsZero() {
+		t.Fatalf("expected disabled result to be cached with a timestamp, got %+v at %s", disabledCached, disabledAt)
+	}
+}
+
+func TestStorageIngestHealthSnapshots(t *testing.T) {
+	factory := func(t *testing.T, opts ...Option) (Repository, func(), error) {
+		t.Helper()
+		repo, err := NewStorage(filepath.Join(t.TempDir(), "store.json"), opts...)
+		return repo, nil, err
+	}
+	RunRepositoryIngestHealthSnapshots(t, factory)
 }
 
 // RunRepositoryRecordingRetention validates the retention workflow that purges

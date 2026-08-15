@@ -1,5 +1,94 @@
 # TASKS
 
+## Scoped change: initial aggregate ingest health after RC19 rejection (#1297, #1304)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose and bound the immutable RC19 qualification failure
+  - Acceptance criteria:
+    - Exact public candidate identity and checksums are verified independently.
+    - Sanitized no-checkout evidence and an exact-image reproduction identify
+      the failed runtime invariant without exposing credentials.
+    - `PLAN.md` records the correction and rollout plan before implementation.
+  - Check:
+    - Release run `31351022453` published 46 assets from exact green main
+      `1e14e3cf7d5f1d949b396d4f7897660575ea468e`; `CHECKSUMS.txt` has exactly
+      45 unique entries with zero missing, extra, or mismatched files. The
+      signed release-set SHA-256 is
+      `374a4084d1880abab1fa980d528a47bb5e324ed85541248438015fb13f2cc204`.
+    - Clean-host run `31351694175` used no checkout, passed signed provenance,
+      package install, production preflight, systemd activation, CLI smoke
+      `7/7`, and direct authenticated OME control. Sanitized evidence retained
+      no secrets and records failure at the aggregate OME assertion only.
+    - The exact RC19 image digests reproduce `/healthz` with overall `ok` but a
+      stale `ingest: disabled` service entry while all ingest endpoint settings
+      and credentials are present. Both repository constructors pre-populate
+      that cache, preventing the handler's missing-cache live fallback.
+    - `PLAN.md` now bounds the empty-initial-cache correction, regression tests,
+      documentation, verification, and immutable RC20 rollout.
+
+- [x] Task 2 - Prime configured ingest health on the first request
+  - Acceptance criteria:
+    - JSON and Postgres repositories expose no cached ingest snapshot before
+      their first health probe.
+    - First `IngestHealth` calls query the configured controller and record a
+      timestamped snapshot; later calls continue updating it.
+    - A no-op/disabled controller still records `ingest: disabled` after its
+      first probe, and `/healthz` retains its existing cache semantics.
+  - Check:
+    - JSON and Postgres constructors no longer seed the health cache with a
+      timestamped `ingest: disabled` value. The existing `/healthz` fallback can
+      now call `IngestHealth` exactly when no snapshot has yet been recorded.
+    - The shared repository scenario requires an empty initial snapshot, proves
+      the configured controller supplies and updates the first cached values,
+      and separately proves a no-op controller records `ingest: disabled` on
+      its first real probe. The scenario runs directly for JSON and is reused by
+      the Postgres-tagged integration suite.
+    - `go test ./internal/storage ./internal/api ./internal/app -count=1
+      -timeout=120s` passed with Go 1.26.5 and an isolated cache.
+
+- [x] Task 3 - Align operations documentation and run local gates
+  - Acceptance criteria:
+    - Operations documentation explains first-request cache priming and later
+      cached behavior without overclaiming continuous live fan-out.
+    - Focused Go/Postgres, Markdown/link, diff, secret, and literal verification
+      gates pass without changing operator-owned files.
+    - An isolated rebuilt Docker stack reports exactly one healthy OME aggregate
+      entry and is completely removed afterward.
+  - Check:
+    - `docs/operations.md` now states that the first `/healthz` request performs
+      one bounded ingest probe when no snapshot exists and that later liveness
+      requests reuse the cache. Markdown link tests/check (89 tracked public
+      files), committed-secret guard, and `git diff --check` passed.
+    - Focused JSON/API/app tests passed, and the exact Postgres regression passed
+      against a newly migrated disposable `postgres:15-alpine` database. The
+      canonical Bash wrapper also exposed a Windows Git-Bash `/migrations` path
+      conversion defect; the equivalent PowerShell-provisioned test completed
+      successfully without weakening the Postgres assertion.
+    - A rebuilt production API image running against the exact RC19 dependency
+      digests returned overall `ok` with exactly `srs: ok`,
+      `ovenmediaengine: ok`, and `transcoder: ok`. The isolated containers,
+      networks, volumes, test database, API image, and Go caches were removed.
+    - Literal `./scripts/verify.sh` passed with Go 1.26.5, including all
+      first-party packages, release bundle, Postgres migration lifecycle,
+      contract/Compose checks, rebuilt quickstart, OME/API/viewer health, and
+      cleanup; unchanged viewer lint/tests were explicitly skipped. The private
+      `.env` was restored byte-for-byte at SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
+      and generated OME bytes again equal `HEAD`.
+
+- [-] Task 4 - Publish RC20 and rerun complete clean-host qualification
+  - Acceptance criteria:
+    - Focused PR and exact-main CI are fully green before tagging.
+    - Immutable RC20 public assets, checksums, signed release set, and five
+      image identities verify independently.
+    - No-checkout qualification passes smoke/authenticated OME, same-tag
+      upgrade, OME/Docker/systemd recovery, retained uninstall, sanitized
+      evidence, and cleanup, or yields a new bounded forward-fix failure.
+  - Check:
+    - Tasks 1-3 are complete; focused publication, protected CI, exact-main
+      CI, immutable RC20 publication, and clean-host qualification remain.
+
 ## Scoped change: post-start smoke after RC18 rejection (#1297, #1304)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -73,7 +162,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       the OME worktree object equals `HEAD` and the six operator-owned untracked
       paths remain excluded.
 
-- [-] Task 4 - Publish RC19 and rerun complete clean-host qualification
+- [x] Task 4 - Publish RC19 and rerun complete clean-host qualification
   - Acceptance criteria:
     - Focused PR and exact-main CI are fully green before tagging.
     - Immutable RC19 public assets, checksums, signed release set, and five
@@ -82,9 +171,16 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       upgrade, OME/Docker/systemd recovery, retained uninstall, sanitized
       evidence, and cleanup, or yields a new bounded forward-fix failure.
   - Check:
-    - Local implementation, documentation, literal verification, and running
-      Docker smoke evidence are complete. PR, protected CI, exact-main CI,
-      RC19 publication, and no-checkout qualification remain pending.
+    - PR #1389 merged as exact main
+      `1e14e3cf7d5f1d949b396d4f7897660575ea468e`; its protected run
+      `31350396806` and exact-main run `31350698194` passed every required gate.
+    - Release run `31351022453` passed all 33 jobs and published 46 RC19 assets.
+      All 45 checksum entries match, the signed release set is exact, and its
+      five first-party images are digest-bound.
+    - No-checkout run `31351694175` passed artifact verification, package
+      installation, preflight, activation, CLI smoke `7/7`, and authenticated
+      OME control. It then exposed the bounded initial aggregate-health cache
+      defect tracked by the new top scope; RC19 is rejected and unchanged.
 
 ## Scoped change: installed generated-config layout after RC17 rejection (#1297, #1304)
 

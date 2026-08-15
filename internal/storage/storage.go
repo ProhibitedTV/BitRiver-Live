@@ -24,12 +24,10 @@ func (s *Storage) Ping(context.Context) error {
 // NewStorage initializes the JSON-backed store with defaults, options, and persisted data.
 func NewStorage(path string, opts ...Option) (*Storage, error) {
 	store := &Storage{
-		filePath:            path,
-		ingestController:    ingest.NoopController{},
-		ingestMaxAttempts:   1,
-		ingestTimeout:       defaultIngestOperationTimeout,
-		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
-		ingestHealthUpdated: time.Now().UTC(),
+		filePath:          path,
+		ingestController:  ingest.NoopController{},
+		ingestMaxAttempts: 1,
+		ingestTimeout:     defaultIngestOperationTimeout,
 		recordingRetention: RecordingRetentionPolicy{
 			Published:   90 * 24 * time.Hour,
 			Unpublished: 14 * 24 * time.Hour,

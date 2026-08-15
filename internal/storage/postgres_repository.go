@@ -130,8 +130,6 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		ingestMaxAttempts:   cfg.IngestMaxAttempts,
 		ingestRetryInterval: cfg.IngestRetryInterval,
 		ingestTimeout:       normalizeIngestTimeout(cfg.IngestTimeout),
-		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
-		ingestHealthUpdated: time.Now().UTC(),
 		recordingRetention:  cfg.RecordingRetention,
 		chatRetention:       cfg.ChatRetention,
 		objectStorage:       cfg.ObjectStorage,
