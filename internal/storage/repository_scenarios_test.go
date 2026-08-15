@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -774,6 +775,41 @@ func RunRepositoryMonetizationPrecision(t *testing.T, factory RepositoryFactory)
 // RunRepositoryIngestHealthSnapshots verifies that repositories persist ingest
 // health snapshots provided by the configured ingest controller.
 func RunRepositoryIngestHealthSnapshots(t *testing.T, factory RepositoryFactory) {
+	blocking := &blockingIngestHealthController{
+		started:  make(chan struct{}),
+		release:  make(chan struct{}),
+		response: []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "ok"}},
+	}
+	concurrentRepo := runRepository(t, factory, WithIngestController(blocking))
+	results := make(chan []ingest.HealthStatus, 2)
+	go func() { results <- concurrentRepo.IngestHealth(context.Background()) }()
+	select {
+	case <-blocking.started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial ingest health probe")
+	}
+	secondStarted := make(chan struct{})
+	go func() {
+		close(secondStarted)
+		results <- concurrentRepo.IngestHealth(context.Background())
+	}()
+	<-secondStarted
+	time.Sleep(25 * time.Millisecond)
+	close(blocking.release)
+	for i := 0; i < 2; i++ {
+		select {
+		case result := <-results:
+			if !reflect.DeepEqual(result, blocking.response) {
+				t.Fatalf("unexpected concurrent initial health result: %+v", result)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for concurrent initial health result")
+		}
+	}
+	if calls := blocking.callCount(); calls != 1 {
+		t.Fatalf("expected overlapping initial health calls to share one probe, got %d", calls)
+	}
+
 	responses := [][]ingest.HealthStatus{
 		{{Component: "srs", Status: "ok"}},
 		{{Component: "transcoder", Status: "error", Detail: "timeout"}},
@@ -831,6 +867,31 @@ func RunRepositoryIngestHealthSnapshots(t *testing.T, factory RepositoryFactory)
 	if !reflect.DeepEqual(disabledCached, disabled) || disabledAt.IsZero() {
 		t.Fatalf("expected disabled result to be cached with a timestamp, got %+v at %s", disabledCached, disabledAt)
 	}
+}
+
+type blockingIngestHealthController struct {
+	ingest.NoopController
+	started  chan struct{}
+	release  chan struct{}
+	response []ingest.HealthStatus
+	once     sync.Once
+	mu       sync.Mutex
+	calls    int
+}
+
+func (c *blockingIngestHealthController) HealthChecks(context.Context) []ingest.HealthStatus {
+	c.mu.Lock()
+	c.calls++
+	c.mu.Unlock()
+	c.once.Do(func() { close(c.started) })
+	<-c.release
+	return append([]ingest.HealthStatus(nil), c.response...)
+}
+
+func (c *blockingIngestHealthController) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
 }
 
 func TestStorageIngestHealthSnapshots(t *testing.T) {

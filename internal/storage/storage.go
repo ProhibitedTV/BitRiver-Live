@@ -1366,6 +1366,12 @@ func (s *Storage) CurrentStreamSessionsByChannelIDs(channelIDs []string) map[str
 
 // IngestHealth reports the status of configured ingest dependencies.
 func (s *Storage) IngestHealth(ctx context.Context) []ingest.HealthStatus {
+	if wait, probe := s.beginIngestHealthProbe(); !probe {
+		<-wait
+		snapshot, _ := s.LastIngestHealth()
+		return snapshot
+	}
+
 	controller := s.ingestController
 	if controller == nil {
 		status := []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}}
@@ -1380,6 +1386,22 @@ func (s *Storage) IngestHealth(ctx context.Context) []ingest.HealthStatus {
 	return checks
 }
 
+// beginIngestHealthProbe coalesces callers while the empty cache is receiving
+// its first probe. Once a snapshot exists, callers retain the normal refresh
+// behavior.
+func (s *Storage) beginIngestHealthProbe() (<-chan struct{}, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.ingestHealth) > 0 && !s.ingestHealthUpdated.IsZero() {
+		return nil, true
+	}
+	if s.ingestHealthInitDone != nil {
+		return s.ingestHealthInitDone, false
+	}
+	s.ingestHealthInitDone = make(chan struct{})
+	return nil, true
+}
+
 // recordIngestHealth executes recordIngestHealth.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.
@@ -1392,6 +1414,10 @@ func (s *Storage) recordIngestHealth(statuses []ingest.HealthStatus) {
 	s.mu.Lock()
 	s.ingestHealth = snapshot
 	s.ingestHealthUpdated = time.Now().UTC()
+	if done := s.ingestHealthInitDone; done != nil {
+		close(done)
+		s.ingestHealthInitDone = nil
+	}
 	s.mu.Unlock()
 }
 

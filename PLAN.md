@@ -31,6 +31,10 @@
 - Do not make every `/healthz` request fan out to ingest services. Only the
   missing initial snapshot should trigger the existing live fallback; once
   recorded, the cache and `/api/status` refresh behavior remain unchanged.
+- Coalesce callers that arrive while the initial probe is in flight so startup
+  liveness and rollout smoke cannot duplicate downstream SRS/OME/transcoder
+  requests or race to overwrite the first snapshot. Calls that begin after the
+  initial snapshot is recorded must retain the existing explicit refresh path.
 - Keep JSON and Postgres repository behavior aligned so development/test and
   the production installer cannot diverge. Do not change Compose, `.env`, OME
   configuration, authentication, public ports, or the release contract.
@@ -43,6 +47,8 @@
 - Extend the shared repository health scenario to require an empty/zero initial
   snapshot before the first controller probe, then require the first and later
   probes to populate/update the cache for both JSON and real Postgres backends.
+  Add a blocked-controller concurrency regression proving overlapping initial
+  calls share one probe and one recorded result for both repositories.
 - Retain API handler coverage proving `/healthz` uses a valid cache and falls
   back to a live probe only when no snapshot exists. Update the operations
   contract to state that the first request primes the cache.

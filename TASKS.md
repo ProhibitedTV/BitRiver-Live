@@ -33,6 +33,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       their first health probe.
     - First `IngestHealth` calls query the configured controller and record a
       timestamped snapshot; later calls continue updating it.
+    - Overlapping calls while that first probe is in flight share one probe and
+      cached result for both JSON and Postgres repositories.
     - A no-op/disabled controller still records `ingest: disabled` after its
       first probe, and `/healthz` retains its existing cache semantics.
   - Check:
@@ -46,6 +48,15 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       the Postgres-tagged integration suite.
     - `go test ./internal/storage ./internal/api ./internal/app -count=1
       -timeout=120s` passed with Go 1.26.5 and an isolated cache.
+    - PR #1391's automated review identified that concurrent startup callers
+      could still race through the empty-cache fallback. JSON and Postgres now
+      publish one in-flight completion signal while the cache is empty, so
+      overlapping callers share the first result and later calls keep the
+      existing refresh behavior.
+    - `go test ./internal/storage -run TestStorageIngestHealthSnapshots
+      -count=50 -timeout=120s` and the focused storage/API/app suites passed
+      with an isolated Go cache. Protected CI will exercise the shared scenario
+      against real migrated Postgres before merge.
 
 - [x] Task 3 - Align operations documentation and run local gates
   - Acceptance criteria:

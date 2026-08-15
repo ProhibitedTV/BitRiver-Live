@@ -88,18 +88,19 @@ type Storage struct {
 	filePath string
 	data     dataset
 	// persistOverride allows tests to intercept persist operations.
-	persistOverride     func(dataset) error
-	ingestController    ingest.Controller
-	ingestMaxAttempts   int
-	ingestRetryInterval time.Duration
-	ingestTimeout       time.Duration
-	ingestHealth        []ingest.HealthStatus
-	ingestHealthUpdated time.Time
-	recordingRetention  RecordingRetentionPolicy
-	chatRetention       ChatRetentionPolicy
-	objectStorage       ObjectStorageConfig
-	objectClient        objectStorageClient
-	retentionNow        func() time.Time
+	persistOverride      func(dataset) error
+	ingestController     ingest.Controller
+	ingestMaxAttempts    int
+	ingestRetryInterval  time.Duration
+	ingestTimeout        time.Duration
+	ingestHealthInitDone chan struct{}
+	ingestHealth         []ingest.HealthStatus
+	ingestHealthUpdated  time.Time
+	recordingRetention   RecordingRetentionPolicy
+	chatRetention        ChatRetentionPolicy
+	objectStorage        ObjectStorageConfig
+	objectClient         objectStorageClient
+	retentionNow         func() time.Time
 }
 
 // RecordingRetentionPolicy specifies how long recordings are kept before being
