@@ -268,6 +268,8 @@ assert_database_absent bitr_restore_wrong_schema
 
 docker_exec "$container" mkdir -p /backups/corrupt
 docker_exec "$container" cp "$archive" "$manifest" "$checksum" /backups/corrupt/
+# $1 expands in the container's /bin/sh.
+# shellcheck disable=SC2016
 docker_exec "$container" /bin/sh -c 'printf corrupt >>"$1"' sh "/backups/corrupt/$archive_name"
 set +e
 corrupt_output="$(

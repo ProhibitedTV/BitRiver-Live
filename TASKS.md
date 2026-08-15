@@ -117,6 +117,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       no BitRiver test containers remain, and operator-owned paths are
       unchanged/untracked.
     - Commit, protected PR CI, merge, and bounded #1299 issue evidence remain.
+    - PR #1393's first shellcheck run identified the intentional container-side
+      `$1` expansion as SC2016. The exact boundary is now documented with a
+      scoped suppression; shell parsing and the full Docker-backed rehearsal
+      pass, while the protected shellcheck rerun remains before merge.
 
 ## Scoped change: initial aggregate ingest health after RC19 rejection (#1297, #1304)
 
