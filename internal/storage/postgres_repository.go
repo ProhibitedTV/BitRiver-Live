@@ -25,20 +25,21 @@ var ErrPostgresUnavailable = fmt.Errorf("postgres repository unavailable")
 const defaultPostgresPingTimeout = 5 * time.Second
 
 type postgresRepository struct {
-	pool                *pgxpool.Pool
-	cfg                 PostgresConfig
-	ingestController    ingest.Controller
-	ingestMaxAttempts   int
-	ingestRetryInterval time.Duration
-	ingestTimeout       time.Duration
-	ingestHealthMu      sync.RWMutex
-	ingestHealth        []ingest.HealthStatus
-	ingestHealthUpdated time.Time
-	recordingRetention  RecordingRetentionPolicy
-	chatRetention       ChatRetentionPolicy
-	objectStorage       ObjectStorageConfig
-	objectClient        objectStorageClient
-	retentionNow        func() time.Time
+	pool                 *pgxpool.Pool
+	cfg                  PostgresConfig
+	ingestController     ingest.Controller
+	ingestMaxAttempts    int
+	ingestRetryInterval  time.Duration
+	ingestTimeout        time.Duration
+	ingestHealthMu       sync.RWMutex
+	ingestHealthInitDone chan struct{}
+	ingestHealth         []ingest.HealthStatus
+	ingestHealthUpdated  time.Time
+	recordingRetention   RecordingRetentionPolicy
+	chatRetention        ChatRetentionPolicy
+	objectStorage        ObjectStorageConfig
+	objectClient         objectStorageClient
+	retentionNow         func() time.Time
 }
 
 // Close shuts down the backing Postgres pool and respects context cancellation.
@@ -130,8 +131,6 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		ingestMaxAttempts:   cfg.IngestMaxAttempts,
 		ingestRetryInterval: cfg.IngestRetryInterval,
 		ingestTimeout:       normalizeIngestTimeout(cfg.IngestTimeout),
-		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
-		ingestHealthUpdated: time.Now().UTC(),
 		recordingRetention:  cfg.RecordingRetention,
 		chatRetention:       cfg.ChatRetention,
 		objectStorage:       cfg.ObjectStorage,
@@ -169,6 +168,12 @@ func wrapPostgresUnavailable(err error) error {
 
 // IngestHealth returns the latest ingest health snapshot and refreshes cached values.
 func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthStatus {
+	if wait, probe := r.beginIngestHealthProbe(); !probe {
+		<-wait
+		snapshot, _ := r.LastIngestHealth()
+		return snapshot
+	}
+
 	controller := r.ingestController
 	var statuses []ingest.HealthStatus
 	if controller == nil {
@@ -184,9 +189,29 @@ func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthSt
 	r.ingestHealthMu.Lock()
 	r.ingestHealth = snapshot
 	r.ingestHealthUpdated = time.Now().UTC()
+	if done := r.ingestHealthInitDone; done != nil {
+		close(done)
+		r.ingestHealthInitDone = nil
+	}
 	r.ingestHealthMu.Unlock()
 
 	return snapshot
+}
+
+// beginIngestHealthProbe coalesces callers while the empty cache is receiving
+// its first probe. Once a snapshot exists, callers retain the normal refresh
+// behavior.
+func (r *postgresRepository) beginIngestHealthProbe() (<-chan struct{}, bool) {
+	r.ingestHealthMu.Lock()
+	defer r.ingestHealthMu.Unlock()
+	if len(r.ingestHealth) > 0 && !r.ingestHealthUpdated.IsZero() {
+		return nil, true
+	}
+	if r.ingestHealthInitDone != nil {
+		return r.ingestHealthInitDone, false
+	}
+	r.ingestHealthInitDone = make(chan struct{})
+	return nil, true
 }
 
 // LastIngestHealth returns the last cached ingest health snapshot and update timestamp.

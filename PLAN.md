@@ -1,5 +1,70 @@
 # PLAN
 
+## Current scope - prime aggregate ingest health after RC19 rejection (#1297, #1304) (2026-08-09)
+
+- Treat immutable `v1.2.3-rc.19` as rejected clean-host evidence. Release run
+  `31351022453` published 46 public assets from exact green main commit
+  `1e14e3cf7d5f1d949b396d4f7897660575ea468e`; all 45 checksum entries match,
+  the signed release-set SHA-256 is
+  `374a4084d1880abab1fa980d528a47bb5e324ed85541248438015fb13f2cc204`,
+  and its five first-party images are digest-bound. Do not patch RC19 or move
+  its tag.
+- Hosted no-checkout run `31351694175` verified the signed release set and
+  package, installed on Ubuntu 24.04.4 x86_64, passed production preflight,
+  activated the pull-only systemd stack, passed all seven CLI smoke checks,
+  and reached authenticated OME control. It then failed the aggregate OME
+  assertion because `/healthz` returned the startup snapshot
+  `ingest: disabled` instead of probing the configured controller.
+- Exact-image Docker Desktop reproduction confirms every ingest URL and
+  credential is present. Both storage constructors seed a non-empty disabled
+  snapshot with a current timestamp; `/healthz` intentionally trusts any
+  recorded snapshot, so its documented live fallback is unreachable on first
+  boot and the configured SRS/OME/transcoder controller is hidden indefinitely
+  until another route explicitly refreshes it.
+- Start repository health caches empty. The first `/healthz` request must then
+  perform one bounded live probe and record the result; later requests retain
+  the existing cache behavior. A genuinely disabled deployment still reports
+  `ingest: disabled` through the no-op controller after that first probe.
+
+### Risks and boundaries
+
+- Do not make every `/healthz` request fan out to ingest services. Only the
+  missing initial snapshot should trigger the existing live fallback; once
+  recorded, the cache and `/api/status` refresh behavior remain unchanged.
+- Coalesce callers that arrive while the initial probe is in flight so startup
+  liveness and rollout smoke cannot duplicate downstream SRS/OME/transcoder
+  requests or race to overwrite the first snapshot. Calls that begin after the
+  initial snapshot is recorded must retain the existing explicit refresh path.
+- Keep JSON and Postgres repository behavior aligned so development/test and
+  the production installer cannot diverge. Do not change Compose, `.env`, OME
+  configuration, authentication, public ports, or the release contract.
+- Preserve the private root `.env`, tracked generated OME placeholder bytes,
+  and the six operator-owned untracked paths. Exact-image diagnostic resources
+  must be removed after evidence is captured.
+
+### Test and rollout plan
+
+- Extend the shared repository health scenario to require an empty/zero initial
+  snapshot before the first controller probe, then require the first and later
+  probes to populate/update the cache for both JSON and real Postgres backends.
+  Add a blocked-controller concurrency regression proving overlapping initial
+  calls share one probe and one recorded result for both repositories.
+- Retain API handler coverage proving `/healthz` uses a valid cache and falls
+  back to a live probe only when no snapshot exists. Update the operations
+  contract to state that the first request primes the cache.
+- Run focused storage/API tests, real Postgres-tagged tests, documentation/link,
+  diff/secret hygiene, and literal `./scripts/verify.sh`. Rebuild the API in an
+  isolated Docker Desktop project and require `/healthz` to report exactly one
+  `ovenmediaengine: ok` entry before cleanup.
+- Publish through a focused PR and protected CI, merge only when the aggregate
+  gate is green, rerun exact-main CI, and cut only the next unused immutable
+  candidate (`v1.2.3-rc.20`). Independently verify its public release set and
+  rerun the complete no-checkout qualification through upgrade, restart
+  recovery, retained uninstall, sanitized evidence, and cleanup.
+- Even a hosted pass remains bounded evidence. Keep #1297/#1304 and stable epic
+  #1293 open for the real XOA/NPM/firewall/host-reboot/media path and the other
+  state, capacity, resilience, SLO, security, and browser gates.
+
 ## Current scope - separate post-start smoke from pre-start port readiness after RC18 rejection (#1297, #1304) (2026-08-09)
 
 - Treat immutable `v1.2.3-rc.18` as rejected clean-host evidence. Release run
