@@ -88,7 +88,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
       and generated OME bytes again equal `HEAD`.
 
-- [-] Task 4 - Publish RC20 and rerun complete clean-host qualification
+- [x] Task 4 - Publish RC20 and rerun complete clean-host qualification
   - Acceptance criteria:
     - Focused PR and exact-main CI are fully green before tagging.
     - Immutable RC20 public assets, checksums, signed release set, and five
@@ -97,8 +97,24 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       upgrade, OME/Docker/systemd recovery, retained uninstall, sanitized
       evidence, and cleanup, or yields a new bounded forward-fix failure.
   - Check:
-    - Tasks 1-3 are complete; focused publication, protected CI, exact-main
-      CI, immutable RC20 publication, and clean-host qualification remain.
+    - PR #1391 merged without bypass as exact main
+      `9a8516a60c584c96a46b630b55c46df33f46fbdc`; protected run
+      `31911599915` and exact-main run `31911889892` passed every required gate.
+    - Release run `31912204601` passed and published 46 immutable RC20 assets.
+      The repository verifier independently accepted all 45 checksum entries,
+      exact tag/commit identity, and complete asset coverage at signed
+      release-set SHA-256
+      `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`.
+    - No-checkout Ubuntu 24.04 run `31912782711` passed public provenance and
+      package verification, install/preflight, pull-only systemd activation,
+      smoke/authenticated OME, same-tag upgrade, OME/Docker/systemd recovery,
+      retained-data uninstall, sanitized evidence, and cleanup in 5m10s.
+      #1297/#1304 remain open for the physical-host acceptance boundaries.
+    - Literal `./scripts/verify.sh` passed for this closeout, including all Go
+      packages, release-set/docs checks, real Postgres migration lifecycle,
+      Compose validation, rebuilt quickstart health, and cleanup. The private
+      root `.env` was hash-restored and generated OME bytes were unchanged;
+      unchanged viewer checks were explicitly skipped.
 
 ## Scoped change: post-start smoke after RC18 rejection (#1297, #1304)
 

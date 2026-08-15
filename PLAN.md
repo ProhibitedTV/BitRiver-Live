@@ -65,6 +65,32 @@
   #1293 open for the real XOA/NPM/firewall/host-reboot/media path and the other
   state, capacity, resilience, SLO, security, and browser gates.
 
+### Qualification result and roadmap handoff (2026-08-15)
+
+- PR #1391 merged without bypass as exact main commit
+  `9a8516a60c584c96a46b630b55c46df33f46fbdc`; protected PR run
+  `31911599915` and exact-main run `31911889892` passed every required gate.
+- Immutable `v1.2.3-rc.20` release run `31912204601` passed and published 46
+  public assets. Independent verification found 45 unique checksum entries,
+  exact candidate commit/tag identity, complete payload coverage, and signed
+  release-set SHA-256
+  `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`.
+- No-checkout Ubuntu 24.04 qualification run `31912782711` passed package
+  installation, immutable preflight, pull-only activation, smoke and
+  authenticated OME control, same-tag upgrade staging, OME/Docker/systemd
+  restart recovery, retained-data uninstall, sanitized evidence, and cleanup.
+- The ledger closeout reran literal `./scripts/verify.sh` successfully with the
+  current public contract values in a disposable env copy. Real Postgres,
+  Compose, rebuilt quickstart, endpoint health, and teardown passed; the private
+  root `.env` was restored at SHA-256
+  `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
+  and generated OME bytes remained unchanged.
+- This completes the hosted RC20 forward-fix slice. It does not close #1297,
+  #1304, or #1293: physical XOA/Nginx Proxy Manager/firewall/host-reboot/media
+  evidence and the remaining production gates are still required. The next
+  primary recoverability slice is #1299; #1298 explicitly depends on its proven
+  backup/restore path.
+
 ## Current scope - separate post-start smoke from pre-start port readiness after RC18 rejection (#1297, #1304) (2026-08-09)
 
 - Treat immutable `v1.2.3-rc.18` as rejected clean-host evidence. Release run
