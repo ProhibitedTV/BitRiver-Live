@@ -39,6 +39,14 @@
   dereference compatibility symlinks during backup so a fresh installer can
   safely normalize them. Refuse traversal, absolute, device, or unexpected
   archive entries before extraction.
+- Snapshot config, local data, the verified Postgres set, and object inventory
+  into the private work directory before encryption; derive manifest
+  fingerprints from that immutable snapshot so live writes cannot make a
+  checksum-valid set whose restored tree disagrees with its manifest.
+- Bind disaster evidence to the exact Postgres archive/manifest hashes and
+  source identity carried by the host recovery report. Treat reported disaster
+  RPO as the maximum of host-snapshot and database-backup age rather than
+  allowing a recent host wrapper to hide stale system-of-record data.
 - The default single-host proof covers local API/transcoder/media objects.
   External object-store durability remains an operator-managed replicated input;
   its non-secret inventory contract and consistency requirements must be carried
@@ -52,7 +60,9 @@
 
 - Add focused Python validation tests and shell integration cases for success,
   wrong release, checksum corruption, unsafe archive members, non-fresh target,
-  wrong passphrase, atomic collision refusal, and secret-free reports.
+  wrong passphrase, atomic collision refusal, unrelated Postgres evidence,
+  combined RPO, post-archive live mutation, root-importable unit execution, and
+  secret-free reports.
 - Verify the source-free asset inventory and packaged-host lifecycle expose the
   canonical recovery commands without a source checkout.
 - Run the disposable Postgres/host-state rehearsal, production golden path when

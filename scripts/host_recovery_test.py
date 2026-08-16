@@ -12,7 +12,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import host_recovery as recovery
+try:
+    from scripts import host_recovery as recovery
+except ModuleNotFoundError:
+    import host_recovery as recovery
 
 
 RELEASE = "v1.2.3-rc.21"
@@ -211,6 +214,14 @@ class HostRecoveryTest(unittest.TestCase):
                     "status": "passed",
                     "source": {"release": RELEASE, "commit": COMMIT},
                     "observed": {"rpoSeconds": 12, "rtoSeconds": 4},
+                    "backup": {
+                        "postgres": {
+                            "archiveName": self.postgres.name,
+                            "archiveSha256": sha256(self.postgres),
+                            "manifestName": self.postgres_manifest.name,
+                            "manifestSha256": sha256(self.postgres_manifest),
+                        }
+                    },
                 }
             ),
             encoding="utf-8",
@@ -221,6 +232,15 @@ class HostRecoveryTest(unittest.TestCase):
                 {
                     "schemaVersion": "bitriver.postgres-restore-report/v1",
                     "result": "passed",
+                    "backup": {
+                        "archive": self.postgres.name,
+                        "archiveSha256": sha256(self.postgres),
+                        "manifest": self.postgres_manifest.name,
+                        "manifestSha256": sha256(self.postgres_manifest),
+                        "sourceRelease": RELEASE,
+                        "sourceCommit": COMMIT,
+                        "observedRpoSeconds": 37,
+                    },
                 }
             ),
             encoding="utf-8",
@@ -275,6 +295,46 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertEqual(report["schemaVersion"], recovery.DISASTER_REPORT_SCHEMA)
         self.assertEqual(report["status"], "passed")
         self.assertTrue(report["bundle"]["sourceFree"])
+        self.assertEqual(report["observed"]["hostRpoSeconds"], 12)
+        self.assertEqual(report["observed"]["postgresRpoSeconds"], 37)
+        self.assertEqual(report["observed"]["rpoSeconds"], 37)
+        unrelated = json.loads(postgres_report.read_text(encoding="utf-8"))
+        unrelated["backup"]["archiveSha256"] = "d" * 64
+        postgres_report.write_text(json.dumps(unrelated), encoding="utf-8")
+        with self.assertRaisesRegex(recovery.RecoveryError, "does not match"):
+            recovery.build_disaster_report(
+                argparse.Namespace(
+                    host_report=host_report,
+                    postgres_report=postgres_report,
+                    expected_object_inventory=object_inventory,
+                    observed_object_inventory=object_inventory,
+                    bundle_root=bundle,
+                    installed_root=installed,
+                    destroyed_source_root=self.root / "destroyed-source",
+                    source_release=RELEASE,
+                    source_commit=COMMIT,
+                    started_at_epoch=int(dt.datetime.now(dt.timezone.utc).timestamp()),
+                    output=output,
+                )
+            )
+        postgres_report.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": "bitriver.postgres-restore-report/v1",
+                    "result": "passed",
+                    "backup": {
+                        "archive": self.postgres.name,
+                        "archiveSha256": sha256(self.postgres),
+                        "manifest": self.postgres_manifest.name,
+                        "manifestSha256": sha256(self.postgres_manifest),
+                        "sourceRelease": RELEASE,
+                        "sourceCommit": COMMIT,
+                        "observedRpoSeconds": 37,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         (bundle / "cmd").mkdir()
         with self.assertRaisesRegex(recovery.RecoveryError, "source checkout"):
             recovery.build_disaster_report(

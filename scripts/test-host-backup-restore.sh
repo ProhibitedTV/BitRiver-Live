@@ -11,6 +11,7 @@ object_root="$workdir/external-objects"
 passphrase_file="$workdir/recovery-passphrase"
 wrong_passphrase_file="$workdir/wrong-passphrase"
 object_inventory="$workdir/object-inventory.json"
+fake_bin="$workdir/fake-bin"
 release="v1.2.3-rc.21"
 commit="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 timestamp="20260815T010203Z"
@@ -48,6 +49,17 @@ printf '%s\n' 'correct horse battery staple recovery passphrase' >"$passphrase_f
 printf '%s\n' 'wrong horse battery staple recovery passphrase' >"$wrong_passphrase_file"
 chmod 0600 "$passphrase_file" "$wrong_passphrase_file"
 
+real_tar="$(command -v tar)"
+mkdir -p "$fake_bin"
+cat >"$fake_bin/tar" <<'TAR_WRAPPER'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+"$BITRIVER_TEST_REAL_TAR" "$@"
+printf '{"durable":"changed-after-snapshot"}\n' \
+  >"$BITRIVER_TEST_MUTATE_AFTER_TAR"
+TAR_WRAPPER
+chmod 0755 "$fake_bin/tar"
+
 postgres_backup="$postgres_dir/bitriver-postgres-${timestamp}.sql.gz"
 printf 'postgres-backup-fixture\n' | gzip -c >"$postgres_backup"
 postgres_sha="$(sha256sum "$postgres_backup")"
@@ -72,6 +84,9 @@ bash "$repo_root/scripts/python.sh" "$repo_root/scripts/host_recovery.py" \
   --root "$object_root" \
   --output "$object_inventory"
 
+PATH="$fake_bin:$PATH" \
+BITRIVER_TEST_REAL_TAR="$real_tar" \
+BITRIVER_TEST_MUTATE_AFTER_TAR="$source_root/var/lib/bitriver-live/api/state.json" \
 BITRIVER_HOST_BACKUP_CREATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
   bash "$repo_root/scripts/backup-host-state.sh" \
   --root-prefix "$source_root" \
@@ -87,6 +102,9 @@ archive="$backup_dir/bitriver-host-${timestamp}.tar.gz.enc"
 manifest="${archive}.manifest.json"
 checksum="${archive}.sha256"
 [[ -f $archive && -f $manifest && -f $checksum ]] || fail "complete host recovery set was not published"
+grep -Fq '"changed-after-snapshot"' \
+  "$source_root/var/lib/bitriver-live/api/state.json" ||
+  fail "test tar wrapper did not mutate the live source after snapshotting"
 if grep -aFq "$secret_sentinel" "$archive" "$manifest" "$checksum"; then
   fail "host recovery set exposed a configuration secret"
 fi
@@ -119,8 +137,9 @@ bash "$repo_root/scripts/restore-host-state.sh" \
 
 cmp "$source_root/etc/bitriver-live/bitriver.env" \
   "$restore_root/etc/bitriver-live/bitriver.env"
-cmp "$source_root/var/lib/bitriver-live/api/state.json" \
-  "$restore_root/var/lib/bitriver-live/api/state.json"
+grep -Fxq '{"durable":true}' \
+  "$restore_root/var/lib/bitriver-live/api/state.json" ||
+  fail "restored data did not match the immutable backup snapshot"
 cmp "$source_root/var/lib/bitriver-live/transcoder/public/live/index.m3u8" \
   "$restore_root/var/lib/bitriver-live/transcoder/public/live/index.m3u8"
 [[ -f $restore_root/var/backups/bitriver-live/recovery/postgres/$(basename "$postgres_backup") ]] ||

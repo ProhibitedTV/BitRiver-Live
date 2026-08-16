@@ -127,6 +127,17 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       so the local run supplied loopback defaults only to `docker compose` via an
       untracked temporary shim; Go environment-isolation tests remained clean,
       and the shim was deleted immediately after the gate.
+    - Automated review found four valid evidence gaps. Backup now inventories a
+      private immutable snapshot rather than later mutable live paths; disaster
+      evidence binds the exact embedded Postgres archive/manifest identity,
+      reports the maximum host/database RPO, and the documented root-level unit
+      invocation works. Six Linux unit tests, the deterministic post-snapshot
+      mutation integration, pinned ShellCheck v0.11.0, source-free bundle check,
+      and the complete real-Postgres lost-host drill pass after the fixes.
+    - Literal `./scripts/verify.sh` passed again on the amended tree through the
+      full Go, contract, migration, Compose, and quickstart gates; the private
+      `.env` and generated OME hashes remain unchanged and no smoke containers
+      remain.
     - Protected CI, review, squash merge, and the bounded #1299 handoff remain.
 
 ## Scoped change: exact-image Compose upgrade and rollback rehearsal (#1298)

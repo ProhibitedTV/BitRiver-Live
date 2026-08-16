@@ -284,6 +284,12 @@ def build_object_inventory(root: Path) -> dict[str, Any]:
     }
 
 
+def preflight_host_state(root_prefix: Path) -> None:
+    prefix = root_prefix.resolve(strict=True)
+    tree_inventory(prefix / Path(CONFIG_RELATIVE.as_posix()), prefix)
+    tree_inventory(prefix / Path(DATA_RELATIVE.as_posix()), prefix)
+
+
 def build_backup_manifest(args: argparse.Namespace) -> None:
     validate_identity(args.source_release, args.source_commit)
     created = parse_timestamp(args.created_at)
@@ -526,6 +532,7 @@ def build_restore_report(args: argparse.Namespace) -> None:
         "backup": {
             "createdAt": manifest["createdAt"],
             "archiveSha256": manifest["archive"]["sha256"],
+            "postgres": postgres_info,
         },
         "observed": {
             "rpoSeconds": rpo,
@@ -573,6 +580,37 @@ def build_disaster_report(args: argparse.Namespace) -> None:
         "commit": args.source_commit,
     }:
         raise RecoveryError("host restore report identity does not match the disaster drill")
+    host_backup = host.get("backup")
+    host_postgres = host_backup.get("postgres") if isinstance(host_backup, dict) else None
+    postgres_backup = postgres.get("backup")
+    if not isinstance(host_postgres, dict) or not isinstance(postgres_backup, dict):
+        raise RecoveryError("recovery reports do not contain Postgres backup identity")
+    postgres_binding = {
+        "sourceRelease": args.source_release,
+        "sourceCommit": args.source_commit,
+        "archive": host_postgres.get("archiveName"),
+        "archiveSha256": host_postgres.get("archiveSha256"),
+        "manifest": host_postgres.get("manifestName"),
+        "manifestSha256": host_postgres.get("manifestSha256"),
+    }
+    if any(
+        not isinstance(postgres_binding[key], str)
+        for key in postgres_binding
+    ) or any(
+        not SHA256_PATTERN.fullmatch(str(postgres_binding[key]))
+        for key in ("archiveSha256", "manifestSha256")
+    ):
+        raise RecoveryError("host restore report has invalid Postgres backup identity")
+    if any(postgres_backup.get(key) != value for key, value in postgres_binding.items()):
+        raise RecoveryError("Postgres restore report does not match the host recovery set")
+    host_observed = host.get("observed")
+    host_rpo = host_observed.get("rpoSeconds") if isinstance(host_observed, dict) else None
+    postgres_rpo = postgres_backup.get("observedRpoSeconds")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in (host_rpo, postgres_rpo)
+    ):
+        raise RecoveryError("recovery reports contain an invalid observed RPO")
     if expected_objects.get("schemaVersion") != OBJECT_INVENTORY_SCHEMA:
         raise RecoveryError("expected object inventory schema is unsupported")
     if observed_objects != expected_objects:
@@ -608,7 +646,9 @@ def build_disaster_report(args: argparse.Namespace) -> None:
             "checkoutPresent": False,
         },
         "observed": {
-            "rpoSeconds": host["observed"]["rpoSeconds"],
+            "rpoSeconds": max(host_rpo, postgres_rpo),
+            "hostRpoSeconds": host_rpo,
+            "postgresRpoSeconds": postgres_rpo,
             "rtoSeconds": total_rto,
         },
         "bundle": {
@@ -640,6 +680,9 @@ def build_parser() -> argparse.ArgumentParser:
     objects = subparsers.add_parser("object-inventory")
     objects.add_argument("--root", type=Path, required=True)
     objects.add_argument("--output", type=Path, required=True)
+
+    preflight = subparsers.add_parser("preflight-host")
+    preflight.add_argument("--root-prefix", type=Path, required=True)
 
     manifest = subparsers.add_parser("backup-manifest")
     manifest.add_argument("--root-prefix", type=Path, required=True)
@@ -692,6 +735,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 json.dumps(build_object_inventory(args.root), indent=2, sort_keys=True)
                 + "\n",
             )
+        elif args.command == "preflight-host":
+            preflight_host_state(args.root_prefix)
         elif args.command == "backup-manifest":
             if args.iterations < 100_000:
                 raise RecoveryError("PBKDF2 iteration count must be at least 100000")

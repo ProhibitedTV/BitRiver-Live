@@ -63,6 +63,7 @@ while (($# > 0)); do
 done
 
 require_command openssl
+require_command cp
 require_command realpath
 require_command sha256sum
 require_command tar
@@ -133,35 +134,49 @@ mkdir "$workdir"
 work_archive="$workdir/$basename"
 work_manifest="$workdir/$basename.manifest.json"
 work_checksum="$workdir/$basename.sha256"
-postgres_dir="$(dirname "$postgres_backup")"
 postgres_name="$(basename "$postgres_backup")"
 postgres_manifest_name="$(basename "${postgres_backup}.manifest.json")"
 postgres_checksum_name="$(basename "${postgres_backup}.sha256")"
+snapshot_root="$workdir/snapshot"
+snapshot_postgres_dir="$snapshot_root/var/backups/bitriver-live/recovery/postgres"
+snapshot_postgres="$snapshot_postgres_dir/$postgres_name"
+postgres_relative="var/backups/bitriver-live/recovery/postgres/$postgres_name"
+postgres_manifest_relative="var/backups/bitriver-live/recovery/postgres/$postgres_manifest_name"
+postgres_checksum_relative="var/backups/bitriver-live/recovery/postgres/$postgres_checksum_name"
+
+bash "$script_dir/python.sh" "$helper" preflight-host \
+  --root-prefix "$root_prefix"
+mkdir -p \
+  "$snapshot_root/etc" \
+  "$snapshot_root/var/lib" \
+  "$snapshot_postgres_dir"
+cp -aL -- "$root_prefix/etc/bitriver-live" "$snapshot_root/etc/"
+cp -aL -- "$root_prefix/var/lib/bitriver-live" "$snapshot_root/var/lib/"
+cp -p -- \
+  "$postgres_backup" \
+  "${postgres_backup}.manifest.json" \
+  "${postgres_backup}.sha256" \
+  "$snapshot_postgres_dir/"
 
 tar_args=(
   --dereference
   --hard-dereference
   --format=pax
-  --transform='s|^bitriver-postgres-|var/backups/bitriver-live/recovery/postgres/bitriver-postgres-|'
   -czf -
-  -C "$root_prefix"
+  -C "$snapshot_root"
   etc/bitriver-live
   var/lib/bitriver-live
-  -C "$postgres_dir"
-  "$postgres_name"
-  "$postgres_manifest_name"
-  "$postgres_checksum_name"
+  "$postgres_relative"
+  "$postgres_manifest_relative"
+  "$postgres_checksum_relative"
 )
 
 object_args=()
 if [[ -n $object_inventory ]]; then
-  cp -p -- "$object_inventory" "$workdir/bitriver-object-inventory.json"
-  tar_args+=(
-    --transform='s|^bitriver-object-inventory.json$|var/backups/bitriver-live/recovery/object-inventory.json|'
-    -C "$workdir"
-    bitriver-object-inventory.json
-  )
-  object_args=(--object-inventory "$object_inventory")
+  snapshot_object="$snapshot_root/var/backups/bitriver-live/recovery/object-inventory.json"
+  cp -p -- "$object_inventory" "$snapshot_object"
+  tar_args+=(var/backups/bitriver-live/recovery/object-inventory.json)
+  object_args=(--object-inventory "$snapshot_object")
 fi
 
 tar "${tar_args[@]}" |
@@ -169,9 +184,9 @@ tar "${tar_args[@]}" |
     -pass "file:$passphrase_file" -out "$work_archive"
 
 bash "$script_dir/python.sh" "$helper" backup-manifest \
-  --root-prefix "$root_prefix" \
+  --root-prefix "$snapshot_root" \
   --archive "$work_archive" \
-  --postgres-backup "$postgres_backup" \
+  --postgres-backup "$snapshot_postgres" \
   --source-release "$source_release" \
   --source-commit "$source_commit" \
   --created-at "$created_at" \
