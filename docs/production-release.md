@@ -232,13 +232,26 @@ tree and runner are byte-identical. It also proves a manifest-bound pre-upgrade
 backup, actual-schema representative state, ambiguous-ledger refusal, exact
 post-upgrade/in-place-rollback invariants, and verified fresh-database restore.
 
-This focused report is necessary but not sufficient for stable promotion. Also
-upgrade the populated canonical Compose installation using the exact candidate
-image digests and packaged configuration, run the production golden path after
-upgrade, exercise image/config rollback and meaningful interrupted deployment
-cut points, and attach the resulting sanitized evidence. Reclassify rollback
-for every migration-changing candidate; never reuse RC19-to-RC20's in-place
-decision for a different schema pair.
+Then run the exact-image Compose rehearsal on a Docker host with network access:
+
+```bash
+BITRIVER_COMPOSE_UPGRADE_ARTIFACT_DIR=.artifacts/stateful-compose-upgrade \
+  ./scripts/test-stateful-compose-upgrade.sh
+```
+
+The `bitriver.stateful-compose-upgrade-report/v1` evidence binds clean RC19 and
+RC20 trees to their public release sets, asserts all five first-party image
+references plus the changed Postgres digest, verifies the backup and preflight,
+tests the migration/config-before-application interruption cut, runs the RC20
+production golden path, and restores exact source images/generated configuration
+without losing source or candidate-created state.
+
+These reports remain necessary but not sufficient for stable promotion. RC19 is
+a rejected source release, so its observed source/rollback health does not make
+it an approved rollback root. Prove the same healthy rollback with an approved
+prior release on the clean-host package path, including reboot evidence.
+Reclassify rollback for every migration-changing candidate; never reuse
+RC19-to-RC20's in-place decision for a different schema pair.
 
 ## 2. Tag one immutable candidate and trigger the build workflow
 

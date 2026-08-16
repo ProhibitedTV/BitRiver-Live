@@ -79,7 +79,10 @@ Use these category entrypoints from the repository root:
   - Run this focused gate after backup/restore script changes. It remains separate from `./scripts/verify.sh` so the required CI workflow is unchanged.
 - **Stateful upgrade/rollback data-plane rehearsal:** `./scripts/test-stateful-upgrade.sh`
   - Uses actual canonical migrations and representative non-empty schema state to prove the immutable RC19-to-RC20 backup, no-op candidate migration, exact invariant preservation, database-layer in-place rollback classification, fresh-database restore, ambiguous-ledger refusal, and secret-scanned `bitriver.stateful-upgrade-report/v1` output.
-  - Set `BITRIVER_UPGRADE_REPORT_PATH` to retain the report. This focused gate remains separate from `./scripts/verify.sh`; exact-image Compose/config rollback and the post-upgrade production golden path remain separate #1298 acceptance.
+  - Set `BITRIVER_UPGRADE_REPORT_PATH` to retain the report. This focused gate remains separate from `./scripts/verify.sh`.
+- **Stateful exact-image Compose upgrade/rollback rehearsal:** `./scripts/test-stateful-compose-upgrade.sh`
+  - Requires Docker plus network access to validate the public RC19/RC20 release sets, run their exact images through populated-state backup, candidate migration/config interruption, RC20 production golden path, and exact source image/generated-config rollback. It reuses the data-plane fixture and checks that source plus candidate-created state survives.
+  - Set `BITRIVER_COMPOSE_UPGRADE_ARTIFACT_DIR` to retain the secret-scanned `bitriver.stateful-compose-upgrade-report/v1` JSON and Markdown summary. This focused gate is isolated from the canonical project and remains separate from `./scripts/verify.sh`; an approved clean-host rollback and reboot proof remain #1298 acceptance.
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) is the reusable/manual source for cross-platform entrypoint checks and targeted Compose smoke; the CI orchestrator calls its entrypoint matrix while the unified Ubuntu gate owns changed-path Compose smoke.

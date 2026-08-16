@@ -1,5 +1,124 @@
 # TASKS
 
+## Scoped change: exact-image Compose upgrade and rollback rehearsal (#1298)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Inventory immutable full-stack inputs and bound the rehearsal
+  - Acceptance criteria:
+    - Source/candidate release-set assets, commits, first-party images, shared
+      dependencies, existing golden path, and source limitations are evidenced.
+    - `PLAN.md` defines isolation, security, interruption, rollback, reporting,
+      and remaining acceptance before implementation.
+  - Check:
+    - Public RC19 and RC20 release sets revalidated at SHA-256
+      `374a4084d1880abab1fa980d528a47bb5e324ed85541248438015fb13f2cc204`
+      and `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`;
+      candidate identity binds commits `1e14e3cf7d5f1d949b396d4f7897660575ea468e`
+      and `9a8516a60c584c96a46b630b55c46df33f46fbdc`.
+    - Both manifests contain all five first-party immutable image references and
+      the same eight digest-pinned third-party references. RC20 changes the
+      pinned `postgres:15-alpine` manifest from
+      `sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f`
+      to `sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23`;
+      the rehearsal therefore includes that stateful dependency-image upgrade.
+      The current production golden path already supports a running exact-image
+      stack and emits secret-scanned evidence.
+    - The canonical Compose contract uses named Postgres/Redis volumes and a
+      bind-backed transcoder workspace. A test-only named-volume override plus
+      fixed isolated project can carry all three across clean tagged source,
+      candidate, and rollback trees without touching operator state.
+    - RC19 is a rejected source release and cannot qualify as the approved
+      rollback target. The rehearsal records its source/rollback aggregate
+      health observation without assuming a particular status and keeps #1298
+      open until an approved prior release is proved on a clean host.
+
+- [x] Task 2 - Share the representative fixture and invariant contract
+  - Acceptance criteria:
+    - Data-plane and Compose rehearsals load the same actual-schema fixture and
+      compute the same deterministic fixed-record/count invariant document.
+    - The existing backup/migration/restore/interruption rehearsal remains green.
+  - Check:
+    - Moved the actual-schema account/auth/MFA/session, profile/channel/schedule,
+      stream/recording/upload, moderation/chat/legal, and payment fixture into
+      `scripts/fixtures/stateful-upgrade.sql` and its deterministic fixed-record
+      fingerprint plus aggregate counts into the adjacent invariant query.
+    - The data-plane rehearsal now copies and executes those shared files rather
+      than carrying private inline duplicates. Fixed user selection keeps the
+      value fingerprint stable when the upgraded golden path adds new accounts.
+    - Bash syntax, pinned ShellCheck v0.11.0, scoped diff check, and the complete
+      manifest-bound Postgres backup/migration/interruption/in-place rollback/
+      fresh-restore rehearsal passed after extraction with clean teardown.
+
+- [x] Task 3 - Automate exact-image Compose upgrade, interruption, and rollback
+  - Acceptance criteria:
+    - Exact release-set checks, clean tagged trees, immutable image assertions,
+      source state, verified backup, candidate upgrade, and interrupted cut
+      point are automated in an isolated rerunnable harness.
+    - RC20 passes the production golden path after upgrade; rollback restores
+      exact source image/config identity without losing source or candidate data.
+    - Secret-safe JSON and Markdown evidence record identities, invariants,
+      durations, outcomes, and honest RC19 limitations.
+  - Check:
+    - `scripts/stateful_compose_upgrade.py` validates both release-set SHA-256
+      values and identities, all five first-party and eight dependency image
+      references, then creates a credential-stable source/candidate env pair.
+      Four focused unit tests cover the happy path plus release-set tamper,
+      missing-image, and changed dependency-digest behavior.
+    - `scripts/test-stateful-compose-upgrade.sh` extracted clean RC19/RC20 Git
+      trees, refused canonical container-name collisions, pulled and asserted
+      immutable images, loaded the shared representative fixture, created and
+      verified the manifest-bound backup, and proved the candidate migration/
+      config cut point exposed no public health endpoint.
+    - The first complete rehearsal upgraded the persisted stack, passed the
+      Dockerized RC20 production golden path, preserved fixed-state invariants
+      while retaining candidate-created accounts, then restored exact RC19
+      first-party images plus byte-identical generated OME/SRS configuration.
+      Source/rollback aggregate health was observed as HTTP 200/200; RC19 stays
+      explicitly unapproved. Secret scans and isolated cleanup passed.
+
+- [x] Task 4 - Align operator/release/testing guidance and focused checks
+  - Acceptance criteria:
+    - Upgrade, production release, testing, and draft release guidance match the
+      exact Compose proof and remaining limitation.
+    - Bash/ShellCheck, both stateful rehearsals, docs/link/secret/diff checks pass.
+  - Check:
+    - Upgrade, production-release, testing, and v1.2.3 draft guidance now expose
+      both focused commands, report schemas, exact dependency transition,
+      verified full-stack behavior, and the approved clean-host rollback/reboot
+      acceptance that remains.
+    - Seven helper/link unit tests, the 89-file Markdown link scan, committed
+      secret guard, installer wording guard, Bash syntax, pinned ShellCheck
+      v0.11.0, and scoped diff check passed.
+    - The real-Postgres data-plane rehearsal passed again with verified backup,
+      candidate preflight, interruption refusal, rollback, fresh restore, secret
+      scan, and clean teardown. The exact-image Compose rehearsal passed in Task
+      3 and was not repeated after documentation-only changes.
+
+- [-] Task 5 - Run full gates and publish the focused full-stack slice
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh`, protected CI, review, and merge pass without
+      touching operator-owned files or overclaiming #1298 completion.
+    - #1298 receives bounded evidence and remains open for any genuinely unmet
+      healthy rollback or clean-host acceptance.
+  - Check:
+    - Literal full verification passed after final evidence-bundle changes; PR
+      #1395 opened from commit `29b51d71` with protected CI in progress.
+    - Review found one P1 portability defect: the POSIX rehearsal invoked the
+      non-executable `scripts/python.sh` wrapper directly. The call now goes
+      through Bash; a real Linux container probe returned Python 3.12.13, Bash
+      syntax, ShellCheck v0.11.0, and all four helper tests passed.
+    - The complete exact-image rehearsal passed after the repair, including the
+      production golden path, evidence scans, exact rollback, and clean teardown.
+      Final full verification passed again on commit `9f9ad5c4`.
+    - Protected run `31921209601` passed Ubuntu in 4m16s, secrets, docs,
+      ShellCheck, and all three quickstart entrypoints. Its merge gate alone
+      rejected the initial PR body because it lacked the enforced release
+      scorecard headings. The live PR now contains the complete high-risk
+      build/CI, data/migrations, and operator-workflow scorecard; rerunning the
+      old workflow retained its stale event payload, so this ledger update will
+      trigger the fresh metadata-aware run required before merge.
+
 ## Scoped change: stateful RC19 to RC20 upgrade/rollback data-plane rehearsal (#1298)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -73,7 +192,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Markdown link validation, committed-secret guard, release-evidence scan,
       and scoped `git diff --check` all pass.
 
-- [-] Task 4 - Run full gates and publish the focused foundation
+- [x] Task 4 - Run full gates and publish the focused foundation
   - Acceptance criteria:
     - Literal `./scripts/verify.sh`, protected CI, review, and merge pass without
       touching operator-owned files or overclaiming #1298 completion.
@@ -98,8 +217,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       ShellCheck v0.11.0, the full Postgres rehearsal, and literal repository
       verification all passed after the repair; both probes were removed and
       the runner returned to an exact clean state.
-    - Protected CI, review, merge, and the bounded #1298 evidence comment remain
-      pending publication.
+    - Protected run `31919021597` passed the Ubuntu `test-all` gate in 4m33s,
+      secrets, docs, ShellCheck, all three quickstart entrypoints, and the
+      aggregate merge gate. The sole P1 thread was answered and resolved.
+    - PR #1394 squash-merged as
+      `9582ea28dc755f16c4524741ef0347cf842e8881`; bounded evidence was posted to
+      #1298, which remains open for the exact-image/config/media/golden-path phase.
 
 ## Scoped change: manifest-bound Postgres recovery rehearsal (#1299)
 
