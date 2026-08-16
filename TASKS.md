@@ -120,7 +120,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - PR #1393's first shellcheck run identified the intentional container-side
       `$1` expansion as SC2016. The exact boundary is now documented with a
       scoped suppression; shell parsing and the full Docker-backed rehearsal
-      pass, while the protected shellcheck rerun remains before merge.
+      pass. Run `31916021784` then passed ShellCheck, docs, Ubuntu `test-all`,
+      and Linux/macOS/Windows quickstart entrypoints. Its aggregate gate found
+      the PR scorecard also needed `build/CI` classification for changed shell
+      scripts; the PR body is corrected, and a fresh protected run remains
+      before merge because failed-job retries retain the original event body.
 
 ## Scoped change: initial aggregate ingest health after RC19 rejection (#1297, #1304)
 
