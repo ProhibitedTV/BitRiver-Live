@@ -80,7 +80,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - #1298 receives bounded merged evidence and remains open for exact-image
       Compose/config/media/golden-path rehearsal.
   - Check:
-    - Literal `./scripts/verify.sh` passed with pinned Go 1.26.5 and bundled
+    - Literal `./scripts/verify.sh` passed with cached Go 1.26.0 and bundled
       Python, including all first-party Go/script packages, repository/CI/
       hygiene/release checks, documentation and contract checks, real
       PostgreSQL migration lifecycle, Compose rendering, and a rebuilt
@@ -91,6 +91,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       The private root `.env` and generated OME configuration retain their
       pre-run SHA-256 values, the generated file has no Git diff, and the
       temporary verification wrapper was removed.
+    - Automated review found that committed migration object IDs could be
+      paired with drifted working-tree files. The rehearsal now rejects both
+      tracked and untracked drift under the migration tree/runner before Docker
+      starts. Focused tracked/untracked refusal probes, Bash syntax, pinned
+      ShellCheck v0.11.0, the full Postgres rehearsal, and literal repository
+      verification all passed after the repair; both probes were removed and
+      the runner returned to an exact clean state.
     - Protected CI, review, merge, and the bounded #1298 evidence comment remain
       pending publication.
 

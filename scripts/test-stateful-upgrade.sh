@@ -134,6 +134,16 @@ require_command() {
 require_command docker
 require_command git
 
+if ! git -C "$repo_root" diff --quiet HEAD -- deploy/migrations deploy/postgres-migrate.sh; then
+  fail "canonical migration files differ from HEAD; commit or remove the drift before generating release evidence"
+fi
+untracked_migration_files="$(
+  git -C "$repo_root" ls-files --others -- \
+    deploy/migrations deploy/postgres-migrate.sh
+)"
+[[ -z "$untracked_migration_files" ]] ||
+  fail "canonical migration files include untracked paths; commit or remove the drift before generating release evidence"
+
 actual_migration_tree="$(git -C "$repo_root" rev-parse HEAD:deploy/migrations)"
 actual_migration_runner="$(git -C "$repo_root" rev-parse HEAD:deploy/postgres-migrate.sh)"
 [[ "$actual_migration_tree" == "$expected_migration_tree" ]] ||
