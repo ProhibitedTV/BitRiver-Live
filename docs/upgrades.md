@@ -40,7 +40,7 @@ and `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`.
 RC19 is used only as the immediate populated-state source; this does not turn
 the rejected candidate into an approved release.
 
-Run the focused rehearsal against disposable Postgres 15:
+Run the focused data-plane rehearsal against disposable Postgres 15:
 
 ```bash
 ./scripts/test-stateful-upgrade.sh
@@ -59,13 +59,37 @@ verified fresh-database restore, and requires an ambiguous `applying` migration
 to block preflight. Its retained report schema is
 `bitriver.stateful-upgrade-report/v1`.
 
+Run the full exact-image Compose rehearsal on a Docker host with network access:
+
+```bash
+./scripts/test-stateful-compose-upgrade.sh
+
+# Retain its secret-scanned JSON and Markdown evidence directory.
+BITRIVER_COMPOSE_UPGRADE_ARTIFACT_DIR=.artifacts/stateful-compose-upgrade \
+  ./scripts/test-stateful-compose-upgrade.sh
+```
+
+The full rehearsal verifies both public release-set hashes, extracts clean tagged
+trees, generates a credential-stable source/candidate env pair, and asserts all
+five first-party image references. It includes the exact Postgres dependency
+transition from
+`sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f`
+to
+`sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23`.
+It loads the shared representative fixture, verifies a manifest-bound backup,
+requires the migration/config-before-application interruption point to expose no
+public health endpoint, runs the production golden path after upgrade, then
+restores exact RC19 images and generated OME/SRS bytes without losing source or
+candidate-created state. Its report schema is
+`bitriver.stateful-compose-upgrade-report/v1`.
+
 RC19 and RC20 have byte-identical migration trees and runners, so this exact hop
 is classified **in-place compatible at the database/migration layer**. It is not
-full upgrade approval: exact-image Compose upgrade/image rollback, packaged
-configuration and generated-config rollback, interrupted deploy cut points,
-and post-upgrade ingest/playback/chat/admin/VOD golden-path evidence remain
-required. A future schema change must be classified again; never carry this
-in-place result forward by assumption.
+full upgrade approval: the Compose rehearsal observes RC19 source/rollback health
+but RC19 remains a rejected, unapproved rollback target. An approved prior
+release must pass the same healthy rollback on the clean-host package path, with
+reboot evidence, before promotion. A future schema change must also be classified
+again; never carry this in-place result forward by assumption.
 
 ### Ubuntu artifact installations
 

@@ -1,5 +1,71 @@
 # PLAN
 
+## Current scope - exact-image Compose upgrade and rollback rehearsal (#1298) (2026-08-15)
+
+- Extend the merged database-layer foundation with a separate opt-in full-stack
+  rehearsal for the same immutable `v1.2.3-rc.19` to `v1.2.3-rc.20` pair. Fetch
+  the public `release-set.json` assets, require their recorded SHA-256 values,
+  source commits, first-party image inventories, and exact third-party
+  dependency inventories, then run only the recorded `tag@sha256` references.
+  The pair retains the same eight dependency tags but upgrades the pinned
+  Postgres 15 manifest digest; treat that as part of the stateful transition.
+- Materialize clean source and candidate deployment trees from their recorded
+  Git commits rather than the caller's working tree. Generate one rotated,
+  private source environment from the published digest evidence, carry the
+  same credentials/non-default settings forward, and change only release/image
+  identity for the candidate. Use one isolated Compose project with persistent
+  named database/Redis/transcoder volumes across source, candidate, and
+  rollback trees.
+- Start RC19 dependencies and API, record its observed aggregate-health state
+  without treating it as source approval, and load the shared real-schema
+  representative fixture into that deployment. Capture fixed-record and count
+  invariants plus generated OME/SRS config hashes before changing services.
+- Execute a documented stop/preflight/backup/upgrade sequence. At the
+  post-migration/config but pre-application cut point, require the public health
+  endpoint to remain unavailable so an interrupted deployment cannot look
+  healthy. Start RC20, verify every first-party container uses the manifest
+  digest, require exact source-fixture invariants, and run the existing
+  production golden path against the upgraded stack.
+- Roll back to the exact RC19 image/config set without removing persistent
+  volumes. Require source image references, byte-identical generated config,
+  preserved source fixtures and candidate-created row growth, successful
+  readiness, and a reachable recorded aggregate-health response. Emit one
+  secret-scanned JSON report and operator-readable Markdown summary.
+
+### Risks and boundaries
+
+- Never use or modify the operator's root `.env`, generated OME file, local
+  media directory, or unrelated deployment helpers. All checkouts, secrets,
+  release manifests, reports, volumes, networks, and containers are isolated
+  and removed by default; retained evidence contains only hashes, counts,
+  booleans, release identities, image digests, and durations.
+- Do not edit the canonical Compose/root-env/generated-OME contract, packages,
+  or CI workflows. The rehearsal consumes the exact tagged contract in clean
+  temporary trees and remains opt-in because it pulls public release assets and
+  images and runs the expensive media golden path.
+- RC19 is a rejected source release. Its rollback phase may prove image/config/
+  state mechanics and readiness, and the report records the observed aggregate
+  status without requiring it to reproduce the earlier startup failure. It
+  cannot be described as an approved production rollback target. #1298 remains
+  open until a healthy approved previous-version rollback and clean-host
+  package/reboot evidence exist.
+- Use the merged manifest-bound Postgres backup before candidate mutation. This
+  slice exercises the in-place rollback class; destructive-schema restore
+  classification remains covered by the database rehearsal and must be rerun
+  for any future migration-changing pair.
+
+### Test and rollout plan
+
+- Extract reusable fixture/invariant SQL from the data-plane rehearsal and keep
+  its exact positive, restore, and interruption behavior green.
+- Add the exact-release Compose orchestrator with release-set refusal cases,
+  source/candidate/rollback image and config assertions, the interrupted cut
+  point, upgraded golden-path evidence, sanitized reports, and guaranteed
+  teardown.
+- Run Bash/ShellCheck, helper/unit checks, both stateful rehearsals, docs/link/
+  secret/diff checks, and literal `./scripts/verify.sh`. Publish through a
+  focused high-risk PR and protected CI, then post bounded evidence to #1298.
+
 ## Current scope - stateful RC19 to RC20 upgrade/rollback data-plane rehearsal foundation (#1298) (2026-08-15)
 
 - Use the immediate immutable published pair `v1.2.3-rc.19` at commit
