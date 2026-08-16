@@ -176,7 +176,12 @@ backups:
   schedule: "0 2 * * *"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
+  # Empty sourceRelease defaults to Chart.appVersion. Set sourceCommit to the
+  # full lowercase 40-character release commit for promotion evidence.
+  sourceRelease: ""
+  sourceCommit: unknown
   objectStorage:
+    # Required when backups.enabled=true so the three-file set survives the Job.
     enabled: false
     bucket: ""
     prefix: bitriver-live/postgres

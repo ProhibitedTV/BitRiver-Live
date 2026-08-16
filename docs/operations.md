@@ -374,7 +374,7 @@ Run the repository-owned rehearsal test after changing the scripts:
 
 - Compose cron override example: `deploy/docker-compose.backups.yml`
 - Kubernetes CronJob examples: `deploy/kubernetes/postgres-backup-cronjob.yaml`
-- Helm scheduling hooks: set `backups.enabled=true` and configure `backups.schedule` / `backups.objectStorage.*` in `deploy/helm/bitriver-live/values.yaml`
+- Helm scheduling hooks: set `backups.enabled=true`, require durable object upload with `backups.objectStorage.enabled=true` plus its bucket/connection settings, and set `backups.sourceRelease` / the full release `backups.sourceCommit` in `deploy/helm/bitriver-live/values.yaml`. The chart mounts the synchronized canonical backup runner and uploads the same archive, manifest, and checksum contract; it refuses to render an enabled scheduler without object storage because pod-local output would disappear with the Job.
 
 ## Redis persistence and recovery
 

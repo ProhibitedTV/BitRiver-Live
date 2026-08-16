@@ -192,6 +192,57 @@ if docker_exec "$container" grep -Fq "$password" "$manifest"; then
   fail "backup manifest leaked the database password"
 fi
 
+docker_exec "$container" mkdir -p /fixed-bin /collision
+docker_exec -i "$container" /bin/sh -c 'cat >/fixed-bin/date && chmod 0755 /fixed-bin/date' <<'SH'
+#!/bin/sh
+case "$*" in
+  *+%Y%m%dT%H%M%SZ*) printf '%s\n' '20260815T010203Z' ;;
+  *+%Y-%m-%dT%H:%M:%SZ*) printf '%s\n' '2026-08-15T01:02:03Z' ;;
+  *) exec /bin/date "$@" ;;
+esac
+SH
+collision_args=(
+  -e PATH=/fixed-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  -e BITRIVER_BACKUP_DIR=/collision
+  -e BITRIVER_BACKUP_POSTGRES_HOST=127.0.0.1
+  -e BITRIVER_BACKUP_POSTGRES_USER=postgres
+  -e BITRIVER_BACKUP_POSTGRES_PASSWORD="$password"
+  -e BITRIVER_BACKUP_POSTGRES_DB="$source_database"
+  -e BITRIVER_BACKUP_SOURCE_RELEASE="$source_release"
+  -e BITRIVER_BACKUP_SOURCE_COMMIT="$source_commit"
+  -e BITRIVER_BACKUP_RUN_PRUNE=0
+)
+docker_exec "${collision_args[@]}" "$container" /bin/bash /backup-postgres.sh
+collision_archive=/collision/bitriver-postgres-20260815T010203Z.sql.gz
+collision_manifest="${collision_archive}.manifest.json"
+collision_checksum="${collision_archive}.sha256"
+collision_before="$(
+  docker_exec "$container" sha256sum \
+    "$collision_archive" "$collision_manifest" "$collision_checksum"
+)"
+set +e
+collision_output="$(
+  docker_exec "${collision_args[@]}" "$container" /bin/bash /backup-postgres.sh 2>&1
+)"
+collision_rc=$?
+set -e
+[[ "$collision_rc" -ne 0 ]] || fail "same-second backup collision unexpectedly succeeded"
+assert_contains "$collision_output" "refusing to replace an existing backup set"
+collision_after="$(
+  docker_exec "$container" sha256sum \
+    "$collision_archive" "$collision_manifest" "$collision_checksum"
+)"
+[[ "$collision_after" == "$collision_before" ]] ||
+  fail "same-second collision changed the previously published backup set"
+docker_exec -w /collision "$container" sha256sum -c "${collision_checksum##*/}"
+[[ "$(docker_exec "$container" find /collision -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" == "3" ]] ||
+  fail "same-second collision left an incomplete or extra backup artifact"
+[[ -z "$(docker_exec "$container" find /collision -name '*.partial.*' -print -quit)" ]] ||
+  fail "same-second collision left a partial artifact"
+if docker_exec "$container" test -d "${collision_archive}.lock"; then
+  fail "same-second collision left its lock directory"
+fi
+
 fingerprint="$(
   docker_exec "$container" grep -oE '"migrationFingerprintSha256": "[0-9a-f]{64}"' "$manifest" |
     head -n 1 |

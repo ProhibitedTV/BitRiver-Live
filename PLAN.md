@@ -44,6 +44,15 @@
   golden path pass.
 - Do not change Compose, root env, generated OME, package layout, CI workflows,
   or deployment topology in this slice.
+- Treat a timestamped backup set as an owned transaction. A concurrent or
+  same-second producer must refuse the collision without deleting an existing
+  archive, manifest, or checksum; cleanup may remove final paths only after the
+  current process has exclusively claimed that set.
+- Preserve the advertised Helm scheduled-backup capability by sourcing its
+  producer from the canonical `scripts/backup-postgres.sh`. Keep the generated
+  chart copy under the existing Helm asset-sync check so the scheduler cannot
+  emit the legacy two-file format that hardened restore intentionally refuses.
+  This does not change the canonical Compose/root-env/generated-OME contract.
 
 ### Test and rollout plan
 
@@ -54,6 +63,10 @@
 - Add negative cases proving archive corruption, missing checksum/manifest,
   mismatched expected release, and mismatched schema fingerprint fail before
   the named rehearsal database exists.
+- Add a deterministic same-second collision regression proving the first
+  complete three-file set remains byte-identical after the second producer is
+  refused. Render/check the Helm producer from the synchronized canonical
+  script and require the chart to publish the same three-file restore contract.
 - Run shell/static checks, focused integration, Markdown/link, diff/secret
   hygiene, and literal `./scripts/verify.sh`. Publish through a focused PR and
   protected CI; keep #1299 open for the remaining lost-host/media/object/golden

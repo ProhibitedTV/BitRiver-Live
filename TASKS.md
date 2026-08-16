@@ -125,6 +125,34 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       the PR scorecard also needed `build/CI` classification for changed shell
       scripts; the PR body is corrected, and a fresh protected run remains
       before merge because failed-job retries retain the original event body.
+    - Fresh run `31916342522` passed the aggregate merge gate, Ubuntu
+      `test-all`, ShellCheck, docs, secret guard, and all three quickstart
+      entrypoint jobs. Automated review then found two valid publication
+      blockers: collision cleanup could remove a previously published
+      same-second set, and the Helm scheduler still emitted the retired
+      archive-plus-checksum format. Fix both with explicit set ownership, a
+      collision regression, and a synchronized canonical Helm producer before
+      rerunning the gates or merging.
+    - The corrected rehearsal passed against disposable Postgres 15. Its
+      deterministic same-second retry was refused, the first archive/manifest/
+      checksum set remained byte-identical and valid, no partial/lock remained,
+      and the complete positive/negative restore matrix still passed.
+    - `bash -n` passed for the backup/restore/prune/rehearsal/sync scripts,
+      `./scripts/sync-helm-deploy-assets.sh --check` passed, and focused
+      `go test ./scripts -run TestHelmBackupUsesManifestBoundCanonicalProducer
+      -count=1 -timeout=120s` passed. The contract test requires the chart's
+      byte-identical canonical producer, ConfigMap mount, provenance/upload
+      inputs, durable object-storage guard, and absence of the legacy inline
+      two-file producer. Full verification and fresh protected CI remain.
+    - Literal `./scripts/verify.sh` passed again after both review repairs,
+      including all Go/script packages, release and contract checks, real
+      Postgres migration lifecycle, Compose rendering, rebuilt quickstart
+      service health, API/viewer reachability, and teardown. Viewer lint/tests
+      correctly skipped because the viewer remains outside this slice.
+    - The run left no `deploy` Compose containers or temporary wrapper. The
+      private `.env` and generated OME file retained their recorded SHA-256
+      hashes, and generated OME has no byte diff. Fresh protected CI, review
+      thread resolution, merge, and bounded #1299 issue evidence remain.
 
 ## Scoped change: initial aggregate ingest health after RC19 rejection (#1297, #1304)
 

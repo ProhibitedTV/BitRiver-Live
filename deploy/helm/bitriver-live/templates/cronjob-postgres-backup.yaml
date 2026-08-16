@@ -1,3 +1,6 @@
+{{- if and .Values.backups.enabled (not .Values.backups.objectStorage.enabled) }}
+{{- fail "backups.objectStorage.enabled must be true when backups.enabled is true so backup sets survive the Job" }}
+{{- end }}
 {{- if .Values.backups.enabled }}
 apiVersion: batch/v1
 kind: CronJob
@@ -23,42 +26,59 @@ spec:
               image: {{ .Values.images.postgres }}:{{ .Values.tags.postgres }}
               imagePullPolicy: {{ .Values.imagePullPolicy }}
               env:
-                - name: PGPASSWORD
+                - name: BITRIVER_BACKUP_DIR
+                  value: /tmp/bitriver-backups
+                - name: BITRIVER_BACKUP_POSTGRES_HOST
+                  value: {{ printf "%s-postgres" (include "bitriver-live.fullname" .) | quote }}
+                - name: BITRIVER_BACKUP_POSTGRES_PORT
+                  value: {{ .Values.service.postgres.port | quote }}
+                - name: BITRIVER_BACKUP_POSTGRES_PASSWORD
                   valueFrom:
                     secretKeyRef:
                       name: {{ include "bitriver-live.fullname" . }}-secrets
                       key: BITRIVER_POSTGRES_PASSWORD
-                - name: POSTGRES_USER
+                - name: BITRIVER_BACKUP_POSTGRES_USER
                   valueFrom:
                     secretKeyRef:
                       name: {{ include "bitriver-live.fullname" . }}-secrets
                       key: BITRIVER_POSTGRES_USER
-                - name: POSTGRES_DB
+                - name: BITRIVER_BACKUP_POSTGRES_DB
                   value: {{ .Values.env.BITRIVER_POSTGRES_DB | quote }}
+                - name: BITRIVER_BACKUP_SOURCE_RELEASE
+                  value: {{ default .Chart.AppVersion .Values.backups.sourceRelease | quote }}
+                - name: BITRIVER_BACKUP_SOURCE_COMMIT
+                  value: {{ default "unknown" .Values.backups.sourceCommit | quote }}
+                - name: BITRIVER_BACKUP_RUN_PRUNE
+                  value: "0"
+                - name: BITRIVER_BACKUP_UPLOAD_ENABLED
+                  value: "1"
+                - name: BITRIVER_BACKUP_UPLOAD_PROVIDER
+                  value: s3
+                - name: BITRIVER_BACKUP_UPLOAD_BUCKET
+                  value: {{ required "backups.objectStorage.bucket is required when backups are enabled" .Values.backups.objectStorage.bucket | quote }}
+                - name: BITRIVER_BACKUP_UPLOAD_PREFIX
+                  value: {{ .Values.backups.objectStorage.prefix | quote }}
+                - name: BITRIVER_BACKUP_UPLOAD_REGION
+                  value: {{ .Values.backups.objectStorage.region | quote }}
+                - name: BITRIVER_BACKUP_UPLOAD_ENDPOINT
+                  value: {{ .Values.backups.objectStorage.endpoint | quote }}
                 - name: AWS_ACCESS_KEY_ID
                   value: {{ .Values.backups.objectStorage.accessKeyId | quote }}
                 - name: AWS_SECRET_ACCESS_KEY
                   value: {{ .Values.backups.objectStorage.secretAccessKey | quote }}
               command:
                 - sh
-                - -c
+                - -ec
                 - |
-                  set -eu
-                  apk add --no-cache coreutils gzip aws-cli >/dev/null
-                  ts="$(date -u +%Y%m%dT%H%M%SZ)"
-                  file="/tmp/bitriver-postgres-${ts}.sql.gz"
-                  pg_dump -h {{ include "bitriver-live.fullname" . }}-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-privileges | gzip -c > "$file"
-                  sha256sum "$file" > "$file.sha256"
-
-                  if [ "{{ .Values.backups.objectStorage.enabled }}" = "true" ]; then
-                    endpoint="{{ .Values.backups.objectStorage.endpoint }}"
-                    args="--region {{ .Values.backups.objectStorage.region }}"
-                    if [ -n "$endpoint" ]; then
-                      args="$args --endpoint-url $endpoint"
-                    fi
-                    # shellcheck disable=SC2086
-                    aws s3 cp "$file" "s3://{{ .Values.backups.objectStorage.bucket }}/{{ .Values.backups.objectStorage.prefix }}/$(basename "$file")" $args
-                    # shellcheck disable=SC2086
-                    aws s3 cp "$file.sha256" "s3://{{ .Values.backups.objectStorage.bucket }}/{{ .Values.backups.objectStorage.prefix }}/$(basename "$file").sha256" $args
-                  fi
+                  apk add --no-cache bash coreutils gzip aws-cli >/dev/null
+                  exec /bin/bash /scripts/backup-postgres.sh
+              volumeMounts:
+                - name: backup-scripts
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: backup-scripts
+              configMap:
+                name: {{ include "bitriver-live.fullname" . }}-backup-scripts
+                defaultMode: 0555
 {{- end }}
