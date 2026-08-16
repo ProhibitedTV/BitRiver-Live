@@ -216,6 +216,30 @@ Keep this evidence attached to the release ticket/change request before maintena
 recovery slice; also account for encrypted `/etc/bitriver-live`, `/var/lib/bitriver-live` or checkout-based transcoder data,
 external object storage, and the exact immutable release set as described in [`docs/operations.md`](operations.md#durable-recovery-inventory).
 
+### Stateful upgrade and rollback release gates
+
+Run the automated data-plane foundation before an exact-image staging upgrade:
+
+```bash
+BITRIVER_UPGRADE_REPORT_PATH=.artifacts/stateful-upgrade-report.json \
+  ./scripts/test-stateful-upgrade.sh
+```
+
+The current `bitriver.stateful-upgrade-report/v1` proof is bound to immutable
+RC19 and RC20 release-set hashes and classifies that exact hop as in-place
+compatible only for Postgres and the migration layer because their migration
+tree and runner are byte-identical. It also proves a manifest-bound pre-upgrade
+backup, actual-schema representative state, ambiguous-ledger refusal, exact
+post-upgrade/in-place-rollback invariants, and verified fresh-database restore.
+
+This focused report is necessary but not sufficient for stable promotion. Also
+upgrade the populated canonical Compose installation using the exact candidate
+image digests and packaged configuration, run the production golden path after
+upgrade, exercise image/config rollback and meaningful interrupted deployment
+cut points, and attach the resulting sanitized evidence. Reclassify rollback
+for every migration-changing candidate; never reuse RC19-to-RC20's in-place
+decision for a different schema pair.
+
 ## 2. Tag one immutable candidate and trigger the build workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.

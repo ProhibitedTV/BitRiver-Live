@@ -1,5 +1,106 @@
 # TASKS
 
+## Scoped change: stateful RC19 to RC20 upgrade/rollback data-plane rehearsal (#1298)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Select the exact upgrade pair and bound the first rehearsal
+  - Acceptance criteria:
+    - Source/candidate tags, commits, release-set hashes, migration delta, and
+      existing upgrade/rollback gaps are evidenced before implementation.
+    - `PLAN.md` defines the data, security, rollback, interruption, report, and
+      remaining full-stack boundaries.
+  - Check:
+    - Selected immutable public `v1.2.3-rc.19` at
+      `1e14e3cf7d5f1d949b396d4f7897660575ea468e` as the immediate source and
+      `v1.2.3-rc.20` at `9a8516a60c584c96a46b630b55c46df33f46fbdc`
+      as the candidate. Their public `release-set.json` asset SHA-256 values are
+      `374a4084d1880abab1fa980d528a47bb5e324ed85541248438015fb13f2cc204`
+      and `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`.
+    - `git diff v1.2.3-rc.19..HEAD` found no migration runner/file change;
+      RC19 to RC20 is therefore eligible for database-layer in-place rollback
+      proof, not a destructive-schema rollback claim.
+    - Existing guidance is manual and the release smoke gate only records an
+      upgrade plan. No automated non-empty stateful upgrade/rollback report or
+      exact-pair interruption rehearsal exists.
+
+- [x] Task 2 - Automate real-schema state, upgrade, rollback, and interruption proof
+  - Acceptance criteria:
+    - Actual canonical migrations and representative non-empty state are used.
+    - A verified pre-upgrade backup exists; candidate migration preserves exact
+      invariants; in-place rollback and restore-required recovery are classified
+      and proved for the exact pair.
+    - Ambiguous migration state blocks candidate progress, and a secret-safe
+      machine-readable report records identities, results, and durations.
+  - Check:
+    - `scripts/test-stateful-upgrade.sh` asserts the current migration tree and
+      runner object identities match the exact RC19/RC20 pair, applies all
+      canonical migrations to disposable Postgres 15, and loads actual-schema
+      fixtures across accounts/roles, profile/OAuth/auth/MFA/session, channel/
+      follow/schedule, stream/recording/upload/object references, moderation,
+      chat/filter/report/appeal, legal/audit, and payment state.
+    - The first complete run published and verified a manifest-bound RC19
+      backup, proved the RC20 plan had no pending migrations, applied the no-op
+      candidate path, matched exact ledger and value/count fingerprints, then
+      restored the RC19 configuration fixture and classified the database layer
+      as in-place compatible.
+    - A separate candidate database with a synthetic exact-checksum `applying`
+      cut point was blocked by migration preflight. After an observable
+      candidate-only value mutation, verified restore to a fresh retained
+      database recovered the exact pre-upgrade ledger and value/count
+      invariants; all disposable databases/container/evidence were removed.
+    - The generated `bitriver.stateful-upgrade-report/v1` binds both tags,
+      commits, release-set hashes, migration objects/fingerprints, invariant
+      matches, rollback class, interruption refusal, config-fixture hashes,
+      durations, and remaining acceptance. The release-evidence secret scan
+      passed.
+
+- [x] Task 3 - Align upgrade/release/testing guidance with proven behavior
+  - Acceptance criteria:
+    - Docs identify the exact proven hop, report, commands, rollback class, and
+      explicit remaining full-stack boundary.
+    - Shell/report/docs/diff/secret checks pass and task evidence is current.
+  - Check:
+    - `docs/upgrades.md`, production release guidance, testing guidance, and the
+      v1.2.3 draft notes now identify the exact RC19/RC20 release identities,
+      focused command, report schema, database-layer in-place classification,
+      future schema reclassification rule, and remaining full-stack gate.
+    - Upgrade backup guidance now requires the complete manifest-bound
+      archive/manifest/checksum set with exact release provenance and points to
+      the durable recovery inventory rather than treating an ad hoc dump as
+      sufficient release evidence.
+    - Focused `bash -n`, cached ShellCheck v0.11.0, Markdown link checker tests,
+      Markdown link validation, committed-secret guard, release-evidence scan,
+      and scoped `git diff --check` all pass.
+
+- [-] Task 4 - Run full gates and publish the focused foundation
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh`, protected CI, review, and merge pass without
+      touching operator-owned files or overclaiming #1298 completion.
+    - #1298 receives bounded merged evidence and remains open for exact-image
+      Compose/config/media/golden-path rehearsal.
+  - Check:
+    - Literal `./scripts/verify.sh` passed with cached Go 1.26.0 and bundled
+      Python, including all first-party Go/script packages, repository/CI/
+      hygiene/release checks, documentation and contract checks, real
+      PostgreSQL migration lifecycle, Compose rendering, and a rebuilt
+      quickstart stack through service health plus API/viewer reachability.
+      Viewer lint/tests were correctly skipped because viewer code is outside
+      this change.
+    - Post-gate cleanup left zero Compose and stateful-rehearsal containers.
+      The private root `.env` and generated OME configuration retain their
+      pre-run SHA-256 values, the generated file has no Git diff, and the
+      temporary verification wrapper was removed.
+    - Automated review found that committed migration object IDs could be
+      paired with drifted working-tree files. The rehearsal now rejects both
+      tracked and untracked drift under the migration tree/runner before Docker
+      starts. Focused tracked/untracked refusal probes, Bash syntax, pinned
+      ShellCheck v0.11.0, the full Postgres rehearsal, and literal repository
+      verification all passed after the repair; both probes were removed and
+      the runner returned to an exact clean state.
+    - Protected CI, review, merge, and the bounded #1298 evidence comment remain
+      pending publication.
+
 ## Scoped change: manifest-bound Postgres recovery rehearsal (#1299)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -96,7 +197,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `python scripts/check_doc_links.py`, shell parse checks, the committed
       secret guard, and scoped `git diff --check` passed.
 
-- [-] Task 5 - Run full gates and publish the focused foundation
+- [x] Task 5 - Run full gates and publish the focused foundation
   - Acceptance criteria:
     - Focused shell/integration/docs/diff/secret checks and literal
       `./scripts/verify.sh` pass without changing operator-owned files.
@@ -153,6 +254,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       private `.env` and generated OME file retained their recorded SHA-256
       hashes, and generated OME has no byte diff. Fresh protected CI, review
       thread resolution, merge, and bounded #1299 issue evidence remain.
+    - Review repairs landed in `c8004c47`; both P1 threads were answered and
+      resolved. Protected run `31917178911` passed Ubuntu `test-all` in 4m21s,
+      ShellCheck, docs, secret guard, Windows/macOS Go, all three quickstart
+      entrypoints, and the aggregate merge gate.
+    - PR #1393 squash-merged as
+      `d680d75032c3e556b5cc5363bf218107f77b4806`. Bounded evidence was posted to
+      #1299, which remains open for artifact-only lost-host, encrypted config,
+      media/object, production RPO/RTO, and golden-path acceptance.
 
 ## Scoped change: initial aggregate ingest health after RC19 rejection (#1297, #1304)
 
