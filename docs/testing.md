@@ -77,6 +77,11 @@ Use these category entrypoints from the repository root:
 - **Postgres backup/restore rehearsal:** `./scripts/test-backup-restore.sh`
   - Uses a disposable Postgres 15 container to prove atomic manifest-bound backup, isolated restore, migration and row-count invariant checks, sanitized reporting, and pre-mutation refusal of mismatched or incomplete evidence.
   - Run this focused gate after backup/restore script changes. It remains separate from `./scripts/verify.sh` so the required CI workflow is unchanged.
+- **Encrypted packaged-host recovery rehearsal:** `./scripts/test-host-backup-restore.sh`
+  - Uses real OpenSSL streaming to prove atomic encrypted host sets, canonical member validation, exact config/data/media/Postgres/object invariants, fresh-target restore, secret-safe RPO/RTO reporting, and pre-mutation refusal of wrong release/passphrase, corruption, collisions, and non-fresh targets.
+- **Source-free disaster-recovery foundation:** `./scripts/test-disaster-recovery.sh`
+  - Requires Docker plus network access. It exports the real non-empty Postgres rehearsal set, stages only source-free package assets, deletes its disposable source host, reinstalls a fresh packaged-host layout, restores Postgres into a fresh exact-digest Postgres 15 container, and compares local/external object invariants.
+  - Set `BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR` to retain secret-scanned `bitriver.host-restore-report/v1`, `bitriver.postgres-restore-report/v1`, and `bitriver.disaster-recovery/v1` evidence. The report keeps exact next-candidate package and recovered-stack production-golden-path qualification explicit rather than treating local staging as publication proof.
 - **Stateful upgrade/rollback data-plane rehearsal:** `./scripts/test-stateful-upgrade.sh`
   - Uses actual canonical migrations and representative non-empty schema state to prove the immutable RC19-to-RC20 backup, no-op candidate migration, exact invariant preservation, database-layer in-place rollback classification, fresh-database restore, ambiguous-ledger refusal, and secret-scanned `bitriver.stateful-upgrade-report/v1` output.
   - Set `BITRIVER_UPGRADE_REPORT_PATH` to retain the report. This focused gate remains separate from `./scripts/verify.sh`.

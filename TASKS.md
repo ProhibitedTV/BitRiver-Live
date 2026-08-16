@@ -1,5 +1,134 @@
 # TASKS
 
+## Scoped change: packaged-host disaster-recovery foundation (#1299)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Inventory durable inputs and bound the packaged recovery proof
+  - Acceptance criteria:
+    - Existing package layout, backup/restore contract, persistent paths,
+      product gate, and published-artifact limitation are evidenced.
+    - `PLAN.md` defines encryption, isolation, restore safety, reporting,
+      testing, and the remaining exact-publication boundary before code changes.
+  - Check:
+    - Packaged hosts separate source-free program assets under
+      `/opt/bitriver-live`, operator secrets/generated config under
+      `/etc/bitriver-live`, and API/transcoder/media data under
+      `/var/lib/bitriver-live`; Postgres remains a named volume and Redis is
+      explicitly ephemeral.
+    - The merged Postgres scripts already publish and verify an atomic
+      archive/manifest/checksum set with release/schema/row-count identity, but
+      the source-free asset manifest does not ship those scripts and there is no
+      encrypted config/media recovery set or destructive lost-host orchestrator.
+    - The existing production golden path covers auth, admin, channel, ingest,
+      playback, chat/moderation, and VOD. The new drill can reuse it after
+      recovery instead of creating a weaker parallel smoke test.
+    - Public RC20 release-set SHA-256
+      `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`
+      binds the Linux amd64 launcher archive at SHA-256
+      `ef4b1d1095fceab6ff9b6f6b55828b041d891ad36174cbdc2f28feba636e90f8`;
+      it predates this recovery payload, so final immutable artifact-only proof
+      must use the next published candidate after this slice merges.
+
+- [x] Task 2 - Implement encrypted host recovery sets and refusal tests
+  - Acceptance criteria:
+    - Backup atomically publishes an encrypted host/Postgres archive, manifest,
+      and checksum without exposing passphrases or retained plaintext.
+    - Restore verifies identity/checksums/paths before mutation, refuses unsafe
+      or non-fresh targets, and proves exact aggregate config/data invariants.
+    - Focused unit/integration tests cover success and all planned failures.
+  - Check:
+    - `scripts/backup-host-state.sh` now publishes an OpenSSL AES-256-CBC,
+      PBKDF2-HMAC-SHA256 encrypted archive plus secret-safe manifest and exact
+      checksum set. It requires a restricted passphrase file, embeds the
+      already-verified Postgres trio, fingerprints packaged config/data/media,
+      optionally carries an aggregate external-object inventory, and never
+      writes a plaintext host archive.
+    - `scripts/restore-host-state.sh` verifies checksum/release/encryption
+      identity, refuses non-fresh targets, decrypts once for fail-closed member
+      validation and again for streaming extraction, accepts only canonical
+      regular files/directories, and emits measured RPO/RTO plus matched
+      config/data/Postgres/object invariants without secrets.
+    - Five Linux unit tests passed, including release/checksum refusal,
+      symlink escape, traversal/special archive members, and restored invariant
+      reporting. The full OpenSSL integration passed success, wrong release,
+      wrong passphrase, corruption-before-mutation, non-fresh target, object
+      inventory, and same-timestamp collision cases.
+    - The first integration run exposed a cleanup ownership defect where a
+      refused same-timestamp producer removed the existing set. Explicit final
+      asset ownership now preserves all three existing files byte-for-byte;
+      the repaired integration passed.
+
+- [x] Task 3 - Ship recovery tools and automate a source-free lost-host drill
+  - Acceptance criteria:
+    - Source-free launcher/package assets contain the canonical recovery tools.
+    - A disposable rehearsal destroys source runtime state, rebuilds a fresh
+      packaged-host layout, restores Postgres/config/media/object fixtures, and
+      emits secret-safe RPO/RTO evidence.
+  - Check:
+    - The source-free asset manifest now ships canonical Postgres backup,
+      restore, pruning, encrypted host backup/restore, Python runtime wrapper,
+      and recovery metadata helper files. Release-bundle and packaged-host
+      installer lifecycle tests passed with the commands present/executable and
+      generated credentials still excluded.
+    - `scripts/test-disaster-recovery.sh` stages a source-free bundle, obtains a
+      real non-empty manifest-bound Postgres backup from the existing complete
+      refusal suite, builds the encrypted config/API/media/Postgres/object set,
+      deletes the source host, and restores into a fresh packaged-host root.
+    - The fresh installer preserved recovered secrets, normalized generated
+      config compatibility links, reconnected durable paths, and installed the
+      same recovery commands. A new exact-digest Postgres 15 container restored
+      the recovered backup into a fresh database with four roles plus exact
+      object metadata; off-host object bytes matched their aggregate inventory.
+    - Secret-safe `bitriver.disaster-recovery/v1` evidence records measured
+      RPO/RTO, source-free bundle fingerprint, and five passing stages while
+      retaining the exact published-package, production golden-path, and
+      scheduled off-host proof as explicit remaining acceptance. Six Linux unit
+      tests and the complete destructive disposable drill passed.
+
+- [x] Task 4 - Align operations, installation, release, and testing guidance
+  - Acceptance criteria:
+    - Operator docs define inputs, encrypted backup/restore commands,
+      scheduling/off-host ownership, RPO/RTO, object consistency, and evidence.
+    - Documentation distinguishes merged source-free proof from the next
+      candidate's required immutable clean-host qualification.
+  - Check:
+    - Operations guidance now inventories the installed recovery commands,
+      required GNU tar/Python/OpenSSL/Postgres client tools, restricted
+      passphrase handling, atomic encrypted set, pre-install fresh-host restore,
+      recovered database handoff, external-object ownership, credential
+      rotation, and evidence/report schemas.
+    - Ubuntu installation, deployment-contract, deploy README, production
+      release gate, testing, and v1.2.3 draft guidance now agree on packaged
+      paths, commands, RPO/RTO targets, source-free proof, and the next
+      immutable candidate plus recovered-stack golden-path boundary. The guide
+      explicitly warns that RC20 predates this package payload.
+    - Three doc-link unit tests and the complete 89-file tracked Markdown link
+      scan passed. Pinned ShellCheck v0.11.0 passed all seven changed shell
+      scripts after replacing two ambiguous numeric validation expressions.
+    - The final `/var/backups/bitriver-live/recovery` layout passed six Linux
+      helper tests, the encrypted host integration, and the complete destructive
+      source-free disaster-recovery drill. Root `.env` and generated OME hashes
+      remain exactly unchanged.
+
+- [-] Task 5 - Run full gates and publish the focused recovery slice
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh`, protected CI, review, and squash merge pass
+      without touching operator-owned files or overclaiming #1299 completion.
+    - #1299 receives bounded evidence and the exact next-candidate follow-up.
+  - Check:
+    - Literal `./scripts/verify.sh` passed with Go 1.26.0: repository hygiene,
+      release-bundle and installer contracts, every first-party Go package,
+      architecture/dependency guards, Markdown links, deployment invariants,
+      Postgres migration lifecycle, Compose rendering, and the complete
+      quickstart smoke were green. Viewer checks were correctly skipped because
+      this slice does not touch `web/viewer`.
+    - The private root `.env` lacked the two optional public media-route values,
+      so the local run supplied loopback defaults only to `docker compose` via an
+      untracked temporary shim; Go environment-isolation tests remained clean,
+      and the shim was deleted immediately after the gate.
+    - Protected CI, review, squash merge, and the bounded #1299 handoff remain.
+
 ## Scoped change: exact-image Compose upgrade and rollback rehearsal (#1298)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -95,7 +224,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       scan, and clean teardown. The exact-image Compose rehearsal passed in Task
       3 and was not repeated after documentation-only changes.
 
-- [-] Task 5 - Run full gates and publish the focused full-stack slice
+- [x] Task 5 - Run full gates and publish the focused full-stack slice
   - Acceptance criteria:
     - Literal `./scripts/verify.sh`, protected CI, review, and merge pass without
       touching operator-owned files or overclaiming #1298 completion.
@@ -118,6 +247,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       build/CI, data/migrations, and operator-workflow scorecard; rerunning the
       old workflow retained its stale event payload, so this ledger update will
       trigger the fresh metadata-aware run required before merge.
+    - Fresh protected run `31921577370` passed Ubuntu in 4m22s, secrets, docs,
+      ShellCheck, Ubuntu/macOS/Windows quickstart entrypoints, and the enforced
+      high-risk release-scorecard merge gate. The sole P1 thread was resolved;
+      PR #1395 squash-merged as
+      `645f5b28b0062d8f8488e2fbb32ae34ec7d789f8`, and #1298 received bounded
+      evidence while remaining open for an approved prior-release rollback.
 
 ## Scoped change: stateful RC19 to RC20 upgrade/rollback data-plane rehearsal (#1298)
 
