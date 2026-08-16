@@ -110,7 +110,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       syntax, ShellCheck v0.11.0, and all four helper tests passed.
     - The complete exact-image rehearsal passed after the repair, including the
       production golden path, evidence scans, exact rollback, and clean teardown.
-      Final full verification and protected CI remain before merge.
+      Final full verification passed again on commit `9f9ad5c4`.
+    - Protected run `31921209601` passed Ubuntu in 4m16s, secrets, docs,
+      ShellCheck, and all three quickstart entrypoints. Its merge gate alone
+      rejected the initial PR body because it lacked the enforced release
+      scorecard headings. The live PR now contains the complete high-risk
+      build/CI, data/migrations, and operator-workflow scorecard; rerunning the
+      old workflow retained its stale event payload, so this ledger update will
+      trigger the fresh metadata-aware run required before merge.
 
 ## Scoped change: stateful RC19 to RC20 upgrade/rollback data-plane rehearsal (#1298)
 
