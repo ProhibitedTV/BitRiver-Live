@@ -85,11 +85,30 @@ required=(
   deploy/systemd/bitriver-live-compose.service
   scripts/render-srs-config.sh
   scripts/bitriver-live-wrapper.sh
+  scripts/backup-postgres.sh
+  scripts/restore-postgres.sh
+  scripts/prune-backups.sh
+  scripts/backup-host-state.sh
+  scripts/restore-host-state.sh
+  scripts/host_recovery.py
+  scripts/python.sh
   scripts/stage-release-assets.sh
   docs/installing-on-ubuntu.md
 )
 for relative in "${required[@]}"; do
   [[ -f $bundle_root/$relative ]] || { echo "required release asset missing: $relative" >&2; exit 1; }
+done
+
+for executable in \
+  scripts/backup-postgres.sh \
+  scripts/restore-postgres.sh \
+  scripts/prune-backups.sh \
+  scripts/backup-host-state.sh \
+  scripts/restore-host-state.sh; do
+  [[ -x $bundle_root/$executable ]] || {
+    echo "packaged recovery command is not executable: $executable" >&2
+    exit 1
+  }
 done
 
 for generated in \

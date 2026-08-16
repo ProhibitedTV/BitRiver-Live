@@ -1,5 +1,76 @@
 # PLAN
 
+## Current scope - packaged-host disaster-recovery foundation (#1299) (2026-08-15)
+
+- Extend the manifest-bound Postgres backup with one encrypted packaged-host
+  recovery set for the default single-host profile. The set will contain the
+  verified three-file Postgres backup, `/etc/bitriver-live`, and
+  `/var/lib/bitriver-live` (API state plus transcoder/media data), while its
+  public manifest retains only exact release identity, hashes, aggregate tree
+  counts/fingerprints, encryption metadata, and timestamps.
+- Use a passphrase file with OpenSSL AES-256-CBC plus PBKDF2 rather than placing
+  secret material on argv, in environment variables, or in reports. Publish the
+  encrypted archive, JSON manifest, and checksum atomically. Restore must verify
+  the complete set and expected release before decrypting, refuse a non-fresh
+  destination, validate every archive path, stream extraction without a
+  plaintext archive on disk, and compare the recovered tree fingerprints.
+- Ship the canonical Postgres and host recovery tools in every source-free
+  launcher/package payload. Add an opt-in isolated rehearsal that creates
+  representative database/config/media/object state, backs it up, removes the
+  source deployment, restores into a fresh packaged-host-shaped root, restores
+  Postgres into a fresh database, and emits one secret-scanned measured report.
+- Reuse the production golden path after recovery rather than adding a parallel
+  product smoke implementation. Bind the rehearsal to explicit release/commit
+  identity and immutable image inputs; distinguish source-free bundle proof in
+  this PR from the exact published-package run required after the next candidate
+  is cut.
+
+### Risks and boundaries
+
+- Never read or modify the repository root `.env`, generated OME configuration,
+  operator media, or unrelated deployment helpers. Test roots, encryption keys,
+  Postgres databases, containers, volumes, reports, and decrypted state remain
+  isolated and are removed by default.
+- Do not change the canonical Compose/root-env/generated-OME contract, packages,
+  CI workflows, or runtime topology. Adding recovery files to the existing
+  source-free asset inventory changes package contents only; the installed
+  runtime paths and service behavior remain unchanged.
+- Require canonical packaged-host paths inside the encrypted archive and
+  dereference compatibility symlinks during backup so a fresh installer can
+  safely normalize them. Refuse traversal, absolute, device, or unexpected
+  archive entries before extraction.
+- Snapshot config, local data, the verified Postgres set, and object inventory
+  into the private work directory before encryption; derive manifest
+  fingerprints from that immutable snapshot so live writes cannot make a
+  checksum-valid set whose restored tree disagrees with its manifest.
+- Bind disaster evidence to the exact Postgres archive/manifest hashes and
+  source identity carried by the host recovery report. Treat reported disaster
+  RPO as the maximum of host-snapshot and database-backup age rather than
+  allowing a recent host wrapper to hide stale system-of-record data.
+- The default single-host proof covers local API/transcoder/media objects.
+  External object-store durability remains an operator-managed replicated input;
+  its non-secret inventory contract and consistency requirements must be carried
+  in the recovery evidence without embedding credentials or object contents.
+- This branch cannot prove its own future published package. Keep #1299 open
+  until the merged recovery assets are published in an immutable candidate and
+  the artifact-only clean-host recovery rehearsal plus production golden path
+  pass against that exact release set.
+
+### Test and rollout plan
+
+- Add focused Python validation tests and shell integration cases for success,
+  wrong release, checksum corruption, unsafe archive members, non-fresh target,
+  wrong passphrase, atomic collision refusal, unrelated Postgres evidence,
+  combined RPO, post-archive live mutation, root-importable unit execution, and
+  secret-free reports.
+- Verify the source-free asset inventory and packaged-host lifecycle expose the
+  canonical recovery commands without a source checkout.
+- Run the disposable Postgres/host-state rehearsal, production golden path when
+  Docker resources permit, Bash/ShellCheck, docs/link/diff/secret checks, and
+  literal `./scripts/verify.sh`.
+- Publish through a focused high-risk PR and protected CI, post bounded evidence
+  to #1299, then use the next immutable candidate for the final clean-host drill.
+
 ## Current scope - exact-image Compose upgrade and rollback rehearsal (#1298) (2026-08-15)
 
 - Extend the merged database-layer foundation with a separate opt-in full-stack

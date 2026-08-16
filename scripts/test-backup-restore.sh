@@ -403,4 +403,13 @@ assert_contains "$blocked_backup_output" "migration ledger contains applying or 
 [[ -z "$(docker_exec "$container" find /backups -name '*.partial.*' -print -quit)" ]] ||
   fail "failed backup left a partial artifact"
 
+if [[ -n ${BITRIVER_BACKUP_RETAIN_DIR:-} ]]; then
+  mkdir -p "$BITRIVER_BACKUP_RETAIN_DIR"
+  retained_dir="$(cd "$BITRIVER_BACKUP_RETAIN_DIR" && pwd -P)"
+  for retained in "$archive" "$manifest" "$checksum"; do
+    docker cp "$container:$retained" "$retained_dir/$(basename "$retained")" >/dev/null
+  done
+  printf '%s\n' "$archive_name" >"$retained_dir/backup-name.txt"
+fi
+
 echo "Postgres backup/restore rehearsal tests passed."

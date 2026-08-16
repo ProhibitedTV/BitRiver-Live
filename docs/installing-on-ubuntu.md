@@ -72,6 +72,15 @@ sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 ```
 
+Install the packaged-host recovery prerequisites as well. The encrypted host
+wrapper requires OpenSSL, Python 3, and GNU tar; the Postgres restore command
+requires the matching PostgreSQL client tools:
+
+```bash
+sudo apt install openssl python3 tar postgresql-client
+tar --version | head -n 1  # must identify GNU tar
+```
+
 Sign out and back in after changing group membership, then verify the non-root operator can reach Docker:
 
 ```bash
@@ -357,6 +366,39 @@ sudo bitriver-host upgrade --operator-user "$USER"
 ```
 
 Back up and validate restore procedures before upgrading; see [`docs/upgrades.md`](upgrades.md).
+
+### Lost-host recovery
+
+Release payloads built after the packaged recovery foundation contain the
+canonical commands under `/opt/bitriver-live/scripts` and in the launcher's
+`share/bitriver-live/scripts` tree. Verify those files are present in the exact
+release before relying on them; RC20 predates this payload, so its package alone
+cannot satisfy the final artifact-only disaster-recovery gate.
+
+Keep the encrypted `bitriver.host-backup/v1` archive, manifest, checksum,
+separately protected passphrase, exact signed release set, and provider object
+backup available off-host. On a replacement machine, verify and extract the
+matching launcher first, restore host state before package installation, then
+install the exact package so it preserves and reconnects recovered paths:
+
+```bash
+sudo share/bitriver-live/scripts/restore-host-state.sh \
+  --archive /mnt/off-host/bitriver-host-YYYYMMDDTHHMMSSZ.tar.gz.enc \
+  --expected-release "$release_tag" \
+  --expected-commit "$release_commit" \
+  --passphrase-file /root/bitriver-recovery.pass \
+  --report /var/backups/bitriver-live/host-restore-report.json
+
+sudo apt install "./bitriver-live_${release_tag}_amd64.deb"
+sudo bitriver-host install --operator-user "$USER"
+```
+
+The recovered Postgres trio is under
+`/var/backups/bitriver-live/recovery/postgres`. Restore it into a fresh database,
+point the preserved environment at that database, restore external objects,
+run migration preflight and the production golden path, then activate/reopen
+traffic. Follow the complete sequence and safety boundary in
+[`docs/operations.md`](operations.md#encrypted-packaged-host-recovery-set).
 
 Safe uninstall removes program/service integration and retains configuration and data:
 

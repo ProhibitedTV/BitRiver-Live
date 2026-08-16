@@ -24,7 +24,7 @@ BitRiver Live has one canonical deployment path: an operator `.env` rendered/val
   - Must pass `cmd/bitriver env validate` (also wrapped by `deploy/check-env.sh`).
 - `deploy/install/release-assets.txt` and `scripts/stage-release-assets.sh`
   - Canonical allowlist and staging path for source-free release archives and Linux packages.
-  - Include every Compose bind-mount/render dependency while excluding root `.env` and deployment-time generated OME/SRS output.
+  - Include every Compose bind-mount/render dependency plus the canonical Postgres and encrypted packaged-host recovery commands, while excluding root `.env`, source code, and deployment-time generated OME/SRS output.
 - `deploy/install/compose-host.sh` and `deploy/systemd/bitriver-live-compose.service`
   - Ubuntu archive/package lifecycle around the canonical Compose stack.
   - Separate program assets (`/opt/bitriver-live`), secret configuration (`/etc/bitriver-live`), and durable state (`/var/lib/bitriver-live`). Installation leaves the service disabled until `configure` and `activate` pass.

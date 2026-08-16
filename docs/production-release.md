@@ -210,11 +210,15 @@ Before tagging production releases, prove backup/restore readiness:
 - Confirm at least one **successful backup in the last 24 hours** (from scheduler logs, object storage object timestamp, or job history).
 - Confirm the latest backup is a complete three-file set: archive, `bitriver.postgres-backup/v1` manifest, and `.sha256` file covering both exactly. The manifest must identify the exact candidate release and full commit; `unknown` is not release evidence.
 - Provide **restore rehearsal evidence within the last 30 days** using `./scripts/restore-postgres.sh` (or equivalent staged workflow). Require the expected release and migration fingerprint, then retain the passing `bitriver.postgres-restore-report/v1` report with matched migration/row-count invariants and observed RPO/RTO.
+- Confirm a complete encrypted `bitriver.host-backup/v1` set protects the verified Postgres trio, packaged configuration/secrets/generated config, and local API/transcoder/media data. When external object storage is enabled, require a matching aggregate inventory plus provider restore/versioning evidence.
+- Retain a passing `bitriver.disaster-recovery/v1` report from the exact published package. It must prove source-host destruction, fresh host/package installation, fresh-database restore, object invariants, the production golden path, and observed RPO/RTO within the targets in `docs/operations.md`.
 - If the release includes schema-heavy changes, run an extra restore rehearsal after migrations are validated in staging.
 
-Keep this evidence attached to the release ticket/change request before maintenance begins. The Postgres rehearsal is one
-recovery slice; also account for encrypted `/etc/bitriver-live`, `/var/lib/bitriver-live` or checkout-based transcoder data,
-external object storage, and the exact immutable release set as described in [`docs/operations.md`](operations.md#durable-recovery-inventory).
+Keep this evidence attached to the release ticket/change request before maintenance begins. Run the local source-free
+foundation with `BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR=.artifacts/disaster-recovery ./scripts/test-disaster-recovery.sh`,
+but do not substitute that staged-bundle result for the required exact published-package and recovered-stack product proof.
+The full encrypted workflow and immutable-input boundary are described in
+[`docs/operations.md`](operations.md#encrypted-packaged-host-recovery-set).
 
 ### Stateful upgrade and rollback release gates
 

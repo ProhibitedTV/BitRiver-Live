@@ -198,6 +198,6 @@ sudo bitriver-host configure
 sudo bitriver-host activate
 ```
 
-Program assets live under `/opt/bitriver-live`, secrets/configuration under `/etc/bitriver-live`, and durable state under `/var/lib/bitriver-live`. Ordinary uninstall preserves configuration/data; permanent purge requires both `--purge-data` and `--yes-really-purge`. See [`docs/installing-on-ubuntu.md`](../docs/installing-on-ubuntu.md).
+Program assets live under `/opt/bitriver-live`, secrets/configuration under `/etc/bitriver-live`, and durable state under `/var/lib/bitriver-live`. The installed source-free asset tree includes the canonical Postgres and encrypted host-state recovery commands under `/opt/bitriver-live/scripts`; recovered Postgres evidence is staged under `/var/backups/bitriver-live/recovery`. Ordinary uninstall preserves configuration/data; permanent purge requires both `--purge-data` and `--yes-really-purge`. See [`docs/installing-on-ubuntu.md`](../docs/installing-on-ubuntu.md) and [`docs/operations.md`](../docs/operations.md#encrypted-packaged-host-recovery-set).
 
 The older `install/wizard.sh`, `install/ubuntu.sh`, and native service units remain historical/advanced helpers and are not equivalent to the release Compose contract.

@@ -294,14 +294,19 @@ Document where every applicable item lives, its retention, its encryption/access
 restore. A lost-host drill is incomplete until configuration, Postgres, media/object data, and the immutable release inputs
 have all been exercised together.
 
-### Scheduled backup, pruning, and object upload scripts
+### Packaged recovery commands
 
-The repository includes operator scripts under `scripts/`:
+Source-free launcher archives and Linux packages install the canonical recovery
+commands under `/opt/bitriver-live/scripts/`; a source checkout exposes the same
+paths under `./scripts/`:
 
 - `./scripts/backup-postgres.sh`: atomically publishes a gzip-compressed logical dump, JSON manifest, and SHA-256 checksum set, and can upload all three to S3-compatible object storage.
 - `./scripts/prune-backups.sh`: prunes complete local backup sets older than the configured retention window while preserving a minimum backup count.
 - `./scripts/restore-postgres.sh`: verifies the backup set before mutation, restores into a fresh isolated database, compares migration and exact public-table row-count invariants, and writes a non-secret JSON report.
+- `./scripts/backup-host-state.sh`: encrypts packaged configuration, local API/media data, the verified Postgres set, and an optional aggregate object inventory into one atomic host recovery set.
+- `./scripts/restore-host-state.sh`: validates release/checksum/archive-member identity before streaming a host recovery set into fresh canonical paths and writing a secret-safe invariant/RPO/RTO report.
 - `./scripts/test-backup-restore.sh`: runs the positive rehearsal and pre-mutation refusal cases against a disposable Postgres 15 container.
+- `./scripts/test-disaster-recovery.sh`: deletes only its disposable source host, rebuilds a source-free packaged-host layout, restores a real non-empty Postgres set plus local/external object fixtures, and writes `bitriver.disaster-recovery/v1` evidence.
 
 The backup manifest has schema `bitriver.postgres-backup/v1`. It binds the archive name/hash/size, source release and commit,
 database/server/tool versions, applied migration ledger and fingerprint, and exact public-table row counts. The dump and all
@@ -369,6 +374,82 @@ Run the repository-owned rehearsal test after changing the scripts:
 ```bash
 ./scripts/test-backup-restore.sh
 ```
+
+### Encrypted packaged-host recovery set
+
+The host-state wrapper requires GNU tar, Python 3, OpenSSL, and a restricted
+passphrase file containing at least 20 bytes. Provision the passphrase through
+your secret manager and store a separately protected recovery copy; losing it
+makes the encrypted archive unrecoverable. Never place the passphrase itself in
+an environment variable, command argument, ticket, or release evidence.
+
+Create the Postgres set first, then bind it to the exact installed release and
+full commit while encrypting the packaged-host state:
+
+```bash
+postgres_backup=/var/backups/bitriver-live/postgres/bitriver-postgres-20260815T020000Z.sql.gz
+recovery_target=/mnt/off-host/bitriver-live
+
+sudo /opt/bitriver-live/scripts/backup-host-state.sh \
+  --postgres-backup "$postgres_backup" \
+  --source-release "$release_version" \
+  --source-commit "$release_commit" \
+  --passphrase-file /root/bitriver-recovery.pass \
+  --output-dir "$recovery_target"
+```
+
+When external object storage is enabled, create a non-secret
+`bitriver.object-inventory/v1` aggregate from a restored/exported object mirror
+and pass it with `--object-inventory`. The inventory proves counts, bytes, and a
+deterministic fingerprint; it does not copy provider objects. Versioning,
+replication, retention, credentials, and the actual object restore remain owned
+by the storage provider/operator.
+
+The three host files are an encrypted `.tar.gz.enc` archive, adjacent
+`bitriver.host-backup/v1` manifest, and `.sha256` file. Copy and retain them as
+one transaction. The public manifest contains hashes, counts, release identity,
+encryption parameters, and timestamps only. It never contains configuration,
+paths below the protected roots, object keys, passphrases, or row contents.
+
+For a lost host, first verify and extract the exact release launcher on the
+fresh machine. Before installing or activating the package, restore only into
+absent `/etc/bitriver-live`, `/var/lib/bitriver-live`, and
+`/var/backups/bitriver-live/recovery` paths:
+
+```bash
+sudo share/bitriver-live/scripts/restore-host-state.sh \
+  --archive /mnt/off-host/bitriver-live/bitriver-host-20260815T021000Z.tar.gz.enc \
+  --expected-release "$release_version" \
+  --expected-commit "$release_commit" \
+  --passphrase-file /root/bitriver-recovery.pass \
+  --report /var/backups/bitriver-live/host-restore-report.json
+```
+
+The command verifies the outer checksum and release identity before decryption,
+rejects traversal, links, devices, unexpected members, wrong passphrases, and
+non-fresh targets, and never writes a plaintext archive. It restores the
+Postgres trio under `/var/backups/bitriver-live/recovery/postgres`.
+
+After host-state recovery, install the exact verified package. The installer
+preserves the recovered environment/data, normalizes generated-config
+compatibility links, and reconnects durable mounts. Restore Postgres into a
+fresh database with `BITRIVER_RESTORE_KEEP_DB=1`, point
+`BITRIVER_POSTGRES_DB` at that recovered database, run migration preflight, and
+only then activate the stack. Restore provider objects, compare their aggregate
+inventory, and run the production golden path. Rotate recovered credentials
+when policy or incident scope requires it.
+
+Run the complete disposable foundation after changing any recovery/package
+input:
+
+```bash
+BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR=.artifacts/disaster-recovery \
+  ./scripts/test-disaster-recovery.sh
+```
+
+The current report deliberately identifies exact published-package and
+recovered-stack production-golden-path proof as remaining until this recovery
+payload is present in the next immutable candidate.
 
 ### Scheduling examples (Compose + Kubernetes + Helm)
 
