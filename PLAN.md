@@ -1,5 +1,58 @@
 # PLAN
 
+## Current scope - stateful RC19 to RC20 upgrade/rollback data-plane rehearsal foundation (#1298) (2026-08-15)
+
+- Use the immediate immutable published pair `v1.2.3-rc.19` at commit
+  `1e14e3cf7d5f1d949b396d4f7897660575ea468e` and `v1.2.3-rc.20` at
+  commit `9a8516a60c584c96a46b630b55c46df33f46fbdc`. Bind evidence to
+  their public release-set SHA-256 identities
+  `374a4084d1880abab1fa980d528a47bb5e324ed85541248438015fb13f2cc204`
+  and `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`.
+  RC19 is an upgrade-source fixture, not an approved release claim.
+- The two tags have no migration-runner or migration-file diff. Classify this
+  exact hop as in-place compatible at the database/migration layer only: apply
+  the RC19 migration set, load representative state in the real schema, take a
+  manifest-bound backup, execute the RC20 migration plan/apply path, and prove
+  exact ledger plus row/value invariants before and after an in-place rollback
+  decision.
+- Exercise the restore-required decision separately by changing the upgraded
+  state, restoring the verified RC19 backup into a fresh isolated database, and
+  proving the original invariants. Demonstrate that an ambiguous `applying`
+  ledger state blocks the candidate migration path rather than allowing a
+  falsely successful upgrade.
+- Emit one secret-safe JSON report with exact release identities, schema
+  fingerprints, representative invariant results, rollback classification,
+  blocked-interruption evidence, and observed backup/upgrade/rollback durations.
+
+### Risks and boundaries
+
+- Never log or retain DSNs, passwords, auth/MFA secrets, session tokens, stream
+  keys, or row contents. The report may contain release/schema hashes, aggregate
+  counts, boolean/value-hash matches, timings, and rollback decisions only.
+- Use actual canonical migrations and table shapes rather than the simplified
+  backup-script fixture. Keep all databases/backup artifacts disposable and
+  isolated from the operator's root `.env`, generated OME, and runtime media.
+- Do not change Compose, root env, generated OME, packages, or CI workflows.
+  This foundation does not close #1298: exact-image Compose upgrade, config and
+  image rollback, meaningful interrupted deployment cut points, ingest/playback,
+  chat/admin/VOD APIs, and the full production golden path remain required.
+- RC19 and RC20 have an identical schema, so no destructive-migration rollback
+  claim is possible from this pair. Future schema-changing releases must rerun
+  the rehearsal and may be classified restore-required or unsupported.
+
+### Test and rollout plan
+
+- Add a Docker-backed Postgres 15 rehearsal with actual migrations plus
+  representative admin/creator/moderator/viewer, auth/MFA/session, profile,
+  channel/follow/schedule, moderation/legal/chat, upload/recording/object, and
+  non-default setting fixtures.
+- Require the manifest-bound backup/restore scripts, migration planner/apply
+  path, deterministic invariant snapshots, ambiguous-ledger refusal, JSON
+  report schema/content, secret scan, and clean database/container teardown.
+- Run shell/static checks, the focused rehearsal, docs/link/diff/secret checks,
+  and literal `./scripts/verify.sh`. Publish as a focused PR through protected
+  CI, then keep #1298 open for the exact-image full-stack phase.
+
 ## Current scope - manifest-bound Postgres backup/restore rehearsal foundation (#1299) (2026-08-15)
 
 - Harden the existing `backup-postgres.sh` / `restore-postgres.sh` path instead

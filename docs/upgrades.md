@@ -29,6 +29,44 @@ The planner prints a checklist with current-image detection, migration expectati
 
 The command is best-effort: if Docker is unavailable or the stack is stopped, it warns and falls back to `.env` tags when possible.
 
+### Current automated rehearsal boundary: RC19 to RC20
+
+The repository-owned stateful data-plane rehearsal uses the immediate immutable
+published pair `v1.2.3-rc.19` (`1e14e3cf7d5f1d949b396d4f7897660575ea468e`)
+to `v1.2.3-rc.20` (`9a8516a60c584c96a46b630b55c46df33f46fbdc`).
+It binds evidence to the public `release-set.json` SHA-256 values
+`374a4084d1880abab1fa980d528a47bb5e324ed85541248438015fb13f2cc204`
+and `dd8eabcea7cf920a6f520e3e472cf44d3e1c7b0b7ad74945904f67ea74a47873`.
+RC19 is used only as the immediate populated-state source; this does not turn
+the rejected candidate into an approved release.
+
+Run the focused rehearsal against disposable Postgres 15:
+
+```bash
+./scripts/test-stateful-upgrade.sh
+
+# Retain the secret-scanned machine-readable report when collecting evidence.
+BITRIVER_UPGRADE_REPORT_PATH=.artifacts/stateful-upgrade-report.json \
+  ./scripts/test-stateful-upgrade.sh
+```
+
+The test uses the real canonical schema and representative non-empty account,
+auth/MFA/session, channel/profile/follow/schedule, moderation/legal/chat,
+stream/upload/recording/object-reference, and payment state. It requires a
+manifest-bound pre-upgrade backup, proves the candidate migration path preserves
+exact ledger and value/count fingerprints, exercises in-place rollback plus a
+verified fresh-database restore, and requires an ambiguous `applying` migration
+to block preflight. Its retained report schema is
+`bitriver.stateful-upgrade-report/v1`.
+
+RC19 and RC20 have byte-identical migration trees and runners, so this exact hop
+is classified **in-place compatible at the database/migration layer**. It is not
+full upgrade approval: exact-image Compose upgrade/image rollback, packaged
+configuration and generated-config rollback, interrupted deploy cut points,
+and post-upgrade ingest/playback/chat/admin/VOD golden-path evidence remain
+required. A future schema change must be classified again; never carry this
+in-place result forward by assumption.
+
 ### Ubuntu artifact installations
 
 Boot-managed Ubuntu installs use the same Compose contract with these host paths:
@@ -99,7 +137,9 @@ Rollback caveats:
 
 Complete all items before stopping production traffic:
 
-- [ ] Export Postgres backup from the running system (for example `pg_dump`/`pg_dumpall`) and verify the dump is readable.
+- [ ] Run `./scripts/backup-postgres.sh` with the exact source release and full
+  commit, then verify and durably store the archive, manifest, and checksum as
+  one set. Release evidence must not use `unknown` provenance.
 - [ ] Snapshot/backup runtime volumes used by the release:
   - `deploy/data/`
   - `deploy/transcoder-data/`
@@ -112,7 +152,10 @@ Complete all items before stopping production traffic:
 - [ ] Record the current schema version (migration metadata) before migration.
 - [ ] Confirm restore drill ownership (who can run restore, where backups are stored, and expected RTO).
 
-If you cannot produce both a DB dump and config backup, **do not start the upgrade**.
+If you cannot produce a complete manifest-bound database backup set and config
+backup, **do not start the upgrade**. Follow
+[`docs/operations.md`](operations.md#postgres-logical-backups-and-restores) for
+the isolated restore rehearsal and full durable recovery inventory.
 
 ## Single copy-paste upgrade sequence
 

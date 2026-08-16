@@ -77,6 +77,9 @@ Use these category entrypoints from the repository root:
 - **Postgres backup/restore rehearsal:** `./scripts/test-backup-restore.sh`
   - Uses a disposable Postgres 15 container to prove atomic manifest-bound backup, isolated restore, migration and row-count invariant checks, sanitized reporting, and pre-mutation refusal of mismatched or incomplete evidence.
   - Run this focused gate after backup/restore script changes. It remains separate from `./scripts/verify.sh` so the required CI workflow is unchanged.
+- **Stateful upgrade/rollback data-plane rehearsal:** `./scripts/test-stateful-upgrade.sh`
+  - Uses actual canonical migrations and representative non-empty schema state to prove the immutable RC19-to-RC20 backup, no-op candidate migration, exact invariant preservation, database-layer in-place rollback classification, fresh-database restore, ambiguous-ledger refusal, and secret-scanned `bitriver.stateful-upgrade-report/v1` output.
+  - Set `BITRIVER_UPGRADE_REPORT_PATH` to retain the report. This focused gate remains separate from `./scripts/verify.sh`; exact-image Compose/config rollback and the post-upgrade production golden path remain separate #1298 acceptance.
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) is the reusable/manual source for cross-platform entrypoint checks and targeted Compose smoke; the CI orchestrator calls its entrypoint matrix while the unified Ubuntu gate owns changed-path Compose smoke.
