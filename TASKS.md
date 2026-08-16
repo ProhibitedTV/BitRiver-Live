@@ -1,5 +1,159 @@
 # TASKS
 
+## Scoped change: manifest-bound Postgres recovery rehearsal (#1299)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Inventory the existing recovery path and bound the first slice
+  - Acceptance criteria:
+    - Current backup/restore behavior, durable-state boundaries, and release
+      acceptance gaps are evidenced from code/docs without changing runtime.
+    - `PLAN.md` defines security, compatibility, isolation, evidence, and test
+      boundaries before implementation.
+  - Check:
+    - Existing backup creates a compressed SQL dump plus checksum and supports
+      pruning/upload, but records no release, commit, database, schema, tool,
+      or row-invariant identity. Restore warns instead of failing when the
+      checksum is absent, creates/drops its target before compatibility checks,
+      and runs only database/table-presence smoke queries.
+    - No backup/restore regression or recurring rehearsal workflow exists.
+      Operations docs state 24-hour RPO, 2-hour RTO, and 30-day drill targets,
+      while issue #1299 still requires non-empty isolated restore, corruption
+      and incompatibility refusal, invariant/golden-path proof, measured output,
+      and lost-host recovery.
+    - `PLAN.md` now scopes a Postgres-only manifest/report foundation without
+      changing the deployment contract or overclaiming media/object/config
+      recovery.
+
+- [x] Task 2 - Make successful backups atomic and manifest-bound
+  - Acceptance criteria:
+    - A successful backup publishes one gzip archive, mandatory checksum, and
+      JSON manifest atomically; failed dumps leave no apparently valid set.
+    - The manifest binds release/commit, database/server and pg tool versions,
+      applied migration identity/fingerprint, and exact public-table row counts.
+    - Missing or non-applied migration ledger state blocks the backup, and no
+      sensitive connection or row data appears in output/evidence.
+  - Check:
+    - Backup now holds one exported repeatable-read Postgres snapshot across
+      `pg_dump`, applied-migration capture, and exact public-table row counts.
+      Missing/empty/non-applied migration ledger state aborts before publication.
+    - The archive and secret-safe JSON manifest publish through partial paths;
+      the checksum is moved last and covers both. Upload/prune now treat archive,
+      manifest, and checksum as one set, and cleanup removes incomplete output.
+    - A disposable real `postgres:15-alpine` database with applied migration,
+      two users, and one channel produced exactly one valid set. Both checksum
+      entries passed, JSON provenance/fingerprint/count assertions passed, no
+      partial file remained, and the container/evidence copy were removed.
+
+- [x] Task 3 - Validate before mutation and emit measured restore evidence
+  - Acceptance criteria:
+    - Restore requires checksum and manifest, validates archive/tag/schema
+      identity before creating or dropping a rehearsal database, and rejects
+      unsafe database identifiers.
+    - Isolated restore compares exact migration and table-count invariants and
+      emits a secret-safe JSON report with observed RPO/RTO and cleanup state.
+    - The source database is never a valid restore target; explicit keep mode
+      retains only the isolated rehearsal database.
+  - Check:
+    - Restore now requires an exact two-member checksum set and valid JSON
+      manifest, validates archive/source/schema identity and safe database names,
+      refuses an existing/protected/source database, and only then creates a
+      fresh isolated target. Missing evidence is a hard failure.
+    - The restored applied-migration fingerprint and every exact public-table
+      row count must equal the backup snapshot. Default cleanup drops the target
+      before an atomic report records matched compatibility/invariants, backup
+      age, restore duration, and cleanup state; explicit keep mode is bounded to
+      the validated isolated database.
+    - A disposable real Postgres backup restored successfully with expected
+      release/schema identity, matched invariants, emitted a parseable passed
+      report, and left no rehearsal database. Wrong-release and source-database
+      target attempts failed before mutation; the source retained both rows.
+
+- [x] Task 4 - Add real-Postgres positive/negative proof and operator docs
+  - Acceptance criteria:
+    - Non-empty representative data survives backup/restore exactly.
+    - Corruption, missing evidence, release mismatch, and schema mismatch fail
+      before the requested rehearsal database exists.
+    - Operations/release docs inventory every durable input, state RPO/RTO and
+      evidence handling, and preserve the bounded Postgres-only claim.
+  - Check:
+    - `./scripts/test-backup-restore.sh` passed twice against disposable
+      `postgres:15-alpine`. The final run created a complete backup set,
+      verified both checksum entries, restored once with default cleanup and
+      once in explicit keep mode, and proved the exact role, channel, object,
+      and non-default operator-setting fixtures survived before removing the
+      retained database and container.
+    - Wrong release, wrong schema fingerprint, corrupt archive, missing
+      checksum, missing manifest, and source-database target cases all failed;
+      each requested rehearsal database was absent afterward. A non-applied
+      migration ledger also blocked a second backup without leaving a valid or
+      partial set.
+    - Operations now defines the three-file manifest contract, compatibility
+      inputs, measured report, RPO/RTO handling, legacy refusal, and the full
+      durable recovery inventory. Release/testing guidance requires the bounded
+      evidence and names the focused regression without changing CI behavior.
+    - `python -m unittest scripts/check_doc_links_test.py`,
+      `python scripts/check_doc_links.py`, shell parse checks, the committed
+      secret guard, and scoped `git diff --check` passed.
+
+- [-] Task 5 - Run full gates and publish the focused foundation
+  - Acceptance criteria:
+    - Focused shell/integration/docs/diff/secret checks and literal
+      `./scripts/verify.sh` pass without changing operator-owned files.
+    - Protected PR CI is green before merge; #1299 receives bounded evidence
+      and remains open for artifact-only lost-host/media/object/golden-path work.
+  - Check:
+    - Focused `./scripts/test-backup-restore.sh`, shell parse, Markdown link,
+      committed-secret, and scoped diff checks pass.
+    - Literal `./scripts/verify.sh` passed with cached Go 1.26, bundled Python,
+      and Docker Desktop after scoping the stale private `.env`'s missing public
+      defaults to Compose subprocesses. All Go, release/contract, migration,
+      Compose render, rebuilt quickstart, health, and cleanup checks passed;
+      viewer checks correctly skipped because this slice does not touch it.
+    - The private root `.env` retained SHA-256
+      `9D57F7161B241315158B0654CA51DA997A8BBF9408A1D6E944AE39648D91AAC2`,
+      the generated OME file retained SHA-256
+      `01C441663CF1A44991A7EAD1A37D930509D50C4E1D4C0329A89FD697A11C7B1D`,
+      no BitRiver test containers remain, and operator-owned paths are
+      unchanged/untracked.
+    - Commit, protected PR CI, merge, and bounded #1299 issue evidence remain.
+    - PR #1393's first shellcheck run identified the intentional container-side
+      `$1` expansion as SC2016. The exact boundary is now documented with a
+      scoped suppression; shell parsing and the full Docker-backed rehearsal
+      pass. Run `31916021784` then passed ShellCheck, docs, Ubuntu `test-all`,
+      and Linux/macOS/Windows quickstart entrypoints. Its aggregate gate found
+      the PR scorecard also needed `build/CI` classification for changed shell
+      scripts; the PR body is corrected, and a fresh protected run remains
+      before merge because failed-job retries retain the original event body.
+    - Fresh run `31916342522` passed the aggregate merge gate, Ubuntu
+      `test-all`, ShellCheck, docs, secret guard, and all three quickstart
+      entrypoint jobs. Automated review then found two valid publication
+      blockers: collision cleanup could remove a previously published
+      same-second set, and the Helm scheduler still emitted the retired
+      archive-plus-checksum format. Fix both with explicit set ownership, a
+      collision regression, and a synchronized canonical Helm producer before
+      rerunning the gates or merging.
+    - The corrected rehearsal passed against disposable Postgres 15. Its
+      deterministic same-second retry was refused, the first archive/manifest/
+      checksum set remained byte-identical and valid, no partial/lock remained,
+      and the complete positive/negative restore matrix still passed.
+    - `bash -n` passed for the backup/restore/prune/rehearsal/sync scripts,
+      `./scripts/sync-helm-deploy-assets.sh --check` passed, and focused
+      `go test ./scripts -run TestHelmBackupUsesManifestBoundCanonicalProducer
+      -count=1 -timeout=120s` passed. The contract test requires the chart's
+      byte-identical canonical producer, ConfigMap mount, provenance/upload
+      inputs, durable object-storage guard, and absence of the legacy inline
+      two-file producer. Full verification and fresh protected CI remain.
+    - Literal `./scripts/verify.sh` passed again after both review repairs,
+      including all Go/script packages, release and contract checks, real
+      Postgres migration lifecycle, Compose rendering, rebuilt quickstart
+      service health, API/viewer reachability, and teardown. Viewer lint/tests
+      correctly skipped because the viewer remains outside this slice.
+    - The run left no `deploy` Compose containers or temporary wrapper. The
+      private `.env` and generated OME file retained their recorded SHA-256
+      hashes, and generated OME has no byte diff. Fresh protected CI, review
+      thread resolution, merge, and bounded #1299 issue evidence remain.
+
 ## Scoped change: initial aggregate ingest health after RC19 rejection (#1297, #1304)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

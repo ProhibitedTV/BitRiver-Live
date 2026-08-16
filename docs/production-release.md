@@ -208,11 +208,13 @@ Before cutting a release candidate:
 Before tagging production releases, prove backup/restore readiness:
 
 - Confirm at least one **successful backup in the last 24 hours** (from scheduler logs, object storage object timestamp, or job history).
-- Confirm the latest backup has both archive and checksum (`.sha256`) artefacts.
-- Provide **restore rehearsal evidence within the last 30 days** using `./scripts/restore-postgres.sh` (or equivalent staged workflow) including smoke query output.
+- Confirm the latest backup is a complete three-file set: archive, `bitriver.postgres-backup/v1` manifest, and `.sha256` file covering both exactly. The manifest must identify the exact candidate release and full commit; `unknown` is not release evidence.
+- Provide **restore rehearsal evidence within the last 30 days** using `./scripts/restore-postgres.sh` (or equivalent staged workflow). Require the expected release and migration fingerprint, then retain the passing `bitriver.postgres-restore-report/v1` report with matched migration/row-count invariants and observed RPO/RTO.
 - If the release includes schema-heavy changes, run an extra restore rehearsal after migrations are validated in staging.
 
-Keep this evidence attached to the release ticket/change request before maintenance begins.
+Keep this evidence attached to the release ticket/change request before maintenance begins. The Postgres rehearsal is one
+recovery slice; also account for encrypted `/etc/bitriver-live`, `/var/lib/bitriver-live` or checkout-based transcoder data,
+external object storage, and the exact immutable release set as described in [`docs/operations.md`](operations.md#durable-recovery-inventory).
 
 ## 2. Tag one immutable candidate and trigger the build workflow
 

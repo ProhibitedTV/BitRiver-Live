@@ -35,6 +35,6 @@ for file in "${expired[@]}"; do
   fi
 
   echo "pruning backup $file" >&2
-  rm -f "$file" "$file.sha256"
+  rm -f "$file" "$file.manifest.json" "$file.sha256"
   remaining=$((remaining - 1))
 done

@@ -74,6 +74,9 @@ Use these category entrypoints from the repository root:
 - **Postgres migration lifecycle:** `./scripts/test-postgres-migrations.sh`
   - Uses a disposable Postgres 15 container to prove fresh apply, previous-schema upgrade, no-op rerun, checksum drift refusal, failed retry, interrupted-state acknowledgment, and non-sensitive status output.
   - Runs automatically inside `./scripts/verify.sh` when Docker is available.
+- **Postgres backup/restore rehearsal:** `./scripts/test-backup-restore.sh`
+  - Uses a disposable Postgres 15 container to prove atomic manifest-bound backup, isolated restore, migration and row-count invariant checks, sanitized reporting, and pre-mutation refusal of mismatched or incomplete evidence.
+  - Run this focused gate after backup/restore script changes. It remains separate from `./scripts/verify.sh` so the required CI workflow is unchanged.
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) is the reusable/manual source for cross-platform entrypoint checks and targeted Compose smoke; the CI orchestrator calls its entrypoint matrix while the unified Ubuntu gate owns changed-path Compose smoke.

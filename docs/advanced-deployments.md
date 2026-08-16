@@ -63,7 +63,7 @@ The Helm chart under `deploy/helm/bitriver-live` mirrors the Compose stack (API,
    kubectl get pods
    ```
 
-The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, and it runs Postgres migrations as a pre-install/upgrade hook using the generated runner and SQL copies in the chart. Canonical sources are `deploy/postgres-migrate.sh` and `deploy/migrations/*.sql`; canonical SRS config remains `deploy/srs/conf/srs.conf`.
+The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, runs Postgres migrations as a pre-install/upgrade hook using the generated runner and SQL copies, and mounts the canonical manifest-bound Postgres backup runner into the optional backup CronJob. Canonical sources are `deploy/postgres-migrate.sh`, `deploy/migrations/*.sql`, and `scripts/backup-postgres.sh`; canonical SRS config remains `deploy/srs/conf/srs.conf`.
 
 After changing either canonical source set, run:
 
@@ -77,7 +77,7 @@ Then validate there is no drift before shipping:
 ./scripts/check-helm-deploy-assets-drift.sh
 ```
 
-Do not edit generated Helm files directly (`deploy/helm/bitriver-live/files/postgres-migrate.sh`, `deploy/helm/bitriver-live/migrations/*.sql`, and `deploy/helm/bitriver-live/files/srs.conf`). Migration SQL and the runner are byte-for-byte copies so their recorded checksums remain identical across Compose and Helm; the generated SRS copy retains its provenance header.
+Do not edit generated Helm files directly (`deploy/helm/bitriver-live/files/postgres-migrate.sh`, `deploy/helm/bitriver-live/files/backup-postgres.sh`, `deploy/helm/bitriver-live/migrations/*.sql`, and `deploy/helm/bitriver-live/files/srs.conf`). Migration SQL plus the migration and backup runners are byte-for-byte copies of their canonical sources; the generated SRS copy retains its provenance header.
 
 Persistent volumes mirror Compose mounts: the API stores state under `/var/lib/bitriver-live`, Redis under `/data`, Postgres under `/var/lib/postgresql/data`, and the transcoder workspace under `/work`. Adjust `values.persistence.*` sizes and storage classes for your cluster.
 

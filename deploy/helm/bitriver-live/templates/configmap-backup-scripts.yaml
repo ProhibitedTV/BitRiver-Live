@@ -1,0 +1,11 @@
+{{- if .Values.backups.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-backup-scripts
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+data:
+  backup-postgres.sh: |-
+{{ .Files.Get "files/backup-postgres.sh" | indent 4 }}
+{{- end }}
