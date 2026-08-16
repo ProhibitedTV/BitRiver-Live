@@ -265,7 +265,7 @@ curl -fsSL --retry 3 \
   "https://github.com/ProhibitedTV/BitRiver-Live/releases/download/$candidate_release/release-set.json" \
   -o "$workdir/candidate-release-set.json"
 
-"$repo_root/scripts/python.sh" "$repo_root/scripts/stateful_compose_upgrade.py" \
+bash "$repo_root/scripts/python.sh" "$repo_root/scripts/stateful_compose_upgrade.py" \
   --source-release-set "$workdir/source-release-set.json" \
   --candidate-release-set "$workdir/candidate-release-set.json" \
   --source-template "$source_root/deploy/.env.example" \

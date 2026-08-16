@@ -102,7 +102,15 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - #1298 receives bounded evidence and remains open for any genuinely unmet
       healthy rollback or clean-host acceptance.
   - Check:
-    - Pending full verifier, publication, protected CI, review, and merge.
+    - Literal full verification passed after final evidence-bundle changes; PR
+      #1395 opened from commit `29b51d71` with protected CI in progress.
+    - Review found one P1 portability defect: the POSIX rehearsal invoked the
+      non-executable `scripts/python.sh` wrapper directly. The call now goes
+      through Bash; a real Linux container probe returned Python 3.12.13, Bash
+      syntax, ShellCheck v0.11.0, and all four helper tests passed.
+    - The complete exact-image rehearsal passed after the repair, including the
+      production golden path, evidence scans, exact rollback, and clean teardown.
+      Final full verification and protected CI remain before merge.
 
 ## Scoped change: stateful RC19 to RC20 upgrade/rollback data-plane rehearsal (#1298)
 
