@@ -451,6 +451,43 @@ The current report deliberately identifies exact published-package and
 recovered-stack production-golden-path proof as remaining until this recovery
 payload is present in the next immutable candidate.
 
+### Single-host service restart rehearsal
+
+Before qualifying a candidate, run the opt-in resilience rehearsal from an
+otherwise idle source checkout with Docker and Go 1.26 available:
+
+```bash
+./scripts/test-service-resilience.sh \
+  --report .artifacts/service-resilience/report.json
+```
+
+The command refuses any existing canonical BitRiver container or occupied test
+port. It exports the tracked commit into a private temporary tree, copies the
+root environment without printing it, assigns dedicated host ports, and keeps
+API/transcoder state in staged binds plus Postgres/Redis in project-scoped
+volumes. It never runs Compose against the operator's checkout, root `.env`,
+generated OME file, or media directory, and it removes the temporary stack and
+private tree before publishing evidence.
+
+Seven bounded stop/start scenarios exercise the API, Postgres, Redis,
+SRS/controller path, OvenMediaEngine, transcoder, and viewer. `/readyz` is the
+core Postgres/Redis signal, authenticated `/api/status` forces live ingest
+probes, and `/viewer` isolates viewer proxy availability. After each recovery,
+the runner requires the original authenticated session and channel identity,
+then samples all long-running Docker restart counts twice to reject a continuing
+restart loop. Redis remains cache/transport state in the default profile; the
+proof does not claim that in-flight chat, rate-limit counters, or transient
+ingest work survive its restart.
+
+Retain the secret-scanned `bitriver.service-resilience/v1` JSON with the release
+ticket. It records the source commit as `local-build`, expected signal classes,
+degradation/recovery durations, durable-state booleans, restart stability,
+isolation results, and explicit remaining acceptance. Rerun the same proof from
+the exact immutable candidate on the clean target host. Physical Docker/host
+reboot, network partitions, disk/CPU/memory pressure, bad credentials/control-
+plane failures, active-stream continuity, and alert delivery are separate
+acceptance and must not be inferred from this stop/start report.
+
 ### Scheduling examples (Compose + Kubernetes + Helm)
 
 - Compose cron override example: `deploy/docker-compose.backups.yml`

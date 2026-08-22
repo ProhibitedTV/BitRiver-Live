@@ -1,5 +1,136 @@
 # TASKS
 
+## Scoped change: deterministic single-host service restart rehearsal (#1304)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Inventory failure surfaces and bound the local proof
+  - Acceptance criteria:
+    - Canonical service dependencies, public health semantics, durable state,
+      existing restart evidence, and unresolved roadmap acceptance are mapped.
+    - `PLAN.md` defines isolation, security, timing, evidence, testing, and the
+      exact-candidate/physical-host boundary before implementation.
+  - Check:
+    - `/readyz` directly probes Postgres and Redis, authenticated `/api/status`
+      forces live SRS/OvenMediaEngine/transcoder probes, and `/viewer` isolates
+      the viewer boundary. `/healthz` is intentionally excluded as the sole
+      ingest signal because its ingest snapshot may be cached.
+    - Existing RC20 evidence covers OME, Docker-daemon, and systemd restart
+      cases but not deterministic API/database/cache/media/viewer failure
+      injection or durable-state checks across those recoveries.
+    - The canonical fixed container names prevent a parallel project from
+      safely sharing the host. The rehearsal will preflight collisions, stage
+      a clean tracked tree with private bind storage and project-scoped named
+      volumes, use bounded waits, and always clean its isolated state.
+
+- [x] Task 2 - Implement the probe/evidence helper and focused tests
+  - Acceptance criteria:
+    - The helper creates a private authenticated fixture, persists its session,
+      classifies expected degradation/recovery, and verifies durable state.
+    - Report validation and tests reject secrets, unbounded or missing timing,
+      incomplete scenarios, and unstable restart counts.
+  - Check:
+    - `cmd/tools/service-resilience` now owns a standard-library HTTP client
+      with an in-memory cookie jar, randomly generated private signup fixture,
+      durable session/channel identity checks, `/readyz`, `/api/status`, and
+      viewer signal classifiers, plus context-bounded polling.
+    - The `bitriver.service-resilience/v1` validator requires all seven named
+      scenarios, non-negative degradation/recovery timings, passing durable-
+      state and restart-stability results, complete isolation/teardown flags,
+      explicit remaining acceptance, and absence of every supplied private
+      sentinel before its atomic JSON report is published.
+    - Nine focused tests passed with Go 1.26.0: cookie/fixture persistence,
+      readiness and ingest-status classification, timeout refusal, report
+      completeness/timing/secret refusal, stable restart-count comparison,
+      staged private-environment handling, redacted log tails, and host build-
+      policy isolation, and in-repository report-path protection.
+
+- [x] Task 3 - Orchestrate deterministic service failures and real recovery
+  - Acceptance criteria:
+    - The isolated canonical stack experiences bounded stop/start failures for
+      API, Postgres, Redis, SRS/controller, OME, transcoder, and viewer paths.
+    - Every scenario proves its expected degradation, recovery, durable-state
+      invariants, and absence of a restart loop; retained evidence is secret-
+      scanned and teardown leaves no test containers or volumes.
+  - Check:
+    - `scripts/test-service-resilience.sh` now runs the Go orchestrator against
+      a clean `git archive` tree with a copied private environment, dedicated
+      host ports, staged API/transcoder binds, project-scoped Postgres/Redis
+      volumes, canonical-container collision refusal, bounded commands/probes,
+      private redacted logs, and guaranteed Compose teardown.
+    - The first dry runs exposed and fixed three harness defects before fault
+      injection: Windows stdout-pipe Git archive deadlock, metadata-only PAX
+      header handling, and leaked host `GOPROXY=off` build policy. The first
+      live baseline then correctly caught a staged OME listener/API endpoint
+      mismatch; both are now aligned without changing the deployment contract.
+    - The complete real-stack rehearsal passed all seven scenarios. Measured
+      recovery was API 3.039s, Postgres 1.459s, Redis 1.440s, SRS/controller
+      2.176s, OvenMediaEngine 2.853s, transcoder 2.347s, and viewer 4.121s.
+      Every outage produced its expected degradation, preserved the same
+      authenticated session/channel, and held all service restart counts stable.
+    - The secret-scanned `bitriver.service-resilience/v1` report contains seven
+      passing scenarios and explicit remaining acceptance. Teardown left zero
+      project containers, volumes, or private work directories. Root `.env`
+      and generated OME hashes remain exactly unchanged at
+      `9D57F716...AAC2` and `01C44166...B1D`.
+
+- [x] Task 4 - Align resilience and release guidance
+  - Acceptance criteria:
+    - Operator, release, testing, and draft release docs expose the opt-in
+      command/report and distinguish this local proof from remaining #1304 work.
+    - Documentation and scoped static checks pass.
+  - Check:
+    - Operations guidance now documents the isolated command, host/tool
+      prerequisites, collision refusal, private staging/storage model, seven
+      signal paths, durable-state and restart-loop assertions, Redis ephemeral
+      boundary, report schema, and exact remaining acceptance.
+    - Production-release, testing, and v1.2.3 draft guidance now require the
+      `bitriver.service-resilience/v1` local-build foundation without treating
+      it as exact-candidate, physical reboot, resource/partition, credential,
+      active-stream, or alert-delivery proof.
+    - Three Markdown-link unit tests and the complete 89-file tracked public
+      Markdown scan passed. Go helper tests, Git Bash syntax, scoped diff check,
+      and pinned ShellCheck v0.11.0 also passed.
+
+- [-] Task 5 - Run full gates and publish the focused resilience slice
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh`, protected CI, review, and squash merge pass
+      without touching operator-owned state or overclaiming #1304 completion.
+    - A staged environment always replaces an absolute operator
+      `BITRIVER_CONFIG_ROOT` with the disposable checkout root before Compose
+      can run writable SRS/OME config renderers.
+    - #1304 receives bounded evidence plus the exact remaining follow-up.
+  - Check:
+    - Literal `./scripts/verify.sh` passed with Go 1.26.0: repository hygiene,
+      release bundle, every first-party Go package, architecture/dependency
+      guards, release-set and Markdown checks, deployment invariants, Postgres
+      migration lifecycle, Compose rendering, exact local image builds, and the
+      complete quickstart smoke were green. Viewer checks were correctly
+      skipped because this slice does not touch `web/viewer`.
+    - The private root `.env` still lacks the two optional SRS/OME public route
+      values, so the local run supplied loopback defaults only to Docker through
+      an ignored temporary shim; test processes saw the real environment, and
+      the shim was deleted immediately after the gate.
+    - Pinned ShellCheck v0.11.0, nine focused Go helper tests, the complete
+      seven-outage real-stack rehearsal, secret-safe report validation, and
+      post-run container/volume/network/hash checks passed. Root `.env` and
+      generated OME hashes remain unchanged; no test runtime residue remains.
+    - Protected CI passed on exact head `7e651718`; review then identified one
+      valid config-root isolation defect. Its focused regression, refreshed
+      full gate, review resolution, squash merge, and bounded #1304 handoff
+      remain.
+    - The review repair now derives an absolute staged config root from the
+      private destination and appends it as the effective
+      `BITRIVER_CONFIG_ROOT`. The focused helper suite and `go vet` passed with
+      a disposable repo-local Go cache.
+    - Refreshed literal `./scripts/verify.sh` passed with pinned Go 1.26.0 and
+      Docker 29.6.2: all Go packages, architecture/dependency guards, release
+      and documentation checks, deployment invariants, Postgres migrations,
+      Compose render, image builds, service health, and quickstart smoke were
+      green. A deleted ignored Docker-only shim supplied the two documented
+      loopback media URLs absent from the private root `.env`; tests continued
+      to receive the unmodified operator environment.
+
 ## Scoped change: packaged-host disaster-recovery foundation (#1299)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -111,7 +242,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       source-free disaster-recovery drill. Root `.env` and generated OME hashes
       remain exactly unchanged.
 
-- [-] Task 5 - Run full gates and publish the focused recovery slice
+- [x] Task 5 - Run full gates and publish the focused recovery slice
   - Acceptance criteria:
     - Literal `./scripts/verify.sh`, protected CI, review, and squash merge pass
       without touching operator-owned files or overclaiming #1299 completion.
@@ -138,7 +269,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       full Go, contract, migration, Compose, and quickstart gates; the private
       `.env` and generated OME hashes remain unchanged and no smoke containers
       remain.
-    - Protected CI, review, squash merge, and the bounded #1299 handoff remain.
+    - Protected run `31923999469` passed Ubuntu aggregate verification,
+      secrets/docs/ShellCheck, all three quickstart entrypoints on Ubuntu,
+      macOS, and Windows, and the enforced high-risk merge gate. All four review
+      threads were resolved; PR #1396 squash-merged as
+      `730cc0e8403ae1a8c7c1cb1e29a316b99a43bc5a`, and #1299 received bounded
+      evidence while remaining open for next-candidate artifact qualification,
+      recovered-stack production golden path, and scheduled off-host RPO proof.
 
 ## Scoped change: exact-image Compose upgrade and rollback rehearsal (#1298)
 

@@ -257,6 +257,29 @@ prior release on the clean-host package path, including reboot evidence.
 Reclassify rollback for every migration-changing candidate; never reuse
 RC19-to-RC20's in-place decision for a different schema pair.
 
+### Single-host service resilience release gates
+
+Run the isolated local-build foundation before publishing a candidate:
+
+```bash
+./scripts/test-service-resilience.sh \
+  --report .artifacts/service-resilience/report.json
+```
+
+Require a passing `bitriver.service-resilience/v1` report with all seven API,
+Postgres, Redis, SRS/controller, OvenMediaEngine, transcoder, and viewer
+scenarios. Every scenario must contain the expected degradation signal, bounded
+recovery duration, preserved session/channel identity, stable restart counts,
+and passing teardown/isolation evidence. Treat Redis queue/rate-limit loss as
+the documented ephemeral boundary rather than a durable-state success claim.
+
+The local-build report is necessary but not sufficient for stable promotion.
+Rerun the rehearsal from the exact immutable candidate on the clean target
+host and bind that evidence to the candidate release-set hash. Also retain the
+physical Docker-daemon/host reboot, network/resource pressure, credential and
+control-plane failure, active-stream continuity, and alert-delivery results
+required by #1304. A source-tree stop/start pass must not close those gates.
+
 ## 2. Tag one immutable candidate and trigger the build workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.
