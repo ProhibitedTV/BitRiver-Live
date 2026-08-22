@@ -78,6 +78,9 @@ class RecoveredStackTest(unittest.TestCase):
         recovered.activate_restored_database(
             self.environment, self.metadata, self.runtime_environment
         )
+        self.expected_postgres_image = json.loads(
+            self.metadata.read_text(encoding="utf-8")
+        )["expectedServiceImages"]["postgres"]
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -128,6 +131,7 @@ class RecoveredStackTest(unittest.TestCase):
                         "asset": {"name": "bitriver-launcher-linux-amd64.tar.gz"},
                         "exercisedBundle": {"fileCount": 53},
                     },
+                    "postgresRestoreHelperImage": self.expected_postgres_image,
                     "recoveredPostgres": {
                         "sourceRelease": RELEASE,
                         "sourceCommit": COMMIT,
@@ -264,10 +268,21 @@ class RecoveredStackTest(unittest.TestCase):
         wrapper = (Path(__file__).parent / "test-recovered-stack-golden-path.sh").read_text(
             encoding="utf-8"
         )
+        lost_host = (Path(__file__).parent / "test-disaster-recovery.sh").read_text(
+            encoding="utf-8"
+        )
         self.assertNotIn("apk add", wrapper)
         self.assertNotIn("docker cp", wrapper)
+        self.assertNotIn("apk add", lost_host)
+        self.assertNotIn("docker cp", lost_host)
         self.assertGreaterEqual(wrapper.count("--read-only"), 2)
         self.assertGreaterEqual(wrapper.count("--entrypoint /bin/sh"), 2)
+        self.assertIn('--network "container:$postgres_container"', lost_host)
+        self.assertIn('"$postgres_image" /restore-postgres.sh', lost_host)
+        self.assertIn('--postgres-restore-helper-image "$postgres_image"', lost_host)
+        self.assertIn(
+            'BITRIVER_DISASTER_POSTGRES_IMAGE="$seed_postgres_image"', wrapper
+        )
         self.assertIn('--runtime-postgres-helper-image "$runtime_postgres_image"', wrapper)
         self.assertIn(
             '--config-root "$(native_path "$recovered_root")/etc/bitriver-live"',
@@ -309,6 +324,10 @@ class RecoveredStackTest(unittest.TestCase):
         self.assertEqual(report["observed"]["goldenPathSeconds"], 92)
         self.assertTrue(report["recoveredRuntime"]["verified"])
         self.assertEqual(
+            report["recoveredRuntime"]["originalPostgresRestoreHelperImage"],
+            self.expected_postgres_image,
+        )
+        self.assertEqual(
             report["recoveredRuntime"]["runtimePostgresRestoreHelperImage"],
             json.loads(self.metadata.read_text(encoding="utf-8"))[
                 "expectedServiceImages"
@@ -327,6 +346,15 @@ class RecoveredStackTest(unittest.TestCase):
         fixtures["images"].write_text(json.dumps(images), encoding="utf-8")
         with self.assertRaisesRegex(recovered.RecoveredStackError, "images do not match"):
             self.complete(fixtures, self.root / "bad-images.json")
+
+        fixtures = self.evidence_fixtures()
+        disaster = json.loads(fixtures["disaster"].read_text(encoding="utf-8"))
+        disaster["postgresRestoreHelperImage"] = (
+            "postgres:15-alpine@sha256:" + "f" * 64
+        )
+        fixtures["disaster"].write_text(json.dumps(disaster), encoding="utf-8")
+        with self.assertRaisesRegex(recovered.RecoveredStackError, "helper image"):
+            self.complete(fixtures, self.root / "bad-original-helper-image.json")
 
         fixtures = self.evidence_fixtures()
         with self.assertRaisesRegex(recovered.RecoveredStackError, "helper image"):

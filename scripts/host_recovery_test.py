@@ -20,6 +20,7 @@ except ModuleNotFoundError:
 
 RELEASE = "v1.2.3-rc.21"
 COMMIT = "a" * 40
+POSTGRES_IMAGE = "postgres:15-alpine@sha256:" + "e" * 64
 
 
 def sha256(path: Path) -> str:
@@ -125,6 +126,16 @@ class HostRecoveryTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_disaster_report_requires_digest_pinned_restore_helper(self) -> None:
+        with self.assertRaisesRegex(recovery.RecoveryError, "digest-pinned"):
+            recovery.build_disaster_report(
+                argparse.Namespace(
+                    source_release=RELEASE,
+                    source_commit=COMMIT,
+                    postgres_restore_helper_image="postgres:15-alpine",
+                )
+            )
 
     def test_manifest_is_secret_safe_and_complete(self) -> None:
         manifest = recovery.verify_backup_set(
@@ -371,6 +382,7 @@ class HostRecoveryTest(unittest.TestCase):
                 destroyed_source_root=self.root / "destroyed-source",
                 source_release=RELEASE,
                 source_commit=COMMIT,
+                postgres_restore_helper_image=POSTGRES_IMAGE,
                 started_at_epoch=int(dt.datetime.now(dt.timezone.utc).timestamp()),
                 output=output,
             )
@@ -379,6 +391,7 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertEqual(report["schemaVersion"], recovery.DISASTER_REPORT_SCHEMA)
         self.assertEqual(report["status"], "passed")
         self.assertTrue(report["bundle"]["sourceFree"])
+        self.assertEqual(report["postgresRestoreHelperImage"], POSTGRES_IMAGE)
         self.assertEqual(report["observed"]["hostRpoSeconds"], 12)
         self.assertEqual(report["observed"]["postgresRpoSeconds"], 37)
         self.assertEqual(report["observed"]["rpoSeconds"], 37)
@@ -452,6 +465,7 @@ class HostRecoveryTest(unittest.TestCase):
                 destroyed_source_root=self.root / "destroyed-source",
                 source_release=RELEASE,
                 source_commit=COMMIT,
+                postgres_restore_helper_image=POSTGRES_IMAGE,
                 release_set=release_set,
                 package_archive=package,
                 started_at_epoch=int(dt.datetime.now(dt.timezone.utc).timestamp()),
@@ -502,6 +516,7 @@ class HostRecoveryTest(unittest.TestCase):
                     destroyed_source_root=self.root / "destroyed-source",
                     source_release=RELEASE,
                     source_commit=COMMIT,
+                    postgres_restore_helper_image=POSTGRES_IMAGE,
                     started_at_epoch=int(dt.datetime.now(dt.timezone.utc).timestamp()),
                     output=output,
                 )
@@ -537,6 +552,7 @@ class HostRecoveryTest(unittest.TestCase):
                     destroyed_source_root=self.root / "destroyed-source",
                     source_release=RELEASE,
                     source_commit=COMMIT,
+                    postgres_restore_helper_image=POSTGRES_IMAGE,
                     started_at_epoch=int(dt.datetime.now(dt.timezone.utc).timestamp()),
                     output=output,
                 )

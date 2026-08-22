@@ -364,6 +364,7 @@ active_root=""
 
 recovery_started="$(date +%s)"
 BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR="$initial_evidence" \
+  BITRIVER_DISASTER_POSTGRES_IMAGE="$seed_postgres_image" \
   bash "$script_dir/test-disaster-recovery.sh" \
     --bundle-root "$bundle_root" \
     --release-set "$release_set" \

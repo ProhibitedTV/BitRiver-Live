@@ -119,7 +119,16 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       existed. The wrapper now canonicalizes the existing recovered root and
       appends `/etc/bitriver-live`; a focused source regression, Python suite,
       Bash syntax, pinned ShellCheck, and `git diff --check` pass.
-    - Literal `./scripts/verify.sh` passes again on the reviewed final diff,
+    - The subsequent exact-head P2 found that the nested original lost-host
+      restore still installed packages and injected scripts into its database
+      container. That phase now uses a disposable read-only, capability-dropped
+      `/bin/sh` helper with narrow mounts and the same digest-pinned Postgres
+      image; the disaster report records it and final completion requires both
+      original/runtime helper images to equal the release set. Fourteen focused
+      Python tests (one platform skip), compilation, Bash syntax, pinned
+      ShellCheck, `git diff --check`, and the real staged lost-host rehearsal
+      pass with the unmodified database container.
+    - Literal `./scripts/verify.sh` passes on the final nested-helper diff,
       including all Go/script packages, release/docs/contract/CI guards,
       Postgres migrations, Compose render, and canonical quickstart smoke. The
       temporary isolated `.env` was removed and primary contract hashes remain

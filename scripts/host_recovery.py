@@ -32,6 +32,7 @@ RELEASE_PATTERN = re.compile(
 )
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+IMAGE_DIGEST_PATTERN = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 CONFIG_RELATIVE = PurePosixPath("etc/bitriver-live")
 DATA_RELATIVE = PurePosixPath("var/lib/bitriver-live")
@@ -785,6 +786,8 @@ def build_restore_report(args: argparse.Namespace) -> None:
 
 def build_disaster_report(args: argparse.Namespace) -> None:
     validate_identity(args.source_release, args.source_commit)
+    if not IMAGE_DIGEST_PATTERN.fullmatch(args.postgres_restore_helper_image):
+        raise RecoveryError("Postgres restore helper image must be digest-pinned")
     release_set_path = getattr(args, "release_set", None)
     package_archive = getattr(args, "package_archive", None)
     if bool(release_set_path) != bool(package_archive):
@@ -905,6 +908,7 @@ def build_disaster_report(args: argparse.Namespace) -> None:
             "verified": False,
             "releaseSetSignatureVerified": False,
         },
+        "postgresRestoreHelperImage": args.postgres_restore_helper_image,
         "recoveredPostgres": postgres_binding,
         "stages": [
             {"id": "encrypted-host-restore", "status": "passed"},
@@ -979,6 +983,7 @@ def build_parser() -> argparse.ArgumentParser:
     disaster.add_argument("--destroyed-source-root", type=Path, required=True)
     disaster.add_argument("--source-release", required=True)
     disaster.add_argument("--source-commit", required=True)
+    disaster.add_argument("--postgres-restore-helper-image", required=True)
     disaster.add_argument("--release-set", type=Path)
     disaster.add_argument("--package-archive", type=Path)
     disaster.add_argument("--started-at-epoch", type=int, required=True)

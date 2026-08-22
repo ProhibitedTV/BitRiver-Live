@@ -217,7 +217,7 @@ Before tagging production releases, prove backup/restore readiness:
 Keep this evidence attached to the release ticket/change request before maintenance begins. Run the local source-free
 foundation with `BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR=.artifacts/disaster-recovery ./scripts/test-disaster-recovery.sh`,
 but do not substitute that staged-bundle result for the required exact published-package and recovered-stack product proof.
-Run the latter with `./scripts/test-recovered-stack-golden-path.sh --release TAG --source-commit SHA --release-set-sha256 SHA256 --artifact-dir DIR` and retain its secret-scanned completion report, including the exact disposable Postgres restore-helper image identity.
+Run the latter with `./scripts/test-recovered-stack-golden-path.sh --release TAG --source-commit SHA --release-set-sha256 SHA256 --artifact-dir DIR` and retain its secret-scanned completion report, including both exact disposable Postgres restore-helper image identities.
 The full encrypted workflow and immutable-input boundary are described in
 [`docs/operations.md`](operations.md#encrypted-packaged-host-recovery-set).
 

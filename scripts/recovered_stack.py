@@ -446,6 +446,11 @@ def complete_disaster_report(
     expected_images = metadata.get("expectedServiceImages")
     if not isinstance(expected_images, dict) or observed_images != expected_images:
         raise RecoveredStackError("observed recovered-stack images do not match the release set")
+    original_postgres_helper_image = disaster.get("postgresRestoreHelperImage")
+    if original_postgres_helper_image != expected_images.get("postgres"):
+        raise RecoveredStackError(
+            "original Postgres restore helper image does not match the release set"
+        )
     if runtime_postgres_helper_image != expected_images.get("postgres"):
         raise RecoveredStackError(
             "runtime Postgres restore helper image does not match the release set"
@@ -468,6 +473,7 @@ def complete_disaster_report(
         "verified": True,
         "inputSha256": sha256_file(metadata_path),
         "originalDisasterReportSha256": sha256_file(disaster_report_path),
+        "originalPostgresRestoreHelperImage": original_postgres_helper_image,
         "runtimePostgresRestoreReportSha256": sha256_file(runtime_postgres_report_path),
         "runtimePostgresRestoreHelperImage": runtime_postgres_helper_image,
         "postgresBackup": postgres_binding,

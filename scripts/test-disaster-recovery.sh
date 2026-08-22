@@ -116,12 +116,13 @@ postgres_report="$workdir/postgres-restore-report.json"
 disaster_report="$workdir/disaster-recovery-report.json"
 retained_artifact_dir="${BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR:-}"
 postgres_container="bitriver-disaster-recovery-${RANDOM}-$$"
+postgres_restore_helper="${postgres_container}-restore"
 postgres_image="${BITRIVER_DISASTER_POSTGRES_IMAGE:-postgres:15-alpine@sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23}"
 started_at_epoch="$(date -u +%s)"
 secret_sentinel="disaster-recovery-secret-e1d18f74"
 
 cleanup() {
-  docker rm -f "$postgres_container" >/dev/null 2>&1 || true
+  docker rm -f "$postgres_restore_helper" "$postgres_container" >/dev/null 2>&1 || true
   rm -rf -- "$workdir"
 }
 trap cleanup EXIT
@@ -131,24 +132,24 @@ fail() {
   exit 1
 }
 
+[[ $postgres_image =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
+  fail "disaster recovery Postgres image must be digest-pinned"
+
 docker_exec() {
   MSYS_NO_PATHCONV=1 docker exec "$@"
 }
 
-docker_cp_from_host() {
-  local source=$1 destination=$2
-  if [[ $windows_posix_compat == true ]]; then
-    source="$(cygpath -w "$source")"
-  fi
-  MSYS_NO_PATHCONV=1 docker cp "$source" "$destination"
+docker_run() {
+  MSYS_NO_PATHCONV=1 docker run "$@"
 }
 
-docker_cp_to_host() {
-  local source=$1 destination=$2
+native_path() {
+  local path=$1
   if [[ $windows_posix_compat == true ]]; then
-    destination="$(cygpath -w "$destination")"
+    cygpath -m "$path"
+  else
+    printf '%s\n' "$path"
   fi
-  MSYS_NO_PATHCONV=1 docker cp "$source" "$destination"
 }
 
 wait_for_postgres() {
@@ -444,28 +445,34 @@ docker run -d --name "$postgres_container" \
   -e POSTGRES_PASSWORD=disaster-recovery-postgres \
   "$postgres_image" >/dev/null
 wait_for_postgres
-docker_exec "$postgres_container" apk add --no-cache bash coreutils >/dev/null
-docker_exec "$postgres_container" mkdir -p /recovery
-docker_cp_from_host "$install_root/scripts/restore-postgres.sh" \
-  "$postgres_container:/restore-postgres.sh" >/dev/null
 recovered_postgres_root="$target_host/var/backups/bitriver-live/recovery/postgres"
 for recovered_postgres_file in \
   "$recovered_postgres_root/$postgres_name" \
   "$recovered_postgres_root/${postgres_name}.manifest.json" \
   "$recovered_postgres_root/${postgres_name}.sha256"; do
   [[ -f $recovered_postgres_file ]] || fail "recovered Postgres set is incomplete"
-  docker_cp_from_host "$recovered_postgres_file" \
-    "$postgres_container:/recovery/$(basename "$recovered_postgres_file")" >/dev/null
 done
-docker_exec \
+postgres_restore_evidence="$workdir/postgres-restore-evidence"
+mkdir -p "$postgres_restore_evidence"
+docker_run --rm --name "$postgres_restore_helper" \
+  --network "container:$postgres_container" \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --mount "type=bind,source=$(native_path "$install_root/scripts/restore-postgres.sh"),target=/restore-postgres.sh,readonly" \
+  --mount "type=bind,source=$(native_path "$recovered_postgres_root"),target=/recovery,readonly" \
+  --mount "type=bind,source=$(native_path "$postgres_restore_evidence"),target=/evidence" \
   -e BITRIVER_BACKUP_POSTGRES_HOST=127.0.0.1 \
   -e BITRIVER_BACKUP_POSTGRES_USER=postgres \
   -e BITRIVER_BACKUP_POSTGRES_PASSWORD=disaster-recovery-postgres \
   -e BITRIVER_RESTORE_REHEARSAL_DB=bitr_disaster_recovered \
   -e BITRIVER_RESTORE_KEEP_DB=1 \
   -e BITRIVER_RESTORE_EXPECT_RELEASE="$source_release" \
-  -e BITRIVER_RESTORE_REPORT_PATH=/recovery/postgres-restore-report.json \
-  "$postgres_container" /bin/bash /restore-postgres.sh "/recovery/$postgres_name"
+  -e BITRIVER_RESTORE_REPORT_PATH=/evidence/postgres-restore-report.json \
+  --entrypoint /bin/sh \
+  "$postgres_image" /restore-postgres.sh "/recovery/$postgres_name"
+cp "$postgres_restore_evidence/postgres-restore-report.json" "$postgres_report"
 
 users="$(
   docker_exec -e PGPASSWORD=disaster-recovery-postgres \
@@ -493,9 +500,6 @@ else
   [[ $object_fixture == 'uploads/fixture.mp4|4096' ]] ||
     fail "fresh-host Postgres restore lost object metadata"
 fi
-docker_cp_to_host "$postgres_container:/recovery/postgres-restore-report.json" \
-  "$postgres_report" >/dev/null
-
 disaster_report_args=(
   disaster-report
   --host-report "$host_report" \
@@ -507,6 +511,7 @@ disaster_report_args=(
   --destroyed-source-root "$source_host" \
   --source-release "$source_release" \
   --source-commit "$source_commit" \
+  --postgres-restore-helper-image "$postgres_image" \
   --started-at-epoch "$started_at_epoch" \
   --output "$disaster_report"
 )
