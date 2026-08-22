@@ -194,7 +194,7 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 		`"next": "16.3.0"`,
 		`"react": "19.2.8"`,
 		`"react-dom": "19.2.8"`,
-		`"@types/node": "26.1.2"`,
+		`"@types/node": "26.2.0"`,
 		`"eslint": "9.39.5"`,
 		`"typescript": "6.0.3"`,
 		`"postcss": "8.5.22"`,
