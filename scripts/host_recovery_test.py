@@ -382,6 +382,17 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertEqual(report["observed"]["hostRpoSeconds"], 12)
         self.assertEqual(report["observed"]["postgresRpoSeconds"], 37)
         self.assertEqual(report["observed"]["rpoSeconds"], 37)
+        self.assertEqual(
+            report["recoveredPostgres"],
+            {
+                "sourceRelease": RELEASE,
+                "sourceCommit": COMMIT,
+                "archive": self.postgres.name,
+                "archiveSha256": sha256(self.postgres),
+                "manifest": self.postgres_manifest.name,
+                "manifestSha256": sha256(self.postgres_manifest),
+            },
+        )
         self.assertFalse(report["publishedPackage"]["verified"])
         self.assertIn(
             "exact published release-set package qualification",

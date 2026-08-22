@@ -905,6 +905,7 @@ def build_disaster_report(args: argparse.Namespace) -> None:
             "verified": False,
             "releaseSetSignatureVerified": False,
         },
+        "recoveredPostgres": postgres_binding,
         "stages": [
             {"id": "encrypted-host-restore", "status": "passed"},
             {"id": "fresh-package-install", "status": "passed"},
