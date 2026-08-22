@@ -23,6 +23,10 @@
   untouched. Fail closed when any
   canonical fixed-name container already exists; always tear down the isolated
   stack and evidence work directory unless retention is explicitly requested.
+- Review hardening must pin `BITRIVER_CONFIG_ROOT` to the staged checkout root.
+  A copied packaged/custom environment may otherwise retain an absolute
+  operator config path and let the disposable SRS/OME renderers rewrite live
+  generated configuration outside the rehearsal boundary.
 
 ### Risks and boundaries
 
@@ -45,7 +49,8 @@
 
 - Add focused helper tests for cookie persistence, readiness and ingest-status
   classification, durable-state checks, restart-count stabilization, report
-  validation, timeout/failure reporting, and secret rejection.
+  validation, timeout/failure reporting, secret rejection, and an absolute
+  operator config-root override that resolves only to the staged tree.
 - Run Bash syntax and pinned ShellCheck over the orchestrator, then execute the
   complete build-mode Compose rehearsal with real Postgres/Redis/media services
   and verify no canonical containers or test volumes remain afterward.

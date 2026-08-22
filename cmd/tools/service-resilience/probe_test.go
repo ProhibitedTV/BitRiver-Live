@@ -127,7 +127,8 @@ func TestPrivateSentinelsAndStagedEnvironment(t *testing.T) {
 	source := filepath.Join(directory, "source.env")
 	destination := filepath.Join(directory, "staged.env")
 	privatePassword := "private-password-value"
-	payload := "BITRIVER_POSTGRES_PASSWORD=" + privatePassword + "\nBITRIVER_LIVE_PORT=8080\n"
+	operatorConfigRoot := filepath.ToSlash(filepath.Join(directory, "operator-config"))
+	payload := "BITRIVER_POSTGRES_PASSWORD=" + privatePassword + "\nBITRIVER_LIVE_PORT=8080\nBITRIVER_CONFIG_ROOT=" + operatorConfigRoot + "\n"
 	if err := os.WriteFile(source, []byte(payload), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +152,10 @@ func TestPrivateSentinelsAndStagedEnvironment(t *testing.T) {
 		!strings.Contains(text, "BITRIVER_OME_API=http://ome:28081") ||
 		!strings.Contains(text, "BITRIVER_LIVE_IMAGE_DIGEST=\n") {
 		t.Fatal("staged environment lacks isolated port or mutable-image override")
+	}
+	stagedConfigRoot := "BITRIVER_CONFIG_ROOT=" + filepath.ToSlash(directory)
+	if strings.LastIndex(text, "BITRIVER_CONFIG_ROOT=") != strings.LastIndex(text, stagedConfigRoot) {
+		t.Fatalf("staged environment did not replace operator config root with %q", stagedConfigRoot)
 	}
 	if !strings.Contains(text, privatePassword) {
 		t.Fatal("staged environment did not preserve private contract values")

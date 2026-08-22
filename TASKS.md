@@ -96,6 +96,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Acceptance criteria:
     - Literal `./scripts/verify.sh`, protected CI, review, and squash merge pass
       without touching operator-owned state or overclaiming #1304 completion.
+    - A staged environment always replaces an absolute operator
+      `BITRIVER_CONFIG_ROOT` with the disposable checkout root before Compose
+      can run writable SRS/OME config renderers.
     - #1304 receives bounded evidence plus the exact remaining follow-up.
   - Check:
     - Literal `./scripts/verify.sh` passed with Go 1.26.0: repository hygiene,
@@ -112,7 +115,21 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       seven-outage real-stack rehearsal, secret-safe report validation, and
       post-run container/volume/network/hash checks passed. Root `.env` and
       generated OME hashes remain unchanged; no test runtime residue remains.
-    - Protected CI, review, squash merge, and the bounded #1304 handoff remain.
+    - Protected CI passed on exact head `7e651718`; review then identified one
+      valid config-root isolation defect. Its focused regression, refreshed
+      full gate, review resolution, squash merge, and bounded #1304 handoff
+      remain.
+    - The review repair now derives an absolute staged config root from the
+      private destination and appends it as the effective
+      `BITRIVER_CONFIG_ROOT`. The focused helper suite and `go vet` passed with
+      a disposable repo-local Go cache.
+    - Refreshed literal `./scripts/verify.sh` passed with pinned Go 1.26.0 and
+      Docker 29.6.2: all Go packages, architecture/dependency guards, release
+      and documentation checks, deployment invariants, Postgres migrations,
+      Compose render, image builds, service health, and quickstart smoke were
+      green. A deleted ignored Docker-only shim supplied the two documented
+      loopback media URLs absent from the private root `.env`; tests continued
+      to receive the unmodified operator environment.
 
 ## Scoped change: packaged-host disaster-recovery foundation (#1299)
 

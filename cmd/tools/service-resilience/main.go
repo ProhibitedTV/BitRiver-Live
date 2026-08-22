@@ -538,9 +538,14 @@ func stagePrivateEnvironment(source, destination, commit string) error {
 	if err != nil {
 		return fmt.Errorf("read private environment: %w", err)
 	}
+	stagedConfigRoot, err := filepath.Abs(filepath.Dir(destination))
+	if err != nil {
+		return fmt.Errorf("resolve staged config root: %w", err)
+	}
 	overrides := []string{
 		"BITRIVER_DEPLOY_IMAGE_SOURCE=build",
 		"BITRIVER_IMAGE_NAMESPACE=bitriver-resilience",
+		"BITRIVER_CONFIG_ROOT=" + filepath.ToSlash(stagedConfigRoot),
 		"BITRIVER_LIVE_IMAGE_TAG=local",
 		"BITRIVER_VIEWER_IMAGE_TAG=local",
 		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG=local",
