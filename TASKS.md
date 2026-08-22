@@ -1,5 +1,120 @@
 # TASKS
 
+## Scoped change: reusable single-host capacity qualification harness (#1303)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Bound the executable roadmap slice and measurement contract
+  - Acceptance criteria:
+    - Current roadmap state, target-host availability, reusable product/media
+      helpers, metrics, resource overlays, sizing claims, and evidence gaps are
+      mapped before implementation.
+    - `PLAN.md` records workload, safety, secret, collector, test, and honest
+      target-host claim boundaries.
+  - Check:
+    - #1297's remaining physical XOA/Nginx Proxy Manager/browser/media/reboot
+      acceptance has no configured endpoint or access authority in the repo.
+      #1303's latest roadmap checkpoint explicitly unblocks reusable harness
+      implementation against signed RC20 while target-host measurement waits.
+    - The production golden path already supplies public-interface account,
+      channel, RTMP, HLS, chat, VOD, polling, sanitization, and evidence helpers.
+      Existing API metrics cover HTTP, ingest, chat, transcode, and viewer QoE;
+      host/Docker sampling must remain a separately identified co-located
+      collector rather than an inferred claim.
+
+- [x] Task 2 - Implement and validate scenario/evidence contracts
+  - Acceptance criteria:
+    - A versioned checked-in RC scenario defines bounded warm-up, steady,
+      spike, and soak phases plus explicit stop conditions and workload caps.
+    - Candidate identity, scenario hashing, metric/resource parsing, threshold
+      evaluation, latency summaries, atomic reports, and secret refusal have
+      focused tests.
+  - Check:
+    - `bitriver.capacity-scenario/v1` now requires an exact JSON shape, unique
+      named phases, 1-60s sampling, explicit protection thresholds, and hard
+      caps of 16 publishers, 512 viewers, 100 API requests/s, 50 chat
+      messages/s, one hour per phase, and four hours total. The checked-in RC
+      ramp is 240s, peaks at two 1080p publishers and 12 virtual viewers, and
+      retains warm-up, steady-state, spike, and soak phases.
+    - Candidate parsing requires an exact prerelease tag, 64-hex release-set
+      hash, and 40-hex source commit. Live evidence additionally hashes the
+      supplied release-set bytes and validates tag, commit, five first-party
+      candidate references/digests, and the signature-asset reference while
+      leaving signature and target runtime-image verification to their owning
+      release/target collectors. Canonical JSON hashing is whitespace-
+      independent; Prometheus, percentage, Docker byte-pair, latency, and
+      persistent stop-threshold helpers reject malformed or unsafe input.
+    - `bitriver.capacity-report/v1` binds the exact candidate and scenario,
+      identifies application/load-client/host/Docker collector status, keeps
+      unproven claims explicit, writes atomically, and refuses raw or encoded
+      private sentinels. All 33 focused tests and Python bytecode compilation
+      pass; a candidate-shaped dry run wrote a valid planned report.
+
+- [x] Task 3 - Execute concurrent public-interface workloads safely
+  - Acceptance criteria:
+    - The harness ramps synthetic 1080p publishers, HLS virtual viewers, and
+      authenticated chat/API traffic against a dedicated running stack.
+    - Bounded sampling and stop conditions terminate every worker/publisher on
+      success, failure, signal, or threshold breach, and retained results name
+      every unavailable collector or unproven claim.
+  - Check:
+    - Live mode provisions one private creator/viewer pair and the maximum
+      scenario channel set, ramps deterministic 1920x1080 RTMP publishers,
+      assigns HLS playlist/segment workers across active publishers, and runs
+      paced anonymous channel-directory plus authenticated chat traffic.
+    - Each bounded sample records readiness/health, selected protected
+      Prometheus aggregates, per-load-type attempts/errors/bytes/latency, and
+      optional Linux host/project-scoped Docker resources. Persistent health,
+      error-rate, CPU, memory, container-memory, or disk breaches stop the run;
+      early publisher exits fail with sanitized context.
+    - A threaded mock public stack exercised signup, channel creation, RTMP
+      child lifecycle, live playback discovery, protected metrics, HLS master/
+      media/segment delivery, API/chat load, sampling, passed report validation,
+      secret exclusion, and unconditional publisher cleanup. The focused suite
+      now passes 33 tests in 1.8s, including exact release-set byte/inventory
+      binding, bounded/disclosed latency sampling, configured-load delivery,
+      active-gauge parity, and zero-stream/transcoder-job drain before success.
+
+- [x] Task 4 - Package the opt-in command and document operator evidence
+  - Acceptance criteria:
+    - Host and Docker-client entrypoints support dry-run validation and a live
+      dedicated-stack run without changing the deployment contract.
+    - Testing/operations docs explain identity inputs, safety caps, report
+      schema, collector boundaries, cleanup, and remaining target-host proof.
+  - Check:
+    - `scripts/test-capacity-qualification.sh` defaults to dry-run, requires
+      exact candidate identity in every mode, and requires protected metrics
+      and release-set files plus `--confirm-dedicated-environment` before live
+      load. Host and Docker clients share the existing Python/FFmpeg image; the
+      path always rewrites returned loopback media URLs and cannot claim
+      co-located collectors.
+    - Host and rebuilt Docker-client candidate-shaped dry runs both wrote a
+      planned report and passed the repository evidence scanner. Bash syntax,
+      pinned ShellCheck 0.11.0, Python compilation, and the Markdown link check
+      over
+      89 tracked public files pass.
+    - Testing and operations guidance now documents hard caps, exact identity,
+      live fixture persistence, report fields, threshold/cleanup behavior,
+      collector provenance, co-located overhead, and the still-unproven VOD,
+      browser/WebRTC, direct dependency/encoder, physical-host, SLO, 4K, and
+      supported-envelope claims.
+
+- [-] Task 5 - Verify, publish, and merge the harness slice
+  - Acceptance criteria:
+    - Focused tests, syntax/static checks, evidence scan, dry-run client proof,
+      literal `./scripts/verify.sh`, protected CI, and squash merge pass.
+    - #1303 receives a bounded handoff that keeps physical-host measurements
+      and conservative supported limits open.
+  - Check:
+    - Local focused proof passes: 33 Python tests, bytecode compilation, host
+      and rebuilt Docker dry runs plus evidence scans, Bash syntax, pinned
+      ShellCheck 0.11.0, 89-file Markdown links, and `git diff --check`.
+    - Literal `./scripts/verify.sh` passes with the exact Go 1.26.0 toolchain
+      and Docker 29.6.2, including Go/release/docs/contract guards, all Go
+      packages, Postgres migrations, Compose rendering, exact local image
+      builds, and healthy API/viewer quickstart smoke. Protected PR evidence,
+      squash merge, and the bounded #1303 handoff remain pending.
+
 ## Scoped change: viewer tooling dependency refresh (#1398)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -18,7 +133,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       and lint packages. Node 24, npm 11, Next/React runtime dependencies, and
       the deployment contract remain unchanged by this PR.
 
-- [-] Task 2 - Align the baseline, verify the clean graph, and merge
+- [x] Task 2 - Align the baseline, verify the clean graph, and merge
   - Acceptance criteria:
     - The runtime-baseline assertion matches the intentional type package pin.
     - Focused viewer checks, literal full verification, protected CI, and
@@ -40,9 +155,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Windows, arm64 viewer, image-scan, quickstart, viewer, secret, and change
       detection check. Its merge-gate job failed only because the generated
       Dependabot body lacked the repository release scorecard.
-    - PR #1398 now records the required medium-risk build/viewer
-      classification, validation evidence, unchanged deployment boundary, and
-      no operator-facing impact. A fresh protected run and squash merge remain.
+    - PR #1398 recorded the required medium-risk build/viewer classification,
+      validation evidence, unchanged deployment boundary, and no operator-
+      facing impact. Fresh protected run 32550653957 passed, and GitHub squash-
+      merged the PR as `44370302` on 2026-08-21.
 
 ## Scoped change: deterministic single-host service restart rehearsal (#1304)
 

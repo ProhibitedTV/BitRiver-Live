@@ -1,5 +1,86 @@
 # PLAN
 
+## Current scope - reusable single-host capacity qualification harness (#1303) (2026-08-21)
+
+- Implement the target-host harness foundation requested by the refreshed
+  roadmap: a versioned synthetic 1080p scenario, concurrent RTMP publishers,
+  HLS virtual viewers, authenticated chat/API activity, protected metrics
+  sampling, optional co-located Docker/host resource sampling, and a
+  machine-readable `bitriver.capacity-report/v1` evidence artifact.
+- Reuse the public-interface clients and synthetic media helpers from the
+  production golden path. The harness must not read the application database,
+  container filesystems, generated service configuration, or private operator
+  state. Private accounts, sessions, and stream keys are per-run sentinels and
+  may never appear in retained evidence.
+- Separate scenario definition from execution. A checked-in RC qualification
+  scenario defines warm-up, steady-state, spike, and bounded soak phases plus
+  explicit host-protection stop conditions. A dry-run validates and hashes the
+  exact scenario without contacting a stack; live execution requires the exact
+  independently verified `release-set.json` bytes, validates their declared
+  hash/tag/commit/five-image structure, and records every claimed collector
+  boundary. It does not replace the release gate's Sigstore verification or
+  infer that target containers match the release set.
+- Sample API health, Prometheus text metrics, request latency/error rates,
+  publisher state, viewer playlist/segment traffic, and load-client results at
+  a bounded interval. When the runner is co-located with the Compose host,
+  additionally collect host CPU/memory/disk and `docker stats`; otherwise mark
+  host/container resource evidence unavailable rather than inferring it.
+- Fail closed on invalid identities, unsafe workload sizes, unbounded phases,
+  mismatched release-set bytes, missing protected metrics authorization,
+  exceeded CPU/memory/disk/error thresholds, repeated health failures, early
+  publisher exit, incomplete samples, undrained application work, or secret-
+  bearing evidence. Always stop child publishers and load workers on success,
+  failure, or interruption.
+
+### Roadmap ordering and evidence boundary
+
+- #1297 remains the first production-acceptance issue, but the repository and
+  issue history expose no physical XOA/Nginx Proxy Manager endpoint or access
+  authority. Its remaining browser/media/firewall/reboot proof cannot be
+  manufactured locally. #1303 is explicitly unblocked for reusable harness
+  implementation against signed RC20 while the physical target is arranged.
+- This slice establishes an executable qualification instrument and may run a
+  bounded build-mode rehearsal. It does not publish a safe concurrency limit,
+  correct host-sizing claims, close #1303, or stand in for target-host RC20
+  measurements. Those require the exact supported physical host and its real
+  topology, followed by reviewed raw results and conservative headroom.
+- Do not change the canonical Compose/root-env/generated-OME contract, product
+  runtime, monitoring deployment, CI workflows, or default verification gate.
+  The harness is opt-in and targets an already-running canonical stack.
+
+### Risks and boundaries
+
+- Load generation can exhaust a developer or operator host. Enforce hard caps
+  in the scenario parser, require stop conditions for every live scenario,
+  ramp workloads by phase, and abort immediately when a configured protection
+  threshold persists. The checked-in RC scenario stays intentionally small.
+- Synthetic HLS fetchers measure HTTP/media delivery from the load client; they
+  are not full browser decoders and do not prove WebRTC, playback UX, CDN, or
+  browser compatibility. Those claims remain with #1307 and target-host media
+  acceptance.
+- API-level metrics do not expose host CPU, disk I/O, network, Postgres pool,
+  Redis, or encoder internals by themselves. The report must distinguish
+  direct host/Docker samples from application metrics and list uncollected
+  requirements explicitly.
+- Capacity fixtures persist normal test accounts/channels in the target stack.
+  Require a dedicated qualification environment and state that cleanup is a
+  disposable-environment responsibility; never target a live production data
+  set by default.
+
+### Test and rollout plan
+
+- Add focused Python tests for scenario schema/identity validation, phase and
+  stop-condition caps, Prometheus parsing, percent/resource parsing, latency
+  summaries, stop-trigger behavior, deterministic scenario hashes, atomic
+  sanitized reports, early-child cleanup, and secret refusal.
+- Run the checked-in scenario in dry-run mode through both the host wrapper and
+  Docker client image, then run a small disposable-stack rehearsal if local
+  Docker resources permit. Scan every retained artifact for sentinels.
+- Document the command, evidence schema, collector boundary, stop semantics,
+  honest non-claims, and target-host follow-up in testing/operations guidance.
+  Run Bash syntax/ShellCheck where available, Markdown links, focused tests,
+  literal `./scripts/verify.sh`, protected PR CI, and squash merge.
+
 ## Current scope - viewer tooling dependency refresh (#1398) (2026-08-21)
 
 - Reconcile the seven Dependabot development-tool updates with the repository's

@@ -31,6 +31,9 @@ scripts/
 scripts/*
 !scripts/check-postgres-pgx.sh
 !scripts/production_golden_path.py
+!scripts/capacity_qualification.py
+!scripts/capacity-scenarios/
+!scripts/capacity-scenarios/*.json
 docs/
 deploy/data/
 deploy/transcoder-data/

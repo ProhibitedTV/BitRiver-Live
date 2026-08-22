@@ -1,0 +1,49 @@
+{
+  "schema": "bitriver.capacity-scenario/v1",
+  "name": "rc-qualification-small",
+  "description": "Bounded release-candidate qualification ramp for a dedicated single-host environment.",
+  "sampleIntervalSeconds": 5,
+  "phases": [
+    {
+      "name": "warm-up",
+      "durationSeconds": 30,
+      "publishers": 1,
+      "viewersPerPublisher": 1,
+      "apiRequestsPerSecond": 1,
+      "chatMessagesPerSecond": 0
+    },
+    {
+      "name": "steady-state",
+      "durationSeconds": 60,
+      "publishers": 1,
+      "viewersPerPublisher": 4,
+      "apiRequestsPerSecond": 2,
+      "chatMessagesPerSecond": 1
+    },
+    {
+      "name": "spike",
+      "durationSeconds": 30,
+      "publishers": 2,
+      "viewersPerPublisher": 6,
+      "apiRequestsPerSecond": 4,
+      "chatMessagesPerSecond": 2
+    },
+    {
+      "name": "soak",
+      "durationSeconds": 120,
+      "publishers": 1,
+      "viewersPerPublisher": 4,
+      "apiRequestsPerSecond": 2,
+      "chatMessagesPerSecond": 1
+    }
+  ],
+  "stopConditions": {
+    "maxErrorRate": 0.05,
+    "maxConsecutiveHealthFailures": 3,
+    "maxHostCPUPercent": 90,
+    "maxHostMemoryPercent": 90,
+    "minHostDiskFreeBytes": 5368709120,
+    "maxContainerMemoryPercent": 95,
+    "thresholdBreachSamples": 3
+  }
+}

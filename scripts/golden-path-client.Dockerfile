@@ -8,5 +8,7 @@ RUN apt-get update \
 
 WORKDIR /harness
 COPY scripts/production_golden_path.py ./production_golden_path.py
+COPY scripts/capacity_qualification.py ./capacity_qualification.py
+COPY scripts/capacity-scenarios ./capacity-scenarios
 
 ENTRYPOINT ["python3", "/harness/production_golden_path.py"]

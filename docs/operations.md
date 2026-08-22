@@ -177,6 +177,77 @@ docker compose -f deploy/docker-compose.yml --env-file ./.env logs --tail=200 > 
 
 The command does not start or stop services. It records CLI version metadata, redacted responses from `/readyz`, `/healthz`, `/api/status`, and `/viewer`, a conservative log scan, and rollback readiness evidence. Treat a failed canary as a stop-promotion signal. Treat warnings as missing evidence that must be resolved or explicitly accepted in the release ticket before expanding traffic.
 
+## Capacity qualification harness
+
+Do not turn the sizing estimates below into a support claim without measuring
+the exact release candidate on the intended host. The opt-in capacity harness
+provides a bounded, secret-safe instrument for that work; it is not part of
+ordinary quickstart or `./scripts/verify.sh`.
+
+First validate and bind the small RC scenario without generating load:
+
+```bash
+./scripts/test-capacity-qualification.sh --dry-run \
+  --release v1.2.3-rc.N \
+  --release-set-sha256 <64-hex-release-set-sha256> \
+  --source-commit <40-hex-source-commit>
+```
+
+Live mode is destructive to the qualification environment in the ordinary
+product sense: it persists test accounts/channels and media output. Run it only
+against a dedicated disposable candidate stack, preferably from a separate
+load-generator host:
+
+```bash
+./scripts/test-capacity-qualification.sh --live --client docker \
+  --confirm-dedicated-environment \
+  --release v1.2.3-rc.N \
+  --release-set-sha256 <64-hex-release-set-sha256> \
+  --release-set-file /verified/release-set.json \
+  --source-commit <40-hex-source-commit> \
+  --base-url https://candidate.example.com \
+  --rtmp-base-url rtmp://candidate.example.com:1935/live \
+  --metrics-bearer-file /run/secrets/bitriver-metrics-token \
+  --artifact-dir .artifacts/capacity-qualification
+```
+
+The checked-in `bitriver.capacity-scenario/v1` scenario ramps through warm-up,
+steady-state, spike, and soak phases. Hard parser caps prevent more than 16
+publishers, 512 virtual viewers, 100 API requests/s, 50 chat messages/s, a
+one-hour phase, or a four-hour total even if a scenario file is edited. The
+small RC scenario is intentionally lower: two publishers and 12 HLS viewers at
+its spike. Every live run requires protected `/metrics` access and stops when
+health repeatedly fails or configured workload/host/container thresholds
+persist. A phase also fails if active stream/transcoder gauges do not match its
+publisher count, less than 80% of configured viewer/API/chat attempts are
+delivered, or its aggregate error rate breaches the limit. A failure or
+interrupt stops all FFmpeg publishers and load workers.
+Live mode hashes the supplied `release-set.json` bytes, requires that hash to
+match `--release-set-sha256`, and validates the declared tag, source commit,
+five first-party candidate references/digests, and Sigstore asset reference.
+It does not verify the Sigstore signature itself, so independently verify the
+release set before the run. The report keeps target runtime-image matching
+explicitly unproven until a target-side collector supplies that evidence.
+
+The resulting `bitriver.capacity-report/v1` records the exact candidate,
+canonical scenario hash, phase timings, HTTP/media bytes and latency
+percentiles, error rates, selected application metrics, collector provenance,
+raw bounded samples, stop reasons, and explicit unproven claims. Per-run
+account passwords, sessions, stream keys, and the metrics token are sentinel-
+scanned and cannot be retained.
+
+Remote mode reports host and Docker resources as unavailable instead of
+guessing. For a bounded development rehearsal on the Compose host, use a host
+client with `--collector-mode co-located`, `--compose-project NAME`, and
+`--data-path DIR`; Linux `/proc`, direct disk usage, and project-scoped
+`docker stats` are then sampled. That mode includes the synthetic
+publisher/viewer generator's own host cost, so it must not be used to publish a
+supported capacity envelope.
+
+Formal #1303 results still need the supported physical target, an external load
+generator plus target-side resource telemetry, VOD activity, direct
+Postgres/Redis/encoder/dropped-frame measurements, and conservative headroom.
+
 ## Resource sizing + kernel tuning
 
 Use `deploy/docker-compose.limits.yml` for enforceable CPU/memory limits under non-Swarm Docker Compose:
