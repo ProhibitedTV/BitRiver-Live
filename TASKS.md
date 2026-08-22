@@ -36,7 +36,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       viewer lint, and the complete Jest suite. Deleted ignored shims supplied
       the two absent loopback media URLs and a path-neutral Jest pattern for
       this nested Windows worktree only.
-    - Protected CI and squash merge remain.
+    - Protected run 32550134730 passed every substantive Ubuntu, macOS,
+      Windows, arm64 viewer, image-scan, quickstart, viewer, secret, and change
+      detection check. Its merge-gate job failed only because the generated
+      Dependabot body lacked the repository release scorecard.
+    - PR #1398 now records the required medium-risk build/viewer
+      classification, validation evidence, unchanged deployment boundary, and
+      no operator-facing impact. A fresh protected run and squash merge remain.
 
 ## Scoped change: deterministic single-host service restart rehearsal (#1304)
 
