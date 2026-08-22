@@ -1,5 +1,68 @@
 # PLAN
 
+## Current scope - published-package lost-host recovery qualification (#1299) (2026-08-21)
+
+- Extend the existing disposable lost-host rehearsal so it can consume an
+  exact public Linux launcher archive instead of always staging release assets
+  from the checkout. Bind the retained `bitriver.disaster-recovery/v1` report
+  to the supplied `bitriver.release-set/v1` bytes, candidate tag, full source
+  commit, package filename, byte length, and SHA-256.
+- Execute the backup, encrypted host-state restore, Postgres fresh-database
+  restore, external-object inventory, and recovered packaged-host install with
+  the scripts extracted from that verified package. Keep the repository test
+  driver and a fixture launcher binary outside the evidence claim so the drill
+  remains portable on Windows while proving the shipped recovery-script bytes.
+- Add a public-download wrapper for the Linux amd64 launcher package and
+  release-set manifest. It must validate identity and package checksum before
+  extraction, reject unsafe archive member paths, use a fresh temporary root,
+  retain only sanitized reports plus the public manifest when requested, and
+  clean all disposable hosts/containers on success, failure, or interruption.
+- Preserve the current build-mode rehearsal as the default. Published mode is
+  explicit and may claim only release-set/package binding plus recovery-script
+  execution; Sigstore verification, Linux binary/package acceptance, the
+  recovered production golden path, and scheduled off-host freshness remain
+  separately owned evidence.
+
+### Roadmap ordering and evidence boundary
+
+- RC20 predates the packaged encrypted recovery payload. RC21 is the first
+  immutable candidate from current `main` that can satisfy #1299's exact
+  published-package recovery boundary; its release workflow must finish before
+  the live published-mode drill can pass.
+- This slice closes only the first of #1299's three recorded remaining items.
+  Keep #1299 open for the production golden path on the recovered immutable
+  stack and production-like scheduled/off-host RPO evidence. Feed the exact
+  candidate identity forward into #1298 after those results exist.
+- Do not change the canonical Compose/root-env/generated-OME contract, CI
+  workflows, runtime services, release workflow, or default verification gate.
+
+### Risks and boundaries
+
+- A public manifest alone is not signature verification. Record the manifest
+  SHA-256 and exact asset match while explicitly stating that Sigstore was not
+  verified by this drill; reuse the clean-host/release verification evidence
+  for that separate claim.
+- Archive extraction is a pre-mutation trust boundary. Verify tag, commit,
+  schema, unique asset entry, size, and SHA-256 before extraction, then refuse
+  absolute or parent-traversing members before invoking `tar`.
+- The rehearsal intentionally destroys only a generated temporary source-host
+  root. It must never accept the repository root, operator paths, or an
+  existing target root, and it must scan retained evidence for test secrets.
+
+### Test and rollout plan
+
+- Add focused Python tests for valid public-package binding and schema,
+  tag/commit/name/size/hash mismatch refusal. Exercise the report in both local
+  and published modes and keep remaining-acceptance fields honest.
+- Add shell regression coverage for exact script-root selection, identity
+  overrides, pre-extraction verification, unsafe archive-member refusal,
+  cleanup, and evidence retention. Run the existing local disaster drill.
+- Once RC21 publishes, download its exact Linux amd64 launcher and release set,
+  run the published disaster drill, scan retained evidence, and record the
+  candidate/report hashes. Then run syntax/ShellCheck, focused tests, literal
+  `./scripts/verify.sh`, protected PR CI, squash merge, and a bounded #1299
+  handoff.
+
 ## Current scope - reusable single-host capacity qualification harness (#1303) (2026-08-21)
 
 - Implement the target-host harness foundation requested by the refreshed

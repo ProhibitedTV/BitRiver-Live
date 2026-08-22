@@ -378,6 +378,7 @@ paths under `./scripts/`:
 - `./scripts/restore-host-state.sh`: validates release/checksum/archive-member identity before streaming a host recovery set into fresh canonical paths and writing a secret-safe invariant/RPO/RTO report.
 - `./scripts/test-backup-restore.sh`: runs the positive rehearsal and pre-mutation refusal cases against a disposable Postgres 15 container.
 - `./scripts/test-disaster-recovery.sh`: deletes only its disposable source host, rebuilds a source-free packaged-host layout, restores a real non-empty Postgres set plus local/external object fixtures, and writes `bitriver.disaster-recovery/v1` evidence.
+- `./scripts/test-published-disaster-recovery.sh`: downloads one exact public Linux amd64 launcher, validates its release-set identity/checksum before extraction, executes that package's recovery scripts through the lost-host drill, and retains secret-scanned manifest-bound evidence.
 
 The backup manifest has schema `bitriver.postgres-backup/v1`. It binds the archive name/hash/size, source release and commit,
 database/server/tool versions, applied migration ledger and fingerprint, and exact public-table row counts. The dump and all
@@ -518,9 +519,23 @@ BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR=.artifacts/disaster-recovery \
   ./scripts/test-disaster-recovery.sh
 ```
 
-The current report deliberately identifies exact published-package and
-recovered-stack production-golden-path proof as remaining until this recovery
-payload is present in the next immutable candidate.
+After the recovery payload is present in an immutable candidate, qualify the
+exact public archive in a fresh evidence directory:
+
+```bash
+./scripts/test-published-disaster-recovery.sh \
+  --release "$release_version" \
+  --source-commit "$release_commit" \
+  --artifact-dir .artifacts/published-disaster-recovery
+```
+
+The wrapper verifies repository/tag/commit identity and the exact launcher
+name, byte length, and SHA-256 declared by `release-set.json` before archive
+listing or extraction. The retained report binds the lost-host result to the
+release-set and package hashes but deliberately does not claim Sigstore
+verification; pair it with independent release/clean-host signature evidence.
+It also keeps the recovered production golden path and production-like
+scheduled/off-host RPO evidence explicit until those separate drills pass.
 
 ### Single-host service restart rehearsal
 
