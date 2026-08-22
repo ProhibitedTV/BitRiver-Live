@@ -269,6 +269,11 @@ class RecoveredStackTest(unittest.TestCase):
         self.assertGreaterEqual(wrapper.count("--read-only"), 2)
         self.assertGreaterEqual(wrapper.count("--entrypoint /bin/sh"), 2)
         self.assertIn('--runtime-postgres-helper-image "$runtime_postgres_image"', wrapper)
+        self.assertIn(
+            '--config-root "$(native_path "$recovered_root")/etc/bitriver-live"',
+            wrapper,
+        )
+        self.assertNotIn('native_path "$recovered_root/etc/bitriver-live"', wrapper)
 
     def test_prepare_refuses_release_set_hash_and_repository_mismatch(self) -> None:
         with self.assertRaisesRegex(Exception, "SHA-256 mismatch"):

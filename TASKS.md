@@ -114,6 +114,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Python compilation, Bash/exact-image shell syntax, exact-digest Alpine
       backup/restore, pinned ShellCheck, Markdown links, Helm asset parity,
       `git diff --check`, and the staged source-free lost-host regression.
+    - Exact-head re-review found a Linux-only P1 before merge: `realpath` was
+      asked to resolve the future recovered config subtree before its parents
+      existed. The wrapper now canonicalizes the existing recovered root and
+      appends `/etc/bitriver-live`; a focused source regression, Python suite,
+      Bash syntax, pinned ShellCheck, and `git diff --check` pass.
     - Literal `./scripts/verify.sh` passes again on the reviewed final diff,
       including all Go/script packages, release/docs/contract/CI guards,
       Postgres migrations, Compose render, and canonical quickstart smoke. The

@@ -69,6 +69,10 @@
   but they do not replace RC21's already-passed Ubuntu package/symlink/systemd
   evidence. This slice proves the recovered exact-image Compose product path;
   physical XOA/Nginx Proxy Manager/browser/reboot evidence remains #1297.
+- Exact-head review hardening must also keep Linux path preparation valid before
+  recovery creates the future `/etc/bitriver-live` subtree. Canonicalize the
+  already-existing disposable recovered root, then append the managed relative
+  config path; do not call `realpath` on nonexistent parent components.
 - Do not change `deploy/docker-compose.yml`, root `.env`, generated OME
   expectations, CI workflows, the release workflow, or the default verification
   gate. Do not claim scheduled backup freshness, off-host durability, alert
@@ -82,7 +86,8 @@
   refusal, unrelated golden report refusal, and honest remaining acceptance.
 - Run both Bash and the exact Postgres Alpine image's `/bin/sh` syntax/runtime
   paths for the backup/restore scripts, and assert the recovered-stack wrapper
-  contains no package installation or in-container script injection.
+  contains no package installation or in-container script injection. Add a
+  source regression for Linux-safe future config-root construction.
 - Run the existing staged and published lost-host rehearsals to guard backward
   compatibility. RC21's first recovered-stack exercise reached the real
   Postgres restore and Dockerized production golden path but is not promotable

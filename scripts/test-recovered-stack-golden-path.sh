@@ -285,7 +285,7 @@ python_helper prepare-environment \
   --expected-commit "$source_commit" \
   --expected-release-set-sha256 "$release_set_sha256" \
   --namespace "$namespace" \
-  --config-root "$(native_path "$recovered_root/etc/bitriver-live")" \
+  --config-root "$(native_path "$recovered_root")/etc/bitriver-live" \
   --host-uid "$host_uid" \
   --host-gid "$host_gid" \
   --bootstrap-database bitr_bootstrap \
