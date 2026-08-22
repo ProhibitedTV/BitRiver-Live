@@ -1,5 +1,33 @@
 # PLAN
 
+## Current scope - viewer tooling dependency refresh (#1398) (2026-08-21)
+
+- Reconcile the seven Dependabot development-tool updates with the repository's
+  explicit viewer runtime baseline. The dependency graph moves
+  `@types/node` from 26.1.2 to 26.2.0, so the invariant test must describe the
+  reviewed package state instead of rejecting the intentional lockfile change.
+- Keep the patch limited to development tooling, the baseline assertion, and
+  concise workflow ledgers. Do not change viewer runtime dependencies,
+  application behavior, deployment contracts, CI workflows, or release inputs.
+
+### Risks and boundaries
+
+- Type and lint package updates can expose compile, lint, test, accessibility,
+  or production-build incompatibilities even when they do not ship in the
+  runtime image. Validate the clean lockfile rather than accepting package
+  metadata alone.
+- Preserve the Node 24 and npm 11 engine contract. `@types/node` 26.2.0 remains
+  a compile-time declaration update and must not be described as a Node 26
+  runtime upgrade.
+
+### Test and rollout plan
+
+- Run the focused Go runtime-baseline test, clean `npm ci`, viewer lint/Jest,
+  the production build, and the blocking production dependency audit.
+- Run literal `./scripts/verify.sh --viewer`, staged diff/secret guards, and the
+  protected PR matrix after updating the branch onto current `main`; squash
+  merge only after every required check passes.
+
 ## Current scope - deterministic single-host service restart rehearsal (#1304) (2026-08-15)
 
 - Add an opt-in, disposable rehearsal for the canonical single-host Compose

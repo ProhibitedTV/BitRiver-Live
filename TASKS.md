@@ -1,5 +1,43 @@
 # TASKS
 
+## Scoped change: viewer tooling dependency refresh (#1398)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose the protected CI failure and bound the refresh
+  - Acceptance criteria:
+    - The failing check is traced to a specific dependency/baseline mismatch.
+    - `PLAN.md` records package scope, runtime boundaries, risks, and tests
+      before implementation.
+  - Check:
+    - CI run 32054411899 failed in `TestViewerRuntimeBaselineIsAligned`: the
+      reviewed package/lock files contain `@types/node` 26.2.0 while the test
+      still requires 26.1.2. Image scanning and native arm64 viewer proof
+      passed; no product runtime failure was reported.
+    - The other six updates are development-only accessibility, testing, type,
+      and lint packages. Node 24, npm 11, Next/React runtime dependencies, and
+      the deployment contract remain unchanged by this PR.
+
+- [-] Task 2 - Align the baseline, verify the clean graph, and merge
+  - Acceptance criteria:
+    - The runtime-baseline assertion matches the intentional type package pin.
+    - Focused viewer checks, literal full verification, protected CI, and
+      squash merge pass without expanding runtime or deployment scope.
+  - Check:
+    - The invariant now requires `@types/node` 26.2.0. Its focused Go test
+      passes against the updated package and lock files.
+    - Clean `npm ci`, ESLint, all 26 Jest suites / 218 tests / 4 snapshots,
+      and the Next 16.3.0 production build passed. The production-only audit
+      exits zero at the blocking high threshold; it reports one non-blocking
+      moderate PostCSS advisory already present in the main runtime override.
+    - Literal `./scripts/verify.sh --viewer` passed with Go 1.26.0 and Docker
+      29.6.2, including repository/release/docs/contract guards, all Go
+      packages, migrations, exact image builds, healthy quickstart smoke,
+      viewer lint, and the complete Jest suite. Deleted ignored shims supplied
+      the two absent loopback media URLs and a path-neutral Jest pattern for
+      this nested Windows worktree only.
+    - Protected CI and squash merge remain.
+
 ## Scoped change: deterministic single-host service restart rehearsal (#1304)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -92,7 +130,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       Markdown scan passed. Go helper tests, Git Bash syntax, scoped diff check,
       and pinned ShellCheck v0.11.0 also passed.
 
-- [-] Task 5 - Run full gates and publish the focused resilience slice
+- [x] Task 5 - Run full gates and publish the focused resilience slice
   - Acceptance criteria:
     - Literal `./scripts/verify.sh`, protected CI, review, and squash merge pass
       without touching operator-owned state or overclaiming #1304 completion.
@@ -130,6 +168,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       green. A deleted ignored Docker-only shim supplied the two documented
       loopback media URLs absent from the private root `.env`; tests continued
       to receive the unmodified operator environment.
+    - The review thread was resolved, the branch was updated onto current
+      `main`, protected CI run 32549119817 passed, and PR #1397 squash-merged as
+      `5d2271b5`. Issue #1304 received the bounded evidence and remains open for
+      exact-candidate/physical-host and advanced failure acceptance.
 
 ## Scoped change: packaged-host disaster-recovery foundation (#1299)
 
