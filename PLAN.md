@@ -1,5 +1,64 @@
 # PLAN
 
+## Current scope - deterministic single-host service restart rehearsal (#1304) (2026-08-15)
+
+- Add an opt-in, disposable rehearsal for the canonical single-host Compose
+  stack that injects bounded stop/start failures into the API, Postgres, Redis,
+  SRS/controller, OvenMediaEngine, transcoder, and viewer service paths. Record
+  the expected public degradation signal for each dependency and the measured
+  time until the stack returns to its documented ready state.
+- Establish one authenticated account and channel before injection, then prove
+  the session and durable channel state survive every recovery. Treat Redis
+  queues and transient ingest work as explicitly ephemeral; do not overclaim
+  in-flight delivery or media continuity from a control-plane restart check.
+- Use `/readyz` for core dependency outages, authenticated `/api/status` for
+  live ingest-component probes, and `/viewer` for the viewer boundary. Require
+  bounded polling, no autonomous restart-count growth after recovery, and one
+  machine-readable `bitriver.service-resilience/v1` report whose retained
+  fields contain only release/source identity, component names, status classes,
+  booleans, counts, and durations.
+- Run from a clean tracked archive with a private copied environment, staged
+  bind storage, and project-scoped database/cache volumes so the operator's
+  working tree, local data, media, generated OME file, and root `.env` remain
+  untouched. Fail closed when any
+  canonical fixed-name container already exists; always tear down the isolated
+  stack and evidence work directory unless retention is explicitly requested.
+- Review hardening must pin `BITRIVER_CONFIG_ROOT` to the staged checkout root.
+  A copied packaged/custom environment may otherwise retain an absolute
+  operator config path and let the disposable SRS/OME renderers rewrite live
+  generated configuration outside the rehearsal boundary.
+
+### Risks and boundaries
+
+- Do not change the canonical Compose/root-env/generated-OME contract,
+  `scripts/verify.sh`, packages, CI, or runtime topology. This is a new opt-in
+  qualification harness over the shipped contract, not a product behavior or
+  deployment-workflow change.
+- A local build proves restart and dependency-recovery mechanics only. Keep
+  #1304 open for exact-candidate clean-host execution, physical daemon/host
+  reboot, network partitions, disk/CPU/memory pressure, credentials/control-
+  plane failures, active-stream continuity, and alert/delivery acceptance.
+- Use randomly generated private test credentials only in the disposable work
+  directory. Never print or retain them; scan the evidence against an exact
+  sentinel set before declaring success.
+- Bound every startup, degradation, and recovery wait. On interruption or
+  failure, capture only sanitized diagnostics, return the failed stage, and
+  remove containers, networks, volumes, copied environment, and credentials.
+
+### Test and rollout plan
+
+- Add focused helper tests for cookie persistence, readiness and ingest-status
+  classification, durable-state checks, restart-count stabilization, report
+  validation, timeout/failure reporting, secret rejection, and an absolute
+  operator config-root override that resolves only to the staged tree.
+- Run Bash syntax and pinned ShellCheck over the orchestrator, then execute the
+  complete build-mode Compose rehearsal with real Postgres/Redis/media services
+  and verify no canonical containers or test volumes remain afterward.
+- Align resilience, production-release, testing, and draft release guidance
+  with the report schema, command, proven boundaries, and remaining #1304
+  acceptance; run Markdown links, diff/secret guards, and literal
+  `./scripts/verify.sh` before a focused PR.
+
 ## Current scope - packaged-host disaster-recovery foundation (#1299) (2026-08-15)
 
 - Extend the manifest-bound Postgres backup with one encrypted packaged-host
