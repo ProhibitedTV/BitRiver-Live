@@ -11,6 +11,12 @@ Options:
   --bundle-root DIR        Extracted source-free launcher share/bitriver-live root.
   --release-set FILE       Exact downloaded release-set.json (published mode).
   --package-archive FILE   Exact downloaded launcher archive (published mode).
+  --prepared-environment FILE
+                            Private production-shaped environment to recover.
+  --postgres-backup FILE   Complete product-schema backup set to recover.
+  --sentinel-file FILE      Private sentinel list for prepared-environment mode.
+  --export-recovered-root DIR
+                            Existing empty temporary directory for the restored host.
   --release TAG            Exact release identity (default v1.2.3-rc.test).
   --source-commit SHA      Full source commit (default test fixture commit).
   -h, --help               Show this help.
@@ -24,6 +30,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 input_bundle_root=""
 release_set=""
 package_archive=""
+prepared_environment=""
+input_postgres_backup=""
+input_sentinel_file=""
+export_recovered_root=""
 source_release="${BITRIVER_DISASTER_SOURCE_RELEASE:-v1.2.3-rc.test}"
 source_commit="${BITRIVER_DISASTER_SOURCE_COMMIT:-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}"
 
@@ -32,6 +42,10 @@ while [[ $# -gt 0 ]]; do
     --bundle-root) [[ $# -ge 2 ]] || { echo "--bundle-root requires a value" >&2; exit 2; }; input_bundle_root=$2; shift 2 ;;
     --release-set) [[ $# -ge 2 ]] || { echo "--release-set requires a value" >&2; exit 2; }; release_set=$2; shift 2 ;;
     --package-archive) [[ $# -ge 2 ]] || { echo "--package-archive requires a value" >&2; exit 2; }; package_archive=$2; shift 2 ;;
+    --prepared-environment) [[ $# -ge 2 ]] || { echo "--prepared-environment requires a value" >&2; exit 2; }; prepared_environment=$2; shift 2 ;;
+    --postgres-backup) [[ $# -ge 2 ]] || { echo "--postgres-backup requires a value" >&2; exit 2; }; input_postgres_backup=$2; shift 2 ;;
+    --sentinel-file) [[ $# -ge 2 ]] || { echo "--sentinel-file requires a value" >&2; exit 2; }; input_sentinel_file=$2; shift 2 ;;
+    --export-recovered-root) [[ $# -ge 2 ]] || { echo "--export-recovered-root requires a value" >&2; exit 2; }; export_recovered_root=$2; shift 2 ;;
     --release) [[ $# -ge 2 ]] || { echo "--release requires a value" >&2; exit 2; }; source_release=$2; shift 2 ;;
     --source-commit) [[ $# -ge 2 ]] || { echo "--source-commit requires a value" >&2; exit 2; }; source_commit=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -55,12 +69,35 @@ if [[ -n $input_bundle_root || -n $release_set || -n $package_archive ]]; then
   }
   published_mode=true
 fi
+if [[ -n $prepared_environment || -n $input_postgres_backup || -n $input_sentinel_file || -n $export_recovered_root ]]; then
+  [[ $published_mode == true ]] || {
+    echo "recovered-root export requires published mode" >&2
+    exit 2
+  }
+  [[ -n $prepared_environment && -n $input_postgres_backup && -n $input_sentinel_file && -n $export_recovered_root ]] || {
+    echo "--prepared-environment, --postgres-backup, --sentinel-file, and --export-recovered-root are required together" >&2
+    exit 2
+  }
+  [[ -f $prepared_environment && -f $input_postgres_backup && -f ${input_postgres_backup}.manifest.json && -f ${input_postgres_backup}.sha256 && -f $input_sentinel_file && -d $export_recovered_root ]] || {
+    echo "prepared recovery inputs are missing" >&2
+    exit 2
+  }
+  if find "$export_recovered_root" -mindepth 1 -print -quit | grep -q .; then
+    echo "exported recovered-root directory must be empty" >&2
+    exit 2
+  fi
+  prepared_environment="$(cd "$(dirname "$prepared_environment")" && pwd -P)/$(basename "$prepared_environment")"
+  input_postgres_backup="$(cd "$(dirname "$input_postgres_backup")" && pwd -P)/$(basename "$input_postgres_backup")"
+  input_sentinel_file="$(cd "$(dirname "$input_sentinel_file")" && pwd -P)/$(basename "$input_sentinel_file")"
+  export_recovered_root="$(cd "$export_recovered_root" && pwd -P)"
+fi
 windows_posix_compat=false
 case "$(uname -s)" in
   MINGW*|MSYS*) windows_posix_compat=true ;;
 esac
 
 workdir="$(mktemp -d)"
+workdir="$(cd "$workdir" && pwd -P)"
 bundle_root="$workdir/source-free-bundle"
 binary_dir="$workdir/bin"
 fake_bin="$workdir/fake-bin"
@@ -79,12 +116,13 @@ postgres_report="$workdir/postgres-restore-report.json"
 disaster_report="$workdir/disaster-recovery-report.json"
 retained_artifact_dir="${BITRIVER_DISASTER_RECOVERY_ARTIFACT_DIR:-}"
 postgres_container="bitriver-disaster-recovery-${RANDOM}-$$"
+postgres_restore_helper="${postgres_container}-restore"
 postgres_image="${BITRIVER_DISASTER_POSTGRES_IMAGE:-postgres:15-alpine@sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23}"
 started_at_epoch="$(date -u +%s)"
 secret_sentinel="disaster-recovery-secret-e1d18f74"
 
 cleanup() {
-  docker rm -f "$postgres_container" >/dev/null 2>&1 || true
+  docker rm -f "$postgres_restore_helper" "$postgres_container" >/dev/null 2>&1 || true
   rm -rf -- "$workdir"
 }
 trap cleanup EXIT
@@ -94,24 +132,24 @@ fail() {
   exit 1
 }
 
+[[ $postgres_image =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
+  fail "disaster recovery Postgres image must be digest-pinned"
+
 docker_exec() {
   MSYS_NO_PATHCONV=1 docker exec "$@"
 }
 
-docker_cp_from_host() {
-  local source=$1 destination=$2
-  if [[ $windows_posix_compat == true ]]; then
-    source="$(cygpath -w "$source")"
-  fi
-  MSYS_NO_PATHCONV=1 docker cp "$source" "$destination"
+docker_run() {
+  MSYS_NO_PATHCONV=1 docker run "$@"
 }
 
-docker_cp_to_host() {
-  local source=$1 destination=$2
+native_path() {
+  local path=$1
   if [[ $windows_posix_compat == true ]]; then
-    destination="$(cygpath -w "$destination")"
+    cygpath -m "$path"
+  else
+    printf '%s\n' "$path"
   fi
-  MSYS_NO_PATHCONV=1 docker cp "$source" "$destination"
 }
 
 wait_for_postgres() {
@@ -216,6 +254,26 @@ fi
 ID_WRAPPER
 chmod 0755 "$fake_bin/id"
 
+# OpenSSL's Git-for-Windows binary does not path-convert a filename after the
+# `file:` passphrase prefix. Keep the published recovery scripts unchanged and
+# translate only those test-local passphrase arguments to native paths.
+real_openssl="$(command -v openssl)"
+if [[ $windows_posix_compat == true ]]; then
+  cat >"$fake_bin/openssl" <<'OPENSSL_WRAPPER'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+translated=()
+for argument in "$@"; do
+  case "$argument" in
+    file:/[A-Za-z]/*) argument="file:$(cygpath -m "${argument#file:}")" ;;
+  esac
+  translated+=("$argument")
+done
+exec "$BITRIVER_TEST_REAL_OPENSSL" "${translated[@]}"
+OPENSSL_WRAPPER
+  chmod 0755 "$fake_bin/openssl"
+fi
+
 # The Windows test filesystem may permit writes while refusing POSIX chmod.
 # The clean-host Linux gate owns permission-mode acceptance; this disposable
 # recovery driver only needs equivalent copy/directory behavior on that host.
@@ -257,12 +315,24 @@ fi
 
 installer="$bundle_root/deploy/install/compose-host.sh"
 operator_user="$(id -un)"
+operator_uid="$(id -u "$operator_user")"
+operator_gid="$(id -g "$operator_user")"
 PATH="$fake_bin:$PATH" BITRIVER_TEST_REAL_ID="$real_id" \
   bash "$installer" install \
   --source-root "$bundle_root" \
   --binary-dir "$binary_dir" \
   --root-prefix "$source_host" \
   --operator-user "$operator_user" >/dev/null
+if [[ -n $prepared_environment ]]; then
+  source_environment="$source_host/etc/bitriver-live/bitriver.env"
+  source_install_environment="$source_host/opt/bitriver-live/.env"
+  cp "$prepared_environment" "$source_environment"
+  chmod 0600 "$source_environment"
+  if [[ ! -L $source_install_environment ]]; then
+    cp "$prepared_environment" "$source_install_environment"
+    chmod 0600 "$source_install_environment"
+  fi
+fi
 
 printf '{"durable":true,"kind":"api"}\n' \
   >"$source_host/var/lib/bitriver-live/api/recovery-fixture.json"
@@ -277,19 +347,25 @@ bash "$packaged_scripts/python.sh" "$packaged_scripts/host_recovery.py" \
   --root "$external_source" \
   --output "$expected_object_inventory"
 
-BITRIVER_BACKUP_RETAIN_DIR="$postgres_backup_dir" \
-BITRIVER_BACKUP_TEST_SCRIPT_ROOT="$packaged_scripts" \
-BITRIVER_BACKUP_TEST_RELEASE="$source_release" \
-BITRIVER_BACKUP_TEST_COMMIT="$source_commit" \
-  bash "$repo_root/scripts/test-backup-restore.sh"
-postgres_name="$(tr -d '\r\n' <"$postgres_backup_dir/backup-name.txt")"
-postgres_backup="$postgres_backup_dir/$postgres_name"
+if [[ -n $input_postgres_backup ]]; then
+  postgres_backup="$input_postgres_backup"
+  postgres_name="$(basename "$postgres_backup")"
+else
+  BITRIVER_BACKUP_RETAIN_DIR="$postgres_backup_dir" \
+  BITRIVER_BACKUP_TEST_SCRIPT_ROOT="$packaged_scripts" \
+  BITRIVER_BACKUP_TEST_RELEASE="$source_release" \
+  BITRIVER_BACKUP_TEST_COMMIT="$source_commit" \
+    bash "$repo_root/scripts/test-backup-restore.sh"
+  postgres_name="$(tr -d '\r\n' <"$postgres_backup_dir/backup-name.txt")"
+  postgres_backup="$postgres_backup_dir/$postgres_name"
+fi
 [[ -f $postgres_backup ]] || fail "real Postgres rehearsal did not retain its backup set"
 
 printf '%s\n' 'correct horse battery staple disaster recovery key' >"$passphrase_file"
 chmod 0600 "$passphrase_file"
 backup_timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
-bash "$packaged_scripts/backup-host-state.sh" \
+PATH="$fake_bin:$PATH" BITRIVER_TEST_REAL_OPENSSL="$real_openssl" \
+  bash "$packaged_scripts/backup-host-state.sh" \
   --root-prefix "$source_host" \
   --output-dir "$host_backup_dir" \
   --postgres-backup "$postgres_backup" \
@@ -303,7 +379,8 @@ host_archive="$host_backup_dir/bitriver-host-${backup_timestamp}.tar.gz.enc"
 rm -rf -- "$source_host" "$external_source"
 [[ ! -e $source_host && ! -e $external_source ]] || fail "source runtime survived the destructive cut"
 
-bash "$packaged_scripts/restore-host-state.sh" \
+PATH="$fake_bin:$PATH" BITRIVER_TEST_REAL_OPENSSL="$real_openssl" \
+  bash "$packaged_scripts/restore-host-state.sh" \
   --archive "$host_archive" \
   --root-prefix "$target_host" \
   --expected-release "$source_release" \
@@ -318,13 +395,34 @@ PATH="$fake_bin:$PATH" BITRIVER_TEST_REAL_ID="$real_id" \
   --root-prefix "$target_host" \
   --operator-user "$operator_user" >/dev/null
 install_root="$target_host/opt/bitriver-live"
-grep -Fq "BITRIVER_POSTGRES_PASSWORD=$secret_sentinel" \
-  "$target_host/etc/bitriver-live/bitriver.env" || fail "installer did not preserve recovered secrets"
+if [[ -z $prepared_environment ]]; then
+  grep -Fq "BITRIVER_POSTGRES_PASSWORD=$secret_sentinel" \
+    "$target_host/etc/bitriver-live/bitriver.env" || fail "installer did not preserve recovered secrets"
+fi
 if [[ ! -L $target_host/etc/bitriver-live/Server.generated.xml ]]; then
   if [[ $windows_posix_compat != true ]] ||
     ! cmp "$target_host/etc/bitriver-live/Server.generated.xml" \
       "$target_host/etc/bitriver-live/deploy/ome/Server.generated.xml"; then
     fail "installer did not normalize recovered OME compatibility path"
+  fi
+fi
+if [[ -n $prepared_environment ]]; then
+  normalized_prepared_environment="$workdir/normalized-prepared.env"
+  awk \
+    -v config_root="$target_host/etc/bitriver-live" \
+    -v host_uid="$operator_uid" \
+    -v host_gid="$operator_gid" '
+    /^BITRIVER_CONFIG_ROOT=/ { print "BITRIVER_CONFIG_ROOT=" config_root; found = 1; next }
+    /^BITRIVER_HOST_UID=/ { print "BITRIVER_HOST_UID=" host_uid; uid_found = 1; next }
+    /^BITRIVER_HOST_GID=/ { print "BITRIVER_HOST_GID=" host_gid; gid_found = 1; next }
+    { print }
+    END { if (!found || !uid_found || !gid_found) exit 2 }
+  ' "$prepared_environment" >"$normalized_prepared_environment"
+  cmp "$normalized_prepared_environment" "$target_host/etc/bitriver-live/bitriver.env" ||
+    fail "prepared environment changed beyond installer-managed host normalization"
+  if [[ ! -L $install_root/.env ]]; then
+    cmp "$normalized_prepared_environment" "$install_root/.env" ||
+      fail "installed environment copy does not match recovered configuration"
   fi
 fi
 if [[ ! -L $install_root/deploy/data || ! -L $install_root/deploy/transcoder-data ]]; then
@@ -347,28 +445,34 @@ docker run -d --name "$postgres_container" \
   -e POSTGRES_PASSWORD=disaster-recovery-postgres \
   "$postgres_image" >/dev/null
 wait_for_postgres
-docker_exec "$postgres_container" apk add --no-cache bash coreutils >/dev/null
-docker_exec "$postgres_container" mkdir -p /recovery
-docker_cp_from_host "$install_root/scripts/restore-postgres.sh" \
-  "$postgres_container:/restore-postgres.sh" >/dev/null
 recovered_postgres_root="$target_host/var/backups/bitriver-live/recovery/postgres"
 for recovered_postgres_file in \
   "$recovered_postgres_root/$postgres_name" \
   "$recovered_postgres_root/${postgres_name}.manifest.json" \
   "$recovered_postgres_root/${postgres_name}.sha256"; do
   [[ -f $recovered_postgres_file ]] || fail "recovered Postgres set is incomplete"
-  docker_cp_from_host "$recovered_postgres_file" \
-    "$postgres_container:/recovery/$(basename "$recovered_postgres_file")" >/dev/null
 done
-docker_exec \
+postgres_restore_evidence="$workdir/postgres-restore-evidence"
+mkdir -p "$postgres_restore_evidence"
+docker_run --rm --name "$postgres_restore_helper" \
+  --network "container:$postgres_container" \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --mount "type=bind,source=$(native_path "$install_root/scripts/restore-postgres.sh"),target=/restore-postgres.sh,readonly" \
+  --mount "type=bind,source=$(native_path "$recovered_postgres_root"),target=/recovery,readonly" \
+  --mount "type=bind,source=$(native_path "$postgres_restore_evidence"),target=/evidence" \
   -e BITRIVER_BACKUP_POSTGRES_HOST=127.0.0.1 \
   -e BITRIVER_BACKUP_POSTGRES_USER=postgres \
   -e BITRIVER_BACKUP_POSTGRES_PASSWORD=disaster-recovery-postgres \
   -e BITRIVER_RESTORE_REHEARSAL_DB=bitr_disaster_recovered \
   -e BITRIVER_RESTORE_KEEP_DB=1 \
   -e BITRIVER_RESTORE_EXPECT_RELEASE="$source_release" \
-  -e BITRIVER_RESTORE_REPORT_PATH=/recovery/postgres-restore-report.json \
-  "$postgres_container" /bin/bash /restore-postgres.sh "/recovery/$postgres_name"
+  -e BITRIVER_RESTORE_REPORT_PATH=/evidence/postgres-restore-report.json \
+  --entrypoint /bin/sh \
+  "$postgres_image" /restore-postgres.sh "/recovery/$postgres_name"
+cp "$postgres_restore_evidence/postgres-restore-report.json" "$postgres_report"
 
 users="$(
   docker_exec -e PGPASSWORD=disaster-recovery-postgres \
@@ -377,17 +481,25 @@ users="$(
     -c 'SELECT count(*) FROM public.users;'
 )"
 [[ $users == 4 ]] || fail "fresh-host Postgres restore lost user fixtures"
-object_fixture="$(
-  docker_exec -e PGPASSWORD=disaster-recovery-postgres \
-    "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 \
-    -h 127.0.0.1 -U postgres -d bitr_disaster_recovered \
-    -c "SELECT object_key || '|' || size_bytes FROM public.object_fixtures;"
-)"
-[[ $object_fixture == 'uploads/fixture.mp4|4096' ]] ||
-  fail "fresh-host Postgres restore lost object metadata"
-docker_cp_to_host "$postgres_container:/recovery/postgres-restore-report.json" \
-  "$postgres_report" >/dev/null
-
+if [[ -n $input_postgres_backup ]]; then
+  channel_fixture="$(
+    docker_exec -e PGPASSWORD=disaster-recovery-postgres \
+      "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 \
+      -h 127.0.0.1 -U postgres -d bitr_disaster_recovered \
+      -c "SELECT title FROM public.channels WHERE id = 'channel-1';"
+  )"
+  [[ $channel_fixture == 'Upgrade channel' ]] ||
+    fail "fresh-host Postgres restore lost product-schema channel state"
+else
+  object_fixture="$(
+    docker_exec -e PGPASSWORD=disaster-recovery-postgres \
+      "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 \
+      -h 127.0.0.1 -U postgres -d bitr_disaster_recovered \
+      -c "SELECT object_key || '|' || size_bytes FROM public.object_fixtures;"
+  )"
+  [[ $object_fixture == 'uploads/fixture.mp4|4096' ]] ||
+    fail "fresh-host Postgres restore lost object metadata"
+fi
 disaster_report_args=(
   disaster-report
   --host-report "$host_report" \
@@ -399,6 +511,7 @@ disaster_report_args=(
   --destroyed-source-root "$source_host" \
   --source-release "$source_release" \
   --source-commit "$source_commit" \
+  --postgres-restore-helper-image "$postgres_image" \
   --started-at-epoch "$started_at_epoch" \
   --output "$disaster_report"
 )
@@ -428,7 +541,15 @@ if [[ -n $retained_artifact_dir ]]; then
   if [[ $published_mode == true ]]; then
     cp "$release_set" "$workdir/published-package-binding.json" "$retained_artifact_dir/"
   fi
-  bash "$repo_root/scripts/scan-release-evidence.sh" --root "$retained_artifact_dir"
+  scan_args=(--root "$retained_artifact_dir")
+  if [[ -n $input_sentinel_file ]]; then
+    scan_args+=(--sentinel-file "$input_sentinel_file")
+  fi
+  bash "$repo_root/scripts/scan-release-evidence.sh" "${scan_args[@]}"
+fi
+
+if [[ -n $export_recovered_root ]]; then
+  cp -a "$target_host/." "$export_recovered_root/"
 fi
 
 if [[ $published_mode == true ]]; then

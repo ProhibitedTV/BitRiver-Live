@@ -1,5 +1,109 @@
 # PLAN
 
+## Current scope - recovered immutable stack production golden path (#1299) (2026-08-22)
+
+- Extend the merged published-package lost-host rehearsal with an explicit
+  recovered-runtime phase. Start from the exact verified RC21 launcher and its
+  encrypted restored host state, then boot the installed
+  `/opt/bitriver-live` Compose bundle with pull-only release-set-pinned images;
+  do not substitute a checkout deployment tree or rebuild product images.
+- Reuse the existing `bitriver.production-golden-path/v1` client unchanged for
+  the public product assertions: readiness and authenticated aggregate status,
+  account/channel creation, deterministic 1080p RTMP, advancing and decodable
+  OME/transcoder playback, offline transition, chat/moderation, VOD upload and
+  playback, and final aggregate health.
+- Preserve and bind the recovery result rather than running an unrelated clean
+  stack. Restore the exact manifest/checksum-bound Postgres trio into a fresh
+  database on the recovered Compose volume, retain the recovered encrypted
+  configuration and local/external object fixtures, prove representative rows
+  exist before the golden path, and prove those rows plus golden-path-created
+  state remain afterward.
+- Publish one secret-scanned completion report that binds the existing
+  `bitriver.disaster-recovery/v1` report, exact release-set/package identity,
+  observed runtime image references, restored-state invariants, and golden-path
+  report SHA-256. Remove only the recovered-golden-path item from
+  `remainingAcceptance`; keep scheduled/off-host freshness and RPO evidence
+  explicit for the final #1299 slice.
+
+### Execution and isolation
+
+- Add a dedicated wrapper instead of changing the default local/staged recovery
+  command. It must require the exact prerelease tag, full commit, and a fresh
+  evidence directory, download and verify the public launcher first, and use
+  only generated temporary host/config/database roots.
+- Prepare a production-shaped private environment from the package's
+  `deploy/.env.example` plus the exact release-set image/dependency digests
+  before the source snapshot. The encrypted restore may change only installer-
+  managed host path/UID/GID values; relocate those to the predicted final root
+  and require every other byte to match. Private values stay in temporary
+  sentinel files and may not enter retained reports or command output.
+- Refuse canonical-container collisions before Docker mutation. Use a unique
+  Compose project and project-owned Postgres/Redis/transcoder volumes, bounded
+  service/HTTP waits, `--no-build --pull never` after exact pulls, and
+  unconditional container/volume/temp-root cleanup on success, failure, or
+  interruption.
+- The repository-side harness may prepare fixtures, inspect Docker runtime
+  identity, and drive the existing golden-path client. Recovery and runtime
+  evidence must still identify the verified public package and its installed
+  source-free bundle; repository code is not part of the recovered runtime.
+
+### Risks and evidence boundaries
+
+- The canonical Compose file has fixed container names, so parallel execution
+  is unsafe even with a unique project. Fail closed when any canonical name is
+  present and never stop or adopt an operator container.
+- A fresh Compose Postgres container initially creates its configured database.
+  Restore the verified trio into a different fresh database before application
+  startup, switch the recovered environment to that database, recreate the
+  Postgres container without deleting its project volume, then run canonical
+  migrations and applications. Refuse an existing restore target or a database
+  identity/hash mismatch before API startup.
+- Automated review hardening must keep that recovered Postgres container
+  unmodified. Do not install packages or copy backup/restore tooling into
+  either exercised Postgres container, including the original fresh-database
+  restore inside `test-disaster-recovery.sh`. Make the packaged backup and
+  restore scripts compatible with the exact release-set Postgres image's
+  `/bin/sh`, run both restore phases in disposable read-only helpers using the
+  database containers' network namespaces and read-only script/input mounts,
+  and bind both original and runtime restore-helper image references to the
+  release-set identity in final evidence.
+- Windows filesystem compatibility shims may emulate package-install symlinks,
+  but they do not replace RC21's already-passed Ubuntu package/symlink/systemd
+  evidence. This slice proves the recovered exact-image Compose product path;
+  physical XOA/Nginx Proxy Manager/browser/reboot evidence remains #1297.
+- Exact-head review hardening must also keep Linux path preparation valid before
+  recovery creates the future `/etc/bitriver-live` subtree. Canonicalize the
+  already-existing disposable recovered root, then append the managed relative
+  config path; do not call `realpath` on nonexistent parent components.
+- Do not change `deploy/docker-compose.yml`, root `.env`, generated OME
+  expectations, CI workflows, the release workflow, or the default verification
+  gate. Do not claim scheduled backup freshness, off-host durability, alert
+  delivery, or a stable release from this result.
+
+### Test and rollout plan
+
+- Add focused tests for release-set-to-environment/runtime binding, original-
+  disaster-to-runtime Postgres archive binding, completion-report schema/
+  status/hash/invariant checks, exact original/runtime restore-helper image
+  refusal, secret refusal, unrelated golden report refusal, and honest
+  remaining acceptance.
+- Run both Bash and the exact Postgres Alpine image's `/bin/sh` syntax/runtime
+  paths for the backup/restore scripts, and assert the recovered-stack wrapper
+  and its nested lost-host drill contain no package installation or
+  in-container script injection. Add a source regression for Linux-safe future
+  config-root construction.
+- Run the existing staged and published lost-host rehearsals to guard backward
+  compatibility. RC21's first recovered-stack exercise reached the real
+  Postgres restore and Dockerized production golden path but is not promotable
+  evidence because review found that it modified the runtime Postgres
+  container. Merge and publish the portable-helper fix, then rerun the wrapper
+  against the exact next public candidate; scan retained evidence and verify
+  complete teardown.
+- Run Python compilation, Bash syntax, pinned ShellCheck, Markdown links,
+  `git diff --check`, and literal `./scripts/verify.sh`. Publish a focused PR,
+  resolve automated review, require protected exact-head CI, squash merge, and
+  post a bounded #1299 handoff before starting scheduled/off-host RPO work.
+
 ## Current scope - published-package lost-host recovery qualification (#1299) (2026-08-21)
 
 - Extend the existing disposable lost-host rehearsal so it can consume an

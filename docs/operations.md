@@ -377,8 +377,9 @@ paths under `./scripts/`:
 - `./scripts/backup-host-state.sh`: encrypts packaged configuration, local API/media data, the verified Postgres set, and an optional aggregate object inventory into one atomic host recovery set.
 - `./scripts/restore-host-state.sh`: validates release/checksum/archive-member identity before streaming a host recovery set into fresh canonical paths and writing a secret-safe invariant/RPO/RTO report.
 - `./scripts/test-backup-restore.sh`: runs the positive rehearsal and pre-mutation refusal cases against a disposable Postgres 15 container.
-- `./scripts/test-disaster-recovery.sh`: deletes only its disposable source host, rebuilds a source-free packaged-host layout, restores a real non-empty Postgres set plus local/external object fixtures, and writes `bitriver.disaster-recovery/v1` evidence.
+- `./scripts/test-disaster-recovery.sh`: deletes only its disposable source host, rebuilds a source-free packaged-host layout, restores a real non-empty Postgres set through a disposable read-only exact-image helper without modifying the database container, records that helper identity, restores local/external object fixtures, and writes `bitriver.disaster-recovery/v1` evidence.
 - `./scripts/test-published-disaster-recovery.sh`: downloads one exact public Linux amd64 launcher, validates its release-set identity/checksum before extraction, executes that package's recovery scripts through the lost-host drill, and retains secret-scanned manifest-bound evidence.
+- `./scripts/test-recovered-stack-golden-path.sh`: extends the exact public-package drill with a product-schema backup, passes the exact release-set Postgres image into the nested lost-host restore, boots only the recovered pull-only Compose installation, runs both restore phases from disposable read-only helpers without mutating either database container, binds both helper identities, restores that same archive into a fresh runtime database, asserts every exercised image, and runs the unchanged production golden path against preserved state.
 
 The backup manifest has schema `bitriver.postgres-backup/v1`. It binds the archive name/hash/size, source release and commit,
 database/server/tool versions, applied migration ledger and fingerprint, and exact public-table row counts. The dump and all
@@ -537,8 +538,24 @@ to match the verified launcher's `share/bitriver-live` subtree. The retained
 report binds the lost-host result to the release-set, package, and exercised
 bundle hashes but deliberately does not claim Sigstore
 verification; pair it with independent release/clean-host signature evidence.
-It also keeps the recovered production golden path and production-like
-scheduled/off-host RPO evidence explicit until those separate drills pass.
+It keeps recovered-product and scheduled/off-host RPO evidence explicit until
+their separate drills pass. Qualify the recovered product with the exact public
+release-set hash in another fresh evidence directory:
+
+```bash
+./scripts/test-recovered-stack-golden-path.sh \
+  --release "$release_version" \
+  --source-commit "$release_commit" \
+  --release-set-sha256 "$release_set_sha256" \
+  --artifact-dir .artifacts/recovered-stack-golden-path
+```
+
+The completion report binds both Postgres restore reports to one recovered
+archive, the disposable restore helper to the exact release-set Postgres image,
+all 13 exercised image references to the release set, preserved and
+new database state, all eight golden-path stages, and total recovery RTO. It
+retains no environment or credentials. After this passes, scheduled backup
+freshness and genuinely off-host restore evidence remain separate acceptance.
 
 ### Single-host service restart rehearsal
 

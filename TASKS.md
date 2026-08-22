@@ -1,5 +1,152 @@
 # TASKS
 
+## Scoped change: recovered immutable stack production golden path (#1299)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Bound the recovered-runtime evidence contract
+  - Acceptance criteria:
+    - The merged published-package recovery result, current #1299 acceptance,
+      installed package layout, exact-image Compose harness, and reusable
+      production golden path are reconciled before implementation.
+    - `PLAN.md` records runtime/package/state identity, Postgres restore,
+      isolation, secrets, cleanup, test, and honest non-claim boundaries.
+  - Check:
+    - PR #1400 merged as `f76a0101`; #1299 now records only the recovered-stack
+      golden path and production-like scheduled/off-host freshness/RPO proof.
+    - RC21's installed source-free bundle contains the canonical Compose,
+      migration, renderer, wrapper, and recovery assets. The existing exact-
+      image upgrade harness proves how to pin/pull/assert release-set images,
+      while #1300 supplies the unchanged public product client.
+    - The current lost-host drill restores the exact Postgres trio into a fresh
+      isolated database but does not boot that recovered database/config/data
+      as a running product. The new slice must bind those phases explicitly.
+
+- [x] Task 2 - Implement recovered environment and completion evidence
+  - Acceptance criteria:
+    - A production-shaped private environment is derived from the verified
+      release set and package template, survives encrypted recovery except for
+      exact installer-managed host normalization, and drives only exact pull-
+      only runtime images after final-root relocation.
+    - Completion evidence refuses unrelated, failed, incomplete, secret-
+      bearing, or identity-mismatched disaster/golden/runtime inputs.
+  - Check:
+    - `recovered_stack.py prepare-environment` validates the exact public
+      release-set SHA/tag/commit/repository, all five first-party plus eight
+      dependency digests, and the package env template before generating a
+      private pull-only loopback environment. Metadata binds 13 exercised
+      Compose services to exact tag-and-digest image references.
+    - The only permitted environment mutation is a hash-predicted switch from
+      a bootstrap database to the fresh restored database; tampered recovered
+      bytes refuse activation.
+    - Completion requires the published-package disaster identity, matching
+      original and runtime Postgres archive identities, all eight
+      passing production golden-path stages, exact observed service images,
+      the exact release-set Postgres restore-helper image,
+      byte-identical recovered and predicted runtime environments, preserved
+      fixture state, increased persistent user state, and a total RTO no
+      shorter than restore-only RTO. It removes only the recovered golden-path
+      acceptance item and scans raw, URL, Base64, URL-safe Base64, and hex
+      sentinel encodings before retention.
+    - Six focused tests plus Python bytecode compilation pass, covering exact
+      preparation/activation/completion and hash, repository, environment,
+      image, failed-stage, encoded-secret, and source-identity refusal.
+
+- [x] Task 3 - Exercise RC21 and harden the immutable-runtime boundary
+  - Acceptance criteria:
+    - The exact package-installed Compose stack is exercised from restored
+      configuration, local/external objects, and manifest-bound Postgres state.
+    - Any mutation of an asserted runtime container invalidates the result;
+      backup/restore tooling instead runs from the exact Postgres image in a
+      disposable read-only helper and final evidence binds that image.
+  - Check:
+    - `test-recovered-stack-golden-path.sh` verified the public RC21 release-set
+      root `ad444f96...` and Linux launcher before safe extraction, built a
+      product-schema backup from RC21 migrations, destroyed the disposable
+      source host, and passed encrypted config/local/external/Postgres recovery.
+    - The installed recovered stack restored that same manifest-bound archive
+      into fresh database `bitr_recovered`, applied a no-op migration pass, and
+      booted 13 asserted tag-and-digest service images in pull-only mode.
+    - The unchanged Dockerized golden-path client passed all eight stages in
+      30.466s. Four recovered users and the representative channel/local-data
+      fixtures existed first; the golden path preserved the fixed-state
+      fingerprint and persisted two additional users.
+    - The first RC21 exercise recorded RPO 27s, restore-only RTO 23s, total
+      product RTO 114s, eight passing golden stages, and preserved 4-to-6 user
+      state, but automated review correctly rejected its immutable-runtime
+      claim because the harness installed packages into recovered Postgres.
+      Report `d40aa45c...` is historical diagnostic evidence, not acceptance.
+    - The wrapper now contains no package installation or container-copy path.
+      Packaged backup/restore scripts run under the exact Postgres Alpine
+      `/bin/sh`; disposable helpers are read-only/capability-dropped, share only
+      the database network namespace, and use narrow script/input/output mounts.
+      Completion refuses a helper image other than the release-set Postgres
+      reference. Thirteen focused Python tests (one platform skip), Bash and
+      exact-image shell syntax, and the full exact-digest backup/restore suite
+      pass. The next published candidate owns final product acceptance.
+
+- [-] Task 4 - Document, verify, publish, and merge the recovered-stack slice
+  - Acceptance criteria:
+    - Operator/release guidance documents the exact command, evidence, and
+      remaining scheduled/off-host boundary.
+    - Focused/static/real-stack checks, literal `./scripts/verify.sh`, protected
+      CI, review, squash merge, and a bounded #1299 handoff pass.
+  - Check:
+    - Operations, testing, release-gate, and v1.2.3 draft guidance now document
+      the exact wrapper/helper contract, RC21 evidence rejection, next-candidate
+      requirement, and scheduled/off-host non-claim.
+    - Thirteen focused host/recovered-stack Python tests pass (one platform skip),
+      plus bytecode compilation, Bash syntax/help, pinned ShellCheck 0.11.0,
+      the 89-file Markdown link check, `git diff --check`, legacy staged
+      disaster regression, the historical RC21 recovered-stack exercise,
+      evidence scans, and complete container cleanup. The next exact public
+      package rerun remains Task 5.
+    - Literal `./scripts/verify.sh` passes on the final diff with local Go 1.26,
+      including Go, architecture, release, contract, Postgres, Compose config,
+      and quickstart smoke gates. The temporary isolated `.env` was removed;
+      primary env and generated OME hashes remain unchanged.
+    - PR #1401's first exact-head run 32560410940 passed the Ubuntu test-all,
+      three-platform quickstart, ShellCheck, docs, and secret gates. Its merge
+      gate rejected only the PR metadata because verification-script changes
+      were not classified as `build/CI`; the scorecard is corrected.
+    - Automated P2 review then invalidated RC21's historical immutable-runtime
+      claim. The portable helper fix passes 13 focused Python tests (one skip),
+      Python compilation, Bash/exact-image shell syntax, exact-digest Alpine
+      backup/restore, pinned ShellCheck, Markdown links, Helm asset parity,
+      `git diff --check`, and the staged source-free lost-host regression.
+    - Exact-head re-review found a Linux-only P1 before merge: `realpath` was
+      asked to resolve the future recovered config subtree before its parents
+      existed. The wrapper now canonicalizes the existing recovered root and
+      appends `/etc/bitriver-live`; a focused source regression, Python suite,
+      Bash syntax, pinned ShellCheck, and `git diff --check` pass.
+    - The subsequent exact-head P2 found that the nested original lost-host
+      restore still installed packages and injected scripts into its database
+      container. That phase now uses a disposable read-only, capability-dropped
+      `/bin/sh` helper with narrow mounts and the same digest-pinned Postgres
+      image; the disaster report records it and final completion requires both
+      original/runtime helper images to equal the release set. Fourteen focused
+      Python tests (one platform skip), compilation, Bash syntax, pinned
+      ShellCheck, `git diff --check`, and the real staged lost-host rehearsal
+      pass with the unmodified database container.
+    - Literal `./scripts/verify.sh` passes on the final nested-helper diff,
+      including all Go/script packages, release/docs/contract/CI guards,
+      Postgres migrations, Compose render, and canonical quickstart smoke. The
+      temporary isolated `.env` was removed and primary contract hashes remain
+      unchanged. Fresh exact-head CI/re-review, squash merge, and the bounded
+      #1299 handoff remain.
+
+- [ ] Task 5 - Publish and qualify the next immutable candidate
+  - Acceptance criteria:
+    - The first candidate containing the portable helper scripts publishes from
+      merged `main` with an exact release-set/package identity.
+    - Its source-free recovered stack passes destructive recovery, helper-bound
+      Postgres restore, all exact image assertions, unchanged production golden
+      path, secret scanning, and teardown without runtime-container mutation.
+    - #1299 receives the bounded result and remains open only for genuinely
+      outstanding scheduled/off-host RPO evidence.
+  - Check:
+    - Blocked until Task 4 merges the reviewed helper implementation.
+
 ## Scoped change: published-package lost-host recovery qualification (#1299)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -65,7 +212,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       lost-host drill with non-empty state, observed RPO 39s, RTO 53s, and no
       retained secrets. Its final disaster report SHA-256 is `f6f79fdb...`.
 
-- [-] Task 4 - Document, verify, publish, and merge the #1299 slice
+- [x] Task 4 - Document, verify, publish, and merge the #1299 slice
   - Acceptance criteria:
     - Operations/testing guidance identifies the exact command, evidence, and
       remaining recovery boundaries.
@@ -92,8 +239,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       run 32555529499 then passed signed provenance, exact Ubuntu package and
       host install, production preflight, OME control, same-tag upgrade,
       OME/Docker/systemd restart, and uninstall retention with no source
-      checkout or retained secrets. PR publication, protected review/CI,
-      squash merge, and the bounded #1299/#1297 handoffs remain pending.
+      checkout or retained secrets. Automated P1 review was fixed and resolved;
+      protected exact-head run 32557495671 passed the full required matrix and
+      release-scorecard merge gate. PR #1400 squash-merged as `f76a0101`, and
+      #1299 received the bounded handoff while remaining open for two items.
 
 ## Scoped change: reusable single-host capacity qualification harness (#1303)
 
