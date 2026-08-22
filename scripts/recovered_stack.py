@@ -341,6 +341,7 @@ def complete_disaster_report(
     disaster_report_path: Path,
     original_postgres_report_path: Path,
     runtime_postgres_report_path: Path,
+    runtime_postgres_helper_image: str,
     golden_report_path: Path,
     observed_images_path: Path,
     recovered_environment_path: Path,
@@ -445,6 +446,10 @@ def complete_disaster_report(
     expected_images = metadata.get("expectedServiceImages")
     if not isinstance(expected_images, dict) or observed_images != expected_images:
         raise RecoveredStackError("observed recovered-stack images do not match the release set")
+    if runtime_postgres_helper_image != expected_images.get("postgres"):
+        raise RecoveredStackError(
+            "runtime Postgres restore helper image does not match the release set"
+        )
 
     original_rto = disaster.get("observed", {}).get("rtoSeconds")
     if isinstance(original_rto, bool) or not isinstance(original_rto, int) or original_rto < 0:
@@ -464,6 +469,7 @@ def complete_disaster_report(
         "inputSha256": sha256_file(metadata_path),
         "originalDisasterReportSha256": sha256_file(disaster_report_path),
         "runtimePostgresRestoreReportSha256": sha256_file(runtime_postgres_report_path),
+        "runtimePostgresRestoreHelperImage": runtime_postgres_helper_image,
         "postgresBackup": postgres_binding,
         "goldenPathReportSha256": sha256_file(golden_report_path),
         "environment": {
@@ -523,6 +529,7 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument("--disaster-report", type=Path, required=True)
     complete.add_argument("--original-postgres-report", type=Path, required=True)
     complete.add_argument("--runtime-postgres-report", type=Path, required=True)
+    complete.add_argument("--runtime-postgres-helper-image", required=True)
     complete.add_argument("--golden-report", type=Path, required=True)
     complete.add_argument("--observed-images", type=Path, required=True)
     complete.add_argument("--recovered-environment", type=Path, required=True)
@@ -568,6 +575,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 disaster_report_path=args.disaster_report,
                 original_postgres_report_path=args.original_postgres_report,
                 runtime_postgres_report_path=args.runtime_postgres_report,
+                runtime_postgres_helper_image=args.runtime_postgres_helper_image,
                 golden_report_path=args.golden_report,
                 observed_images_path=args.observed_images,
                 recovered_environment_path=args.recovered_environment,

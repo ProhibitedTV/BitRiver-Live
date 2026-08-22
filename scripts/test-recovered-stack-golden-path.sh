@@ -30,6 +30,9 @@ artifact_dir=""
 namespace="ghcr.io/prohibitedtv"
 wait_timeout="${BITRIVER_RECOVERED_STACK_WAIT_TIMEOUT:-300}"
 project="bitriver-recovered-${RANDOM}-$$"
+backup_helper_name="${project}-postgres-backup"
+restore_helper_name="${project}-postgres-restore"
+backup_helper_volume="${project}-postgres-backup"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,20 +93,8 @@ docker_exec() {
   MSYS_NO_PATHCONV=1 docker exec "$@"
 }
 
-docker_cp_from_host() {
-  local source=$1 destination=$2
-  if [[ $windows_posix_compat == true ]]; then
-    source="$(cygpath -w "$source")"
-  fi
-  MSYS_NO_PATHCONV=1 docker cp "$source" "$destination"
-}
-
-docker_cp_to_host() {
-  local source=$1 destination=$2
-  if [[ $windows_posix_compat == true ]]; then
-    destination="$(cygpath -w "$destination")"
-  fi
-  MSYS_NO_PATHCONV=1 docker cp "$source" "$destination"
+docker_run() {
+  MSYS_NO_PATHCONV=1 docker run "$@"
 }
 
 python_helper() {
@@ -205,6 +196,7 @@ active_root=""
 
 cleanup() {
   set +e
+  docker rm -f "$backup_helper_name" "$restore_helper_name" >/dev/null 2>&1
   if [[ -n $active_root && -f $active_root/.env ]]; then
     compose "$active_root" down -v --remove-orphans >/dev/null 2>&1
   fi
@@ -334,11 +326,18 @@ docker_exec -i \
 seed_invariants="$(database_invariants "$seed_root")"
 [[ "$(invariant_users "$seed_invariants")" == 4 ]] ||
   fail "production-shaped seed database does not contain four fixture users"
-docker_exec -u 0 "$seed_postgres_id" apk add --no-cache bash coreutils gzip >/dev/null
-docker_exec "$seed_postgres_id" mkdir -p /seed-backups
-docker_cp_from_host "$bundle_root/scripts/backup-postgres.sh" \
-  "$seed_postgres_id:/backup-postgres.sh" >/dev/null
-docker_exec \
+seed_postgres_image="$(docker inspect -f '{{.Config.Image}}' "$seed_postgres_id")"
+docker volume create \
+  --label "com.docker.compose.project=$project" \
+  "$backup_helper_volume" >/dev/null
+docker_run --rm --name "$backup_helper_name" \
+  --network "container:$seed_postgres_id" \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --mount "type=bind,source=$(native_path "$bundle_root/scripts/backup-postgres.sh"),target=/backup-postgres.sh,readonly" \
+  --mount "type=volume,source=$backup_helper_volume,target=/seed-backups" \
   -e BITRIVER_BACKUP_DIR=/seed-backups \
   -e BITRIVER_BACKUP_POSTGRES_HOST=127.0.0.1 \
   -e BITRIVER_BACKUP_POSTGRES_USER="$(env_value "$seed_root" BITRIVER_POSTGRES_USER)" \
@@ -347,8 +346,16 @@ docker_exec \
   -e BITRIVER_BACKUP_SOURCE_RELEASE="$release" \
   -e BITRIVER_BACKUP_SOURCE_COMMIT="$source_commit" \
   -e BITRIVER_BACKUP_RUN_PRUNE=0 \
-  "$seed_postgres_id" /bin/bash /backup-postgres.sh
-docker_cp_to_host "$seed_postgres_id:/seed-backups/." "$seed_backup_dir" >/dev/null
+  --entrypoint /bin/sh \
+  "$seed_postgres_image" /backup-postgres.sh
+docker_run --rm --name "$backup_helper_name" \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --mount "type=volume,source=$backup_helper_volume,target=/seed-backups,readonly" \
+  --mount "type=bind,source=$(native_path "$seed_backup_dir"),target=/retained-backups" \
+  --entrypoint /bin/sh \
+  "$seed_postgres_image" -c 'cp -a /seed-backups/. /retained-backups/'
 postgres_backup="$(find "$seed_backup_dir" -maxdepth 1 -name 'bitriver-postgres-*.sql.gz' -type f -print -quit)"
 [[ -n $postgres_backup && -f ${postgres_backup}.manifest.json && -f ${postgres_backup}.sha256 ]] ||
   fail "production-shaped backup set was not retained"
@@ -408,32 +415,33 @@ active_root="$install_root"
 compose "$install_root" up -d --no-build --pull never postgres
 wait_for_service "$install_root" postgres healthy
 runtime_postgres_id="$(compose "$install_root" ps -q postgres)"
-docker_exec -u 0 "$runtime_postgres_id" apk add --no-cache bash coreutils gzip >/dev/null
-docker_exec "$runtime_postgres_id" mkdir -p /recovery
+runtime_postgres_image="$(docker inspect -f '{{.Config.Image}}' "$runtime_postgres_id")"
 runtime_postgres_root="$recovered_root/var/backups/bitriver-live/recovery/postgres"
 runtime_backup="$(find "$runtime_postgres_root" -maxdepth 1 -name 'bitriver-postgres-*.sql.gz' -type f -print -quit)"
 [[ -n $runtime_backup && -f ${runtime_backup}.manifest.json && -f ${runtime_backup}.sha256 ]] ||
   fail "recovered runtime is missing its Postgres backup set"
-docker_cp_from_host "$install_root/scripts/restore-postgres.sh" \
-  "$runtime_postgres_id:/restore-postgres.sh" >/dev/null
-for backup_member in "$runtime_backup" "${runtime_backup}.manifest.json" "${runtime_backup}.sha256"; do
-  docker_cp_from_host "$backup_member" \
-    "$runtime_postgres_id:/recovery/$(basename "$backup_member")" >/dev/null
-done
-docker_exec \
+runtime_restore_evidence="$workdir/runtime-postgres-restore"
+mkdir -p "$runtime_restore_evidence"
+runtime_postgres_report="$runtime_restore_evidence/runtime-postgres-restore-report.json"
+docker_run --rm --name "$restore_helper_name" \
+  --network "container:$runtime_postgres_id" \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --mount "type=bind,source=$(native_path "$install_root/scripts/restore-postgres.sh"),target=/restore-postgres.sh,readonly" \
+  --mount "type=bind,source=$(native_path "$runtime_postgres_root"),target=/recovery,readonly" \
+  --mount "type=bind,source=$(native_path "$runtime_restore_evidence"),target=/evidence" \
   -e BITRIVER_BACKUP_POSTGRES_HOST=127.0.0.1 \
   -e BITRIVER_BACKUP_POSTGRES_USER="$(env_value "$install_root" BITRIVER_POSTGRES_USER)" \
   -e BITRIVER_BACKUP_POSTGRES_PASSWORD="$(env_value "$install_root" BITRIVER_POSTGRES_PASSWORD)" \
   -e BITRIVER_RESTORE_REHEARSAL_DB=bitr_recovered \
   -e BITRIVER_RESTORE_KEEP_DB=1 \
   -e BITRIVER_RESTORE_EXPECT_RELEASE="$release" \
-  -e BITRIVER_RESTORE_REPORT_PATH=/recovery/runtime-postgres-restore-report.json \
-  "$runtime_postgres_id" /bin/bash /restore-postgres.sh \
+  -e BITRIVER_RESTORE_REPORT_PATH=/evidence/runtime-postgres-restore-report.json \
+  --entrypoint /bin/sh \
+  "$runtime_postgres_image" /restore-postgres.sh \
   "/recovery/$(basename "$runtime_backup")"
-runtime_postgres_report="$private_root/runtime-postgres-restore-report.json"
-docker_cp_to_host \
-  "$runtime_postgres_id:/recovery/runtime-postgres-restore-report.json" \
-  "$runtime_postgres_report" >/dev/null
 
 runtime_environment="$private_root/runtime.env"
 python_helper activate-restored-database \
@@ -544,6 +552,7 @@ python_helper complete-disaster-report \
   --disaster-report "$initial_evidence/disaster-recovery-report.json" \
   --original-postgres-report "$initial_evidence/postgres-restore-report.json" \
   --runtime-postgres-report "$runtime_postgres_report" \
+  --runtime-postgres-helper-image "$runtime_postgres_image" \
   --golden-report "$golden_evidence/production-golden-path.json" \
   --observed-images "$observed_images" \
   --recovered-environment "$recovered_environment_snapshot" \

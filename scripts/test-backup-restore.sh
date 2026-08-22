@@ -8,6 +8,7 @@ source_database="bitriver_backup_source"
 password="backup-restore-test-password"
 source_release="${BITRIVER_BACKUP_TEST_RELEASE:-v1.2.3-rc.test}"
 source_commit="${BITRIVER_BACKUP_TEST_COMMIT:-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}"
+postgres_image="${BITRIVER_BACKUP_TEST_POSTGRES_IMAGE:-postgres:15-alpine}"
 workdir="$(mktemp -d)"
 
 [[ $source_release =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || {
@@ -100,13 +101,13 @@ run_restore() {
     docker_args+=(-e BITRIVER_RESTORE_KEEP_DB=1)
   fi
   docker_exec "${docker_args[@]}" \
-    "$container" /bin/bash /restore-postgres.sh "$archive_path"
+    "$container" /bin/sh /restore-postgres.sh "$archive_path"
 }
 
 docker run -d --name "$container" \
   -e POSTGRES_PASSWORD="$password" \
   -e POSTGRES_DB="$source_database" \
-  postgres:15-alpine >/dev/null
+  "$postgres_image" >/dev/null
 
 ready=false
 for _ in {1..60}; do
@@ -118,7 +119,6 @@ for _ in {1..60}; do
 done
 [[ "$ready" == true ]] || fail "Postgres did not become ready"
 
-docker_exec "$container" apk add --no-cache bash coreutils >/dev/null
 docker cp "$script_root/backup-postgres.sh" "$container:/backup-postgres.sh" >/dev/null
 docker cp "$script_root/restore-postgres.sh" "$container:/restore-postgres.sh" >/dev/null
 
@@ -193,7 +193,7 @@ docker_exec \
   -e BITRIVER_BACKUP_SOURCE_RELEASE="$source_release" \
   -e BITRIVER_BACKUP_SOURCE_COMMIT="$source_commit" \
   -e BITRIVER_BACKUP_RUN_PRUNE=0 \
-  "$container" /bin/bash /backup-postgres.sh
+  "$container" /bin/sh /backup-postgres.sh
 
 archive="$(docker_exec "$container" /bin/sh -c 'ls /backups/bitriver-postgres-*.sql.gz')"
 [[ -n "$archive" ]] || fail "backup archive was not published"
@@ -230,7 +230,7 @@ collision_args=(
   -e BITRIVER_BACKUP_SOURCE_COMMIT="$source_commit"
   -e BITRIVER_BACKUP_RUN_PRUNE=0
 )
-docker_exec "${collision_args[@]}" "$container" /bin/bash /backup-postgres.sh
+docker_exec "${collision_args[@]}" "$container" /bin/sh /backup-postgres.sh
 collision_archive=/collision/bitriver-postgres-20260815T010203Z.sql.gz
 collision_manifest="${collision_archive}.manifest.json"
 collision_checksum="${collision_archive}.sha256"
@@ -240,7 +240,7 @@ collision_before="$(
 )"
 set +e
 collision_output="$(
-  docker_exec "${collision_args[@]}" "$container" /bin/bash /backup-postgres.sh 2>&1
+  docker_exec "${collision_args[@]}" "$container" /bin/sh /backup-postgres.sh 2>&1
 )"
 collision_rc=$?
 set -e
@@ -410,7 +410,7 @@ blocked_backup_output="$(
     -e BITRIVER_BACKUP_SOURCE_RELEASE="$source_release" \
     -e BITRIVER_BACKUP_SOURCE_COMMIT="$source_commit" \
     -e BITRIVER_BACKUP_RUN_PRUNE=0 \
-    "$container" /bin/bash /backup-postgres.sh 2>&1
+    "$container" /bin/sh /backup-postgres.sh 2>&1
 )"
 blocked_backup_rc=$?
 set -e

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 umask 077
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BACKUP_DIR="${BITRIVER_BACKUP_DIR:-$REPO_ROOT/data/backups/postgres}"
@@ -40,6 +40,7 @@ partial_migrations="$BACKUP_DIR/.bitriver-migrations-${TIMESTAMP}-$$.txt"
 partial_row_counts="$BACKUP_DIR/.bitriver-row-counts-${TIMESTAMP}-$$.jsonl"
 snapshot_pid=""
 snapshot_id=""
+snapshot_pipe=""
 published=false
 collision_lock_acquired=false
 owns_final_assets=false
@@ -53,11 +54,13 @@ require_command() {
 
 validate_source_identity() {
   if [ "$SOURCE_RELEASE" != "unknown" ] &&
-     [[ ! "$SOURCE_RELEASE" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+     ! printf '%s\n' "$SOURCE_RELEASE" |
+       grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
     echo "error: BITRIVER_BACKUP_SOURCE_RELEASE must be an exact v-prefixed release or 'unknown'" >&2
     exit 1
   fi
-  if [ "$SOURCE_COMMIT" != "unknown" ] && [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  if [ "$SOURCE_COMMIT" != "unknown" ] &&
+     ! printf '%s\n' "$SOURCE_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
     echo "error: BITRIVER_BACKUP_SOURCE_COMMIT must be a full lowercase commit SHA or 'unknown'" >&2
     exit 1
   fi
@@ -78,6 +81,10 @@ stop_snapshot_exporter() {
     kill "$snapshot_pid" >/dev/null 2>&1 || true
     wait "$snapshot_pid" >/dev/null 2>&1 || true
     snapshot_pid=""
+  fi
+  if [ -n "$snapshot_pipe" ]; then
+    rm -f "$snapshot_pipe"
+    snapshot_pipe=""
   fi
 }
 
@@ -101,20 +108,23 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 start_snapshot_exporter() {
-  coproc BITRIVER_BACKUP_SNAPSHOT {
-    psql_source -qAt <<'SQL'
+  snapshot_pipe="$BACKUP_DIR/.bitriver-snapshot-${TIMESTAMP}-$$.fifo"
+  rm -f "$snapshot_pipe"
+  mkfifo "$snapshot_pipe"
+  psql_source -qAt >"$snapshot_pipe" <<'SQL' &
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SELECT pg_export_snapshot();
 SELECT pg_sleep(86400);
 ROLLBACK;
 SQL
-  }
-  snapshot_pid="${BITRIVER_BACKUP_SNAPSHOT_PID:-}"
-  if [ -z "$snapshot_pid" ] || ! IFS= read -r snapshot_id <&"${BITRIVER_BACKUP_SNAPSHOT[0]}"; then
+  snapshot_pid=$!
+  if ! IFS= read -r snapshot_id <"$snapshot_pipe"; then
     echo "error: could not export a consistent Postgres snapshot" >&2
     exit 1
   fi
-  if [[ ! "$snapshot_id" =~ ^[0-9A-Fa-f-]+$ ]]; then
+  rm -f "$snapshot_pipe"
+  snapshot_pipe=""
+  if ! printf '%s\n' "$snapshot_id" | grep -Eq '^[0-9A-Fa-f-]+$'; then
     echo "error: Postgres returned an invalid snapshot identifier" >&2
     exit 1
   fi
@@ -282,16 +292,17 @@ upload_backup() {
   require_command aws
 
   local destination="s3://${UPLOAD_BUCKET}/${UPLOAD_PREFIX}/${BACKUP_BASENAME}"
-  local aws_args=("--region" "$UPLOAD_REGION")
-
-  if [ -n "$UPLOAD_ENDPOINT" ]; then
-    aws_args+=("--endpoint-url" "$UPLOAD_ENDPOINT")
-  fi
 
   echo "uploading backup set to ${destination}" >&2
-  aws s3 cp "$BACKUP_PATH" "$destination" "${aws_args[@]}"
-  aws s3 cp "$MANIFEST_PATH" "${destination}.manifest.json" "${aws_args[@]}"
-  aws s3 cp "$CHECKSUM_PATH" "${destination}.sha256" "${aws_args[@]}"
+  if [ -n "$UPLOAD_ENDPOINT" ]; then
+    aws s3 cp "$BACKUP_PATH" "$destination" --region "$UPLOAD_REGION" --endpoint-url "$UPLOAD_ENDPOINT"
+    aws s3 cp "$MANIFEST_PATH" "${destination}.manifest.json" --region "$UPLOAD_REGION" --endpoint-url "$UPLOAD_ENDPOINT"
+    aws s3 cp "$CHECKSUM_PATH" "${destination}.sha256" --region "$UPLOAD_REGION" --endpoint-url "$UPLOAD_ENDPOINT"
+  else
+    aws s3 cp "$BACKUP_PATH" "$destination" --region "$UPLOAD_REGION"
+    aws s3 cp "$MANIFEST_PATH" "${destination}.manifest.json" --region "$UPLOAD_REGION"
+    aws s3 cp "$CHECKSUM_PATH" "${destination}.sha256" --region "$UPLOAD_REGION"
+  fi
 }
 
 main() {
@@ -299,6 +310,7 @@ main() {
   require_command psql
   require_command gzip
   require_command sha256sum
+  require_command mkfifo
   validate_source_identity
 
   mkdir -p "$BACKUP_DIR"

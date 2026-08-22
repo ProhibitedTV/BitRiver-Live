@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 umask 077
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BACKUP_DIR="${BITRIVER_BACKUP_DIR:-$REPO_ROOT/data/backups/postgres}"
@@ -53,7 +53,7 @@ latest_backup() {
 validate_database_name() {
   local name="$1"
   local label="$2"
-  if [[ ! "$name" =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
+  if ! printf '%s\n' "$name" | grep -Eq '^[a-z_][a-z0-9_]{0,62}$'; then
     echo "error: $label must match ^[a-z_][a-z0-9_]{0,62}$" >&2
     exit 1
   fi
@@ -61,12 +61,13 @@ validate_database_name() {
 
 validate_expected_identity() {
   if [ -n "$EXPECTED_RELEASE" ] &&
-     [[ ! "$EXPECTED_RELEASE" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+     ! printf '%s\n' "$EXPECTED_RELEASE" |
+       grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
     echo "error: BITRIVER_RESTORE_EXPECT_RELEASE must be an exact v-prefixed release" >&2
     exit 1
   fi
   if [ -n "$EXPECTED_SCHEMA_FINGERPRINT" ] &&
-     [[ ! "$EXPECTED_SCHEMA_FINGERPRINT" =~ ^[0-9a-f]{64}$ ]]; then
+     ! printf '%s\n' "$EXPECTED_SCHEMA_FINGERPRINT" | grep -Eq '^[0-9a-f]{64}$'; then
     echo "error: BITRIVER_RESTORE_EXPECT_SCHEMA_FINGERPRINT must be 64 lowercase hex characters" >&2
     exit 1
   fi
@@ -135,12 +136,13 @@ validate_checksum_set() {
 
   while IFS= read -r line || [ -n "$line" ]; do
     line_count=$((line_count + 1))
-    if [[ ! "$line" =~ ^([0-9a-f]{64})[[:space:]][[:space:]]([^/]+)$ ]]; then
+    if ! printf '%s\n' "$line" |
+      grep -Eq '^[0-9a-f]{64}  [^/[:space:]]+$'; then
       echo "error: invalid checksum entry in $checksum_file" >&2
       exit 1
     fi
-    digest="${BASH_REMATCH[1]}"
-    name="${BASH_REMATCH[2]}"
+    digest="${line%%  *}"
+    name="${line#*  }"
     case "$name" in
       "$archive_name")
         archive_seen=$((archive_seen + 1))
@@ -252,16 +254,18 @@ FROM manifest;")"
     echo "error: backup manifest checksum asset identity is invalid" >&2
     exit 1
   fi
-  if [[ ! "$manifest_schema_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+  if ! printf '%s\n' "$manifest_schema_fingerprint" | grep -Eq '^[0-9a-f]{64}$'; then
     echo "error: backup manifest migration fingerprint is invalid" >&2
     exit 1
   fi
   if [ "$source_release" != "unknown" ] &&
-     [[ ! "$source_release" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+     ! printf '%s\n' "$source_release" |
+       grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
     echo "error: backup manifest source release is invalid" >&2
     exit 1
   fi
-  if [ "$source_commit" != "unknown" ] && [[ ! "$source_commit" =~ ^[0-9a-f]{40}$ ]]; then
+  if [ "$source_commit" != "unknown" ] &&
+     ! printf '%s\n' "$source_commit" | grep -Eq '^[0-9a-f]{40}$'; then
     echo "error: backup manifest source commit is invalid" >&2
     exit 1
   fi
@@ -312,10 +316,10 @@ SQL
   local row_counts_array="["
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    row_counts_array+="${separator}${line}"
+    row_counts_array="${row_counts_array}${separator}${line}"
     separator=','
   done <"$restore_row_counts_file"
-  row_counts_array+="]"
+  row_counts_array="${row_counts_array}]"
 
   restored_row_counts_json="$(psql_rehearsal -qAt -v row_counts_json="$row_counts_array" <<'SQL'
 SELECT COALESCE(

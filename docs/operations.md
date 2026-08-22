@@ -379,7 +379,7 @@ paths under `./scripts/`:
 - `./scripts/test-backup-restore.sh`: runs the positive rehearsal and pre-mutation refusal cases against a disposable Postgres 15 container.
 - `./scripts/test-disaster-recovery.sh`: deletes only its disposable source host, rebuilds a source-free packaged-host layout, restores a real non-empty Postgres set plus local/external object fixtures, and writes `bitriver.disaster-recovery/v1` evidence.
 - `./scripts/test-published-disaster-recovery.sh`: downloads one exact public Linux amd64 launcher, validates its release-set identity/checksum before extraction, executes that package's recovery scripts through the lost-host drill, and retains secret-scanned manifest-bound evidence.
-- `./scripts/test-recovered-stack-golden-path.sh`: extends the exact public-package drill with a product-schema backup, boots only the recovered pull-only Compose installation, restores that same archive into a fresh runtime database, asserts every exercised image, and runs the unchanged production golden path against preserved state.
+- `./scripts/test-recovered-stack-golden-path.sh`: extends the exact public-package drill with a product-schema backup, boots only the recovered pull-only Compose installation, runs backup/restore tooling from disposable read-only helpers using the exact release-set Postgres image without mutating either database container, restores that same archive into a fresh runtime database, asserts every exercised image, and runs the unchanged production golden path against preserved state.
 
 The backup manifest has schema `bitriver.postgres-backup/v1`. It binds the archive name/hash/size, source release and commit,
 database/server/tool versions, applied migration ledger and fingerprint, and exact public-table row counts. The dump and all
@@ -551,7 +551,8 @@ release-set hash in another fresh evidence directory:
 ```
 
 The completion report binds both Postgres restore reports to one recovered
-archive, all 13 exercised image references to the release set, preserved and
+archive, the disposable restore helper to the exact release-set Postgres image,
+all 13 exercised image references to the release set, preserved and
 new database state, all eight golden-path stages, and total recovery RTO. It
 retains no environment or credentials. After this passes, scheduled backup
 freshness and genuinely off-host restore evidence remain separate acceptance.

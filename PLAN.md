@@ -58,6 +58,13 @@
   Postgres container without deleting its project volume, then run canonical
   migrations and applications. Refuse an existing restore target or a database
   identity/hash mismatch before API startup.
+- Automated review hardening must keep that recovered Postgres container
+  unmodified. Do not install packages or copy backup/restore tooling into
+  either exercised Postgres container. Make the packaged backup and restore
+  scripts compatible with the exact release-set Postgres image's `/bin/sh`,
+  run them in disposable read-only helpers using the database containers'
+  network namespaces and read-only script/input mounts, and bind the runtime
+  restore-helper image reference to the release-set identity in final evidence.
 - Windows filesystem compatibility shims may emulate package-install symlinks,
   but they do not replace RC21's already-passed Ubuntu package/symlink/systemd
   evidence. This slice proves the recovered exact-image Compose product path;
@@ -71,12 +78,18 @@
 
 - Add focused tests for release-set-to-environment/runtime binding, original-
   disaster-to-runtime Postgres archive binding, completion-report schema/
-  status/hash/invariant checks, secret refusal, unrelated golden report
-  refusal, and honest remaining acceptance.
+  status/hash/invariant checks, exact restore-helper image refusal, secret
+  refusal, unrelated golden report refusal, and honest remaining acceptance.
+- Run both Bash and the exact Postgres Alpine image's `/bin/sh` syntax/runtime
+  paths for the backup/restore scripts, and assert the recovered-stack wrapper
+  contains no package installation or in-container script injection.
 - Run the existing staged and published lost-host rehearsals to guard backward
-  compatibility. Run the new exact RC21 recovered-stack wrapper with real
-  Postgres restore and the Dockerized production golden path; scan retained
-  evidence and verify complete teardown.
+  compatibility. RC21's first recovered-stack exercise reached the real
+  Postgres restore and Dockerized production golden path but is not promotable
+  evidence because review found that it modified the runtime Postgres
+  container. Merge and publish the portable-helper fix, then rerun the wrapper
+  against the exact next public candidate; scan retained evidence and verify
+  complete teardown.
 - Run Python compilation, Bash syntax, pinned ShellCheck, Markdown links,
   `git diff --check`, and literal `./scripts/verify.sh`. Publish a focused PR,
   resolve automated review, require protected exact-head CI, squash merge, and

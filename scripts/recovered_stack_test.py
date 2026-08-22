@@ -195,12 +195,22 @@ class RecoveredStackTest(unittest.TestCase):
             "runtime_postgres": runtime_postgres,
         }
 
-    def complete(self, fixtures: dict[str, Path], output: Path) -> None:
+    def complete(
+        self,
+        fixtures: dict[str, Path],
+        output: Path,
+        *,
+        helper_image: str | None = None,
+    ) -> None:
+        expected_images = json.loads(self.metadata.read_text(encoding="utf-8"))[
+            "expectedServiceImages"
+        ]
         recovered.complete_disaster_report(
             metadata_path=self.metadata,
             disaster_report_path=fixtures["disaster"],
             original_postgres_report_path=fixtures["postgres"],
             runtime_postgres_report_path=fixtures["runtime_postgres"],
+            runtime_postgres_helper_image=helper_image or expected_images["postgres"],
             golden_report_path=fixtures["golden"],
             observed_images_path=fixtures["images"],
             recovered_environment_path=self.environment,
@@ -250,6 +260,16 @@ class RecoveredStackTest(unittest.TestCase):
         with self.assertRaisesRegex(recovered.RecoveredStackError, "do not match"):
             recovered.record_observed_images(self.metadata, observations, output)
 
+    def test_wrapper_keeps_exercised_postgres_containers_unmodified(self) -> None:
+        wrapper = (Path(__file__).parent / "test-recovered-stack-golden-path.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("apk add", wrapper)
+        self.assertNotIn("docker cp", wrapper)
+        self.assertGreaterEqual(wrapper.count("--read-only"), 2)
+        self.assertGreaterEqual(wrapper.count("--entrypoint /bin/sh"), 2)
+        self.assertIn('--runtime-postgres-helper-image "$runtime_postgres_image"', wrapper)
+
     def test_prepare_refuses_release_set_hash_and_repository_mismatch(self) -> None:
         with self.assertRaisesRegex(Exception, "SHA-256 mismatch"):
             recovered.prepare_environment(
@@ -283,6 +303,12 @@ class RecoveredStackTest(unittest.TestCase):
         self.assertEqual(report["observed"]["rtoSeconds"], 180)
         self.assertEqual(report["observed"]["goldenPathSeconds"], 92)
         self.assertTrue(report["recoveredRuntime"]["verified"])
+        self.assertEqual(
+            report["recoveredRuntime"]["runtimePostgresRestoreHelperImage"],
+            json.loads(self.metadata.read_text(encoding="utf-8"))[
+                "expectedServiceImages"
+            ]["postgres"],
+        )
         self.assertEqual(report["recoveredRuntime"]["state"]["preGoldenUsers"], 4)
         self.assertEqual(
             report["stages"][-1]["id"],
@@ -296,6 +322,14 @@ class RecoveredStackTest(unittest.TestCase):
         fixtures["images"].write_text(json.dumps(images), encoding="utf-8")
         with self.assertRaisesRegex(recovered.RecoveredStackError, "images do not match"):
             self.complete(fixtures, self.root / "bad-images.json")
+
+        fixtures = self.evidence_fixtures()
+        with self.assertRaisesRegex(recovered.RecoveredStackError, "helper image"):
+            self.complete(
+                fixtures,
+                self.root / "bad-helper-image.json",
+                helper_image="postgres:15-alpine@sha256:" + "f" * 64,
+            )
 
         fixtures = self.evidence_fixtures()
         golden = json.loads(fixtures["golden"].read_text(encoding="utf-8"))
