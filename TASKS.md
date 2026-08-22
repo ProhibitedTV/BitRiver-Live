@@ -98,7 +98,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       including Go, architecture, release, contract, Postgres, Compose config,
       and quickstart smoke gates. The temporary isolated `.env` was removed;
       primary env and generated OME hashes remain unchanged.
-    - Protected PR CI/review, squash merge, and #1299 handoff remain.
+    - PR #1401's first exact-head run 32560410940 passed the Ubuntu test-all,
+      three-platform quickstart, ShellCheck, docs, and secret gates. Its merge
+      gate rejected only the PR metadata because verification-script changes
+      were not classified as `build/CI`; the scorecard is corrected. Fresh
+      exact-head CI/review, squash merge, and #1299 handoff remain.
 
 ## Scoped change: published-package lost-host recovery qualification (#1299)
 
