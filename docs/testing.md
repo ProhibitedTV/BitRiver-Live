@@ -91,6 +91,31 @@ Use these category entrypoints from the repository root:
 - **Single-host service restart rehearsal:** `./scripts/test-service-resilience.sh --report .artifacts/service-resilience/report.json`
   - Requires Docker, network access for uncached build dependencies, Go 1.26, and an otherwise idle host with no canonical BitRiver containers. It builds a clean tracked-tree copy, uses a private copied environment plus isolated runtime storage, then injects bounded API, Postgres, Redis, SRS/controller, OvenMediaEngine, transcoder, and viewer stop/start failures.
   - The secret-scanned `bitriver.service-resilience/v1` report requires the expected `/readyz`, authenticated `/api/status`, or `/viewer` degradation and recovery signal, preserved session/channel identity, stable restart counts, unchanged operator environment/generated OME hashes, and complete container/volume cleanup for every scenario. This local-build proof remains separate from `./scripts/verify.sh`; exact-candidate clean-host, physical reboot, network/resource pressure, credential/control-plane, active-stream, and alert-delivery evidence remain #1304 acceptance.
+- **Single-host capacity qualification:** `./scripts/test-capacity-qualification.sh --dry-run --release TAG --release-set-sha256 SHA256 --source-commit SHA`
+  - Dry-run is the safe default. It validates and hashes the checked-in
+    warm-up/steady/spike/soak scenario, binds the planned report to one exact
+    prerelease candidate, and secret-scans the resulting
+    `bitriver.capacity-report/v1` evidence without contacting a stack.
+  - Live mode requires a dedicated already-running stack, the exact verified
+    `release-set.json`, a protected metrics token file, and the explicit
+    `--confirm-dedicated-environment` flag. The harness validates the file hash,
+    candidate identity, five-image inventory, and signature-asset reference;
+    signature verification remains an independent release gate. It
+    creates normal test accounts/channels, ramps deterministic 1080p RTMP
+    publishers, HLS virtual viewers, chat, and API traffic, samples bounded
+    application/load-client evidence, and aborts on persistent health,
+    error-rate, CPU, memory, container-memory, or disk thresholds. It always
+    requires at least 80% of configured phase traffic plus matching active
+    stream/transcoder gauges, stops child publishers, and scans retained
+    evidence for per-run sentinels.
+  - Use `--client docker` to isolate FFmpeg/Python dependencies from the load
+    runner. `--collector-mode co-located --data-path DIR --compose-project NAME`
+    adds direct host/Docker samples for development, but includes the load
+    generator's own overhead and is not formal physical-host capacity proof.
+    The initial scenario does not qualify VOD activity, WebRTC/browser
+    playback, direct Postgres/Redis/encoder telemetry, SLO thresholds, 4K, or a
+    supported concurrency envelope; those stay explicit in the report and in
+    #1303 until target-host measurements exist.
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) is the reusable/manual source for cross-platform entrypoint checks and targeted Compose smoke; the CI orchestrator calls its entrypoint matrix while the unified Ubuntu gate owns changed-path Compose smoke.
