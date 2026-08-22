@@ -114,6 +114,10 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       packages, Postgres migrations, Compose rendering, exact local image
       builds, and healthy API/viewer quickstart smoke. Protected PR evidence,
       squash merge, and the bounded #1303 handoff remain pending.
+    - PR #1399 review identified two wrapper defects before merge. Host mode now
+      invokes the tracked non-executable Python selector through Bash on POSIX,
+      while Docker mode preserves an explicit remote media-host override and
+      uses `host.docker.internal` only as its loopback default.
 
 ## Scoped change: viewer tooling dependency refresh (#1398)
 

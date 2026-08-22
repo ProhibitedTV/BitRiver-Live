@@ -155,7 +155,7 @@ fi
 
 set +e
 if [[ $client == host ]]; then
-  "$SCRIPT_DIR/python.sh" "$SCRIPT_DIR/capacity_qualification.py" "${common_args[@]}"
+  bash "$SCRIPT_DIR/python.sh" "$SCRIPT_DIR/capacity_qualification.py" "${common_args[@]}"
   harness_status=$?
 else
   command -v docker >/dev/null 2>&1 || {
@@ -188,6 +188,7 @@ else
   docker_base_url="${docker_base_url//127.0.0.1/host.docker.internal}"
   docker_rtmp_base_url="${rtmp_base_url//localhost/host.docker.internal}"
   docker_rtmp_base_url="${docker_rtmp_base_url//127.0.0.1/host.docker.internal}"
+  docker_media_host_override="${media_host_override:-host.docker.internal}"
   docker_args=(
     run --rm
     --add-host host.docker.internal:host-gateway
@@ -208,7 +209,7 @@ else
     --stage-timeout "$stage_timeout"
     --collector-mode remote
   )
-  capacity_args+=(--media-host-override host.docker.internal)
+  capacity_args+=(--media-host-override "$docker_media_host_override")
   if [[ $mode == dry-run ]]; then
     capacity_args+=(--dry-run)
   else

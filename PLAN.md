@@ -31,6 +31,10 @@
   publisher exit, incomplete samples, undrained application work, or secret-
   bearing evidence. Always stop child publishers and load workers on success,
   failure, or interruption.
+- Keep the wrapper portable across tracked-file mode differences: invoke the
+  non-executable shared Python selector through Bash on host clients. Docker
+  clients default loopback playback rewriting to `host.docker.internal` but
+  must preserve an operator-supplied media-host override for remote targets.
 
 ### Roadmap ordering and evidence boundary
 
