@@ -2,12 +2,28 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script_root="${BITRIVER_BACKUP_TEST_SCRIPT_ROOT:-$repo_root/scripts}"
 container="bitriver-backup-restore-test-${RANDOM}-$$"
 source_database="bitriver_backup_source"
 password="backup-restore-test-password"
-source_release="v1.2.3-rc.test"
-source_commit="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+source_release="${BITRIVER_BACKUP_TEST_RELEASE:-v1.2.3-rc.test}"
+source_commit="${BITRIVER_BACKUP_TEST_COMMIT:-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}"
 workdir="$(mktemp -d)"
+
+[[ $source_release =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || {
+  echo "Backup/restore integration test requires an exact v-prefixed release" >&2
+  exit 2
+}
+[[ $source_commit =~ ^[0-9a-f]{40}$ ]] || {
+  echo "Backup/restore integration test requires a full lowercase commit" >&2
+  exit 2
+}
+for required_script in backup-postgres.sh restore-postgres.sh; do
+  [[ -f $script_root/$required_script ]] || {
+    echo "Backup/restore integration test script is missing: $script_root/$required_script" >&2
+    exit 2
+  }
+done
 
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
@@ -103,12 +119,14 @@ done
 [[ "$ready" == true ]] || fail "Postgres did not become ready"
 
 docker_exec "$container" apk add --no-cache bash coreutils >/dev/null
-docker cp "$repo_root/scripts/backup-postgres.sh" "$container:/backup-postgres.sh" >/dev/null
-docker cp "$repo_root/scripts/restore-postgres.sh" "$container:/restore-postgres.sh" >/dev/null
+docker cp "$script_root/backup-postgres.sh" "$container:/backup-postgres.sh" >/dev/null
+docker cp "$script_root/restore-postgres.sh" "$container:/restore-postgres.sh" >/dev/null
 
 docker_exec -i \
   -e PGPASSWORD="$password" \
   "$container" psql -X -q -v ON_ERROR_STOP=1 \
+  -v source_release="$source_release" \
+  -v source_commit="$source_commit" \
   -h 127.0.0.1 -U postgres -d "$source_database" <<'SQL'
 CREATE TABLE public.schema_migrations (
   filename TEXT PRIMARY KEY,
@@ -127,7 +145,7 @@ INSERT INTO public.schema_migrations (
   release_version, release_commit
 ) VALUES (
   '0001_initial.sql', '0001', repeat('a', 64), 'applied', now(),
-  'v1.2.3-rc.test', repeat('b', 40)
+  :'source_release', :'source_commit'
 );
 
 CREATE TABLE public.users (id TEXT PRIMARY KEY, email TEXT NOT NULL, role TEXT NOT NULL);

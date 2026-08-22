@@ -1,5 +1,100 @@
 # TASKS
 
+## Scoped change: published-package lost-host recovery qualification (#1299)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Bound the exact published-package evidence contract
+  - Acceptance criteria:
+    - #1299's merged recovery foundation and exact remaining acceptance are
+      reconciled with the current release/package structure before code edits.
+    - `PLAN.md` records package identity, extraction, secret, cleanup, test,
+      and honest non-claim boundaries.
+  - Check:
+    - #1299 records three remaining items: exact next-candidate published-
+      package recovery, recovered-stack production golden path, and scheduled
+      off-host freshness/RPO evidence. RC20 predates the recovery payload;
+      RC21 is publishing from exact current-main commit `069a914d`.
+    - The Linux launcher archive contains the source-free deployment bundle
+      and canonical recovery scripts. The release-set manifest declares the
+      candidate tag/commit and every package's exact name, size, and SHA-256.
+
+- [x] Task 2 - Bind recovery evidence to the verified public package
+  - Acceptance criteria:
+    - Published mode validates the release-set schema/tag/commit and exact
+      package name/size/hash before extraction or host mutation.
+    - The disaster report records the public manifest/package binding and does
+      not claim signature or production-golden-path proof.
+  - Check:
+    - `host_recovery.py verify-release-package` now requires the supported
+      release-set schema/repository, exact candidate tag/full commit, and one
+      unique package entry whose size and SHA-256 match the downloaded bytes.
+    - Published disaster reports record the release-set SHA-256 and exact
+      package identity, insert a passing package-binding stage, and explicitly
+      report that the release-set signature was not verified by this drill.
+      Local reports keep the published-package item open.
+    - Seven focused host-recovery tests pass, including schema, repository,
+      tag, commit, name, size, package hash, and exercised-bundle tamper
+      refusal before report output or host mutation.
+    - PR #1400 review identified a P1 in the low-level published interface: a
+      valid archive and an unrelated complete bundle root could be supplied
+      independently. The fixed preflight and final report now compare a
+      deterministic inventory of every directory, relative file path, byte
+      length, and content SHA-256 against the verified archive subtree. The
+      exact RC21 rehearsal bound all 53 files before host mutation.
+
+- [x] Task 3 - Execute the packaged recovery scripts end to end
+  - Acceptance criteria:
+    - The exact extracted backup/restore/helper scripts drive encrypted host,
+      fresh Postgres, and external-object recovery in a disposable lost-host
+      rehearsal.
+    - Local staged mode remains compatible; cleanup and secret scanning pass
+      in both modes.
+  - Check:
+    - The backup rehearsal now accepts an exact script root and release/commit
+      fixture identity. The disaster driver selects backup, restore, inventory,
+      and host-state helpers from the staged/extracted source-free bundle; its
+      repository helper only binds the final report to the public manifest.
+    - Local staged mode passed real Postgres 15 backup/refusal/isolated restore,
+      encrypted host restore, external-object comparison, source deletion, and
+      secret scanning. Windows-only test shims cover unresolved group names,
+      mode-setting, link emulation, and Docker copy paths; Linux acceptance is
+      still owned by the unmodified clean-host installer gate.
+    - Exact RC21 published mode downloaded and pre-validated release-set
+      `ad444f96...` and launcher SHA `4d4012ea...`, then passed the same complete
+      lost-host drill with non-empty state, observed RPO 39s, RTO 53s, and no
+      retained secrets. Its final disaster report SHA-256 is `f6f79fdb...`.
+
+- [-] Task 4 - Document, verify, publish, and merge the #1299 slice
+  - Acceptance criteria:
+    - Operations/testing guidance identifies the exact command, evidence, and
+      remaining recovery boundaries.
+    - Focused tests, syntax/ShellCheck, evidence scanning, literal
+      `./scripts/verify.sh`, protected CI, review, and squash merge pass.
+    - #1299 receives a bounded handoff and remains open only for genuinely
+      outstanding recovered-golden-path and scheduled/off-host evidence.
+  - Check:
+    - Seven focused host-recovery tests and Python bytecode compilation pass.
+      Bash syntax/help/negative-argument checks, pinned ShellCheck 0.11.0, the
+      89-file Markdown link check, `git diff --check`, and retained-evidence
+      scans pass.
+    - Both the staged-bundle rehearsal and final exact RC21 public launcher
+      rehearsal pass. The public report binds release-set `ad444f96...`,
+      launcher `4d4012ea...`, and report `f6f79fdb...`; it records RPO 39s,
+      RTO 53s, and only the recovered golden path plus scheduled/off-host RPO
+      as remaining.
+    - Literal `./scripts/verify.sh` passes with Go 1.26.0 and Docker 29.6.2,
+      including all Go/script packages, release/docs/contract guards,
+      migrations, Compose render, exact local image builds, and healthy
+      API/viewer smoke. The temporary private env was removed, and the primary
+      env/generated OME hashes remained unchanged.
+    - RC21 release run 32554574269 published 46 assets successfully. Clean-host
+      run 32555529499 then passed signed provenance, exact Ubuntu package and
+      host install, production preflight, OME control, same-tag upgrade,
+      OME/Docker/systemd restart, and uninstall retention with no source
+      checkout or retained secrets. PR publication, protected review/CI,
+      squash merge, and the bounded #1299/#1297 handoffs remain pending.
+
 ## Scoped change: reusable single-host capacity qualification harness (#1303)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -99,7 +194,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       browser/WebRTC, direct dependency/encoder, physical-host, SLO, 4K, and
       supported-envelope claims.
 
-- [-] Task 5 - Verify, publish, and merge the harness slice
+- [x] Task 5 - Verify, publish, and merge the harness slice
   - Acceptance criteria:
     - Focused tests, syntax/static checks, evidence scan, dry-run client proof,
       literal `./scripts/verify.sh`, protected CI, and squash merge pass.
@@ -112,8 +207,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Literal `./scripts/verify.sh` passes with the exact Go 1.26.0 toolchain
       and Docker 29.6.2, including Go/release/docs/contract guards, all Go
       packages, Postgres migrations, Compose rendering, exact local image
-      builds, and healthy API/viewer quickstart smoke. Protected PR evidence,
-      squash merge, and the bounded #1303 handoff remain pending.
+      builds, and healthy API/viewer quickstart smoke. Protected exact-head run
+      32553921873 passed the full matrix and merge gate; PR #1399 squash-merged
+      as `069a914d`, and #1303 received the bounded handoff.
     - PR #1399 review identified two wrapper defects before merge. Host mode now
       invokes the tracked non-executable Python selector through Bash on POSIX,
       while Docker mode preserves an explicit remote media-host override and
