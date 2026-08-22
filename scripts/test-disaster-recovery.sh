@@ -140,6 +140,7 @@ if [[ $published_mode == true ]]; then
     --package "$package_archive" \
     --expected-release "$source_release" \
     --expected-commit "$source_commit" \
+    --bundle-root "$bundle_root" \
     --output "$workdir/published-package-binding.json"
 else
   mkdir -p "$bundle_root"

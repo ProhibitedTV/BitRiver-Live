@@ -531,8 +531,11 @@ exact public archive in a fresh evidence directory:
 
 The wrapper verifies repository/tag/commit identity and the exact launcher
 name, byte length, and SHA-256 declared by `release-set.json` before archive
-listing or extraction. The retained report binds the lost-host result to the
-release-set and package hashes but deliberately does not claim Sigstore
+listing or extraction. Before any host mutation, it also requires a
+deterministic path-and-content inventory of the exercised source-free bundle
+to match the verified launcher's `share/bitriver-live` subtree. The retained
+report binds the lost-host result to the release-set, package, and exercised
+bundle hashes but deliberately does not claim Sigstore
 verification; pair it with independent release/clean-host signature evidence.
 It also keeps the recovered production golden path and production-like
 scheduled/off-host RPO evidence explicit until those separate drills pass.

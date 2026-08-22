@@ -34,7 +34,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       report that the release-set signature was not verified by this drill.
       Local reports keep the published-package item open.
     - Seven focused host-recovery tests pass, including schema, repository,
-      tag, commit, name, size, and hash mismatch refusal before report output.
+      tag, commit, name, size, package hash, and exercised-bundle tamper
+      refusal before report output or host mutation.
+    - PR #1400 review identified a P1 in the low-level published interface: a
+      valid archive and an unrelated complete bundle root could be supplied
+      independently. The fixed preflight and final report now compare a
+      deterministic inventory of every directory, relative file path, byte
+      length, and content SHA-256 against the verified archive subtree. The
+      exact RC21 rehearsal bound all 53 files before host mutation.
 
 - [x] Task 3 - Execute the packaged recovery scripts end to end
   - Acceptance criteria:
@@ -55,8 +62,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       still owned by the unmodified clean-host installer gate.
     - Exact RC21 published mode downloaded and pre-validated release-set
       `ad444f96...` and launcher SHA `4d4012ea...`, then passed the same complete
-      lost-host drill with non-empty state, observed RPO 42s, RTO 55s, and no
-      retained secrets. Its final disaster report SHA-256 is `9c13fd78...`.
+      lost-host drill with non-empty state, observed RPO 39s, RTO 53s, and no
+      retained secrets. Its final disaster report SHA-256 is `f6f79fdb...`.
 
 - [-] Task 4 - Document, verify, publish, and merge the #1299 slice
   - Acceptance criteria:
@@ -73,8 +80,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       scans pass.
     - Both the staged-bundle rehearsal and final exact RC21 public launcher
       rehearsal pass. The public report binds release-set `ad444f96...`,
-      launcher `4d4012ea...`, and report `9c13fd78...`; it records RPO 42s,
-      RTO 55s, and only the recovered golden path plus scheduled/off-host RPO
+      launcher `4d4012ea...`, and report `f6f79fdb...`; it records RPO 39s,
+      RTO 53s, and only the recovered golden path plus scheduled/off-host RPO
       as remaining.
     - Literal `./scripts/verify.sh` passes with Go 1.26.0 and Docker 29.6.2,
       including all Go/script packages, release/docs/contract guards,

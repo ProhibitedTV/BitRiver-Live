@@ -24,6 +24,8 @@ OBJECT_INVENTORY_SCHEMA = "bitriver.object-inventory/v1"
 POSTGRES_BACKUP_SCHEMA = "bitriver.postgres-backup/v1"
 RELEASE_SET_SCHEMA = "bitriver.release-set/v1"
 RECOVERY_PACKAGE_NAME = "bitriver-launcher-linux-amd64.tar.gz"
+LAUNCHER_ROOT = PurePosixPath("bitriver-launcher-linux-amd64")
+LAUNCHER_BUNDLE_ROOT = LAUNCHER_ROOT / "share/bitriver-live"
 RELEASE_PATTERN = re.compile(
     r"^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     r"(?:-[0-9A-Za-z.-]+)?$"
@@ -91,6 +93,7 @@ def validate_release_package(
     *,
     expected_release: str,
     expected_commit: str,
+    bundle_root: Path | None = None,
 ) -> dict[str, Any]:
     """Bind one downloaded package to an exact public release-set manifest."""
     validate_identity(expected_release, expected_commit)
@@ -136,7 +139,7 @@ def validate_release_package(
     if actual_sha != expected_sha:
         raise RecoveryError("published recovery package SHA-256 does not match release-set")
     validate_launcher_archive(package_path)
-    return {
+    result = {
         "verified": True,
         "releaseSetSha256": sha256_file(release_set_path),
         "releaseSetSignatureVerified": False,
@@ -146,6 +149,15 @@ def validate_release_package(
             "sha256": actual_sha,
         },
     }
+    if bundle_root is not None:
+        archived_bundle = launcher_archive_bundle_inventory(package_path)
+        exercised_bundle = content_tree_inventory(bundle_root)
+        if exercised_bundle != archived_bundle:
+            raise RecoveryError(
+                "exercised recovery bundle does not match the verified launcher archive"
+            )
+        result["exercisedBundle"] = exercised_bundle
+    return result
 
 
 def parse_timestamp(value: str) -> dt.datetime:
@@ -252,6 +264,58 @@ def tree_inventory(root: Path, allowed_root: Path) -> dict[str, Any]:
         "totalBytes": total_bytes,
         "fingerprintSha256": digest.hexdigest(),
     }
+
+
+def content_inventory(records: Iterable[tuple[str, ...]]) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    directory_count = 0
+    file_count = 0
+    total_bytes = 0
+    ordered = sorted(records, key=lambda record: (record[1], record[0]))
+    for record in ordered:
+        digest.update("\0".join(record).encode("utf-8"))
+        digest.update(b"\n")
+        if record[0] == "directory":
+            directory_count += 1
+        elif record[0] == "file":
+            file_count += 1
+            total_bytes += int(record[2])
+        else:
+            raise RecoveryError("content inventory contains an unsupported entry")
+    return {
+        "directoryCount": directory_count,
+        "fileCount": file_count,
+        "totalBytes": total_bytes,
+        "fingerprintSha256": digest.hexdigest(),
+    }
+
+
+def content_tree_inventory(root: Path) -> dict[str, Any]:
+    if not root.is_dir():
+        raise RecoveryError("exercised recovery bundle root is missing")
+    records: list[tuple[str, ...]] = []
+
+    def visit(directory: Path) -> None:
+        try:
+            entries = sorted(os.scandir(directory), key=lambda item: item.name)
+        except OSError as exc:
+            raise RecoveryError(f"cannot inventory exercised recovery bundle: {exc}") from exc
+        for entry in entries:
+            path = Path(entry.path)
+            relative = safe_relative(path, root)
+            if entry.is_symlink():
+                raise RecoveryError("exercised recovery bundle contains a symlink")
+            if entry.is_dir(follow_symlinks=False):
+                records.append(("directory", relative))
+                visit(path)
+            elif entry.is_file(follow_symlinks=False):
+                size = path.stat(follow_symlinks=False).st_size
+                records.append(("file", relative, str(size), sha256_file(path)))
+            else:
+                raise RecoveryError("exercised recovery bundle contains a special entry")
+
+    visit(root)
+    return content_inventory(records)
 
 
 def parse_checksum_file(
@@ -497,16 +561,15 @@ def validate_member_name(name: str) -> PurePosixPath:
 
 
 def validate_launcher_archive(package: Path) -> None:
-    root = PurePosixPath("bitriver-launcher-linux-amd64")
     required = {
-        root / "bin/bitriver",
-        root / "bin/bitriver-live",
-        root / "share/bitriver-live/deploy/docker-compose.yml",
-        root / "share/bitriver-live/scripts/backup-postgres.sh",
-        root / "share/bitriver-live/scripts/restore-postgres.sh",
-        root / "share/bitriver-live/scripts/backup-host-state.sh",
-        root / "share/bitriver-live/scripts/restore-host-state.sh",
-        root / "share/bitriver-live/scripts/host_recovery.py",
+        LAUNCHER_ROOT / "bin/bitriver",
+        LAUNCHER_ROOT / "bin/bitriver-live",
+        LAUNCHER_BUNDLE_ROOT / "deploy/docker-compose.yml",
+        LAUNCHER_BUNDLE_ROOT / "scripts/backup-postgres.sh",
+        LAUNCHER_BUNDLE_ROOT / "scripts/restore-postgres.sh",
+        LAUNCHER_BUNDLE_ROOT / "scripts/backup-host-state.sh",
+        LAUNCHER_BUNDLE_ROOT / "scripts/restore-host-state.sh",
+        LAUNCHER_BUNDLE_ROOT / "scripts/host_recovery.py",
     }
     seen: set[PurePosixPath] = set()
     try:
@@ -516,7 +579,7 @@ def validate_launcher_archive(package: Path) -> None:
                 if path in seen:
                     raise RecoveryError("launcher archive repeats a path")
                 seen.add(path)
-                if not is_at_or_below(path, root):
+                if not is_at_or_below(path, LAUNCHER_ROOT):
                     raise RecoveryError("launcher archive contains an unexpected root")
                 if not (member.isdir() or member.isfile()):
                     raise RecoveryError("launcher archive contains a link or special entry")
@@ -524,6 +587,69 @@ def validate_launcher_archive(package: Path) -> None:
         raise RecoveryError(f"cannot inspect launcher archive: {exc}") from exc
     if not required.issubset(seen):
         raise RecoveryError("launcher archive is missing required recovery assets")
+
+
+def launcher_archive_bundle_inventory(package: Path) -> dict[str, Any]:
+    records: dict[str, tuple[str, ...]] = {}
+    seen: set[PurePosixPath] = set()
+
+    def ensure_parent_directories(relative: PurePosixPath) -> None:
+        for length in range(1, len(relative.parts)):
+            parent = PurePosixPath(*relative.parts[:length]).as_posix()
+            existing = records.get(parent)
+            if existing is not None and existing[0] != "directory":
+                raise RecoveryError("launcher archive has a file-directory conflict")
+            records[parent] = ("directory", parent)
+
+    try:
+        with tarfile.open(package, mode="r:gz") as archive:
+            for member in archive:
+                path = validate_member_name(member.name)
+                if path in seen:
+                    raise RecoveryError("launcher archive repeats a path")
+                seen.add(path)
+                if path == LAUNCHER_BUNDLE_ROOT:
+                    if not member.isdir():
+                        raise RecoveryError("launcher bundle root is not a directory")
+                    continue
+                if not is_at_or_below(path, LAUNCHER_BUNDLE_ROOT):
+                    continue
+                relative_path = PurePosixPath(
+                    *path.parts[len(LAUNCHER_BUNDLE_ROOT.parts) :]
+                )
+                relative = relative_path.as_posix()
+                ensure_parent_directories(relative_path)
+                if member.isdir():
+                    existing = records.get(relative)
+                    if existing is not None and existing[0] != "directory":
+                        raise RecoveryError("launcher archive has a file-directory conflict")
+                    records[relative] = ("directory", relative)
+                elif member.isfile():
+                    if relative in records:
+                        raise RecoveryError("launcher archive has a file-directory conflict")
+                    extracted = archive.extractfile(member)
+                    if extracted is None:
+                        raise RecoveryError("cannot read launcher archive file")
+                    digest = hashlib.sha256()
+                    size = 0
+                    for chunk in iter(lambda: extracted.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                        size += len(chunk)
+                    if size != member.size:
+                        raise RecoveryError("launcher archive file size is inconsistent")
+                    records[relative] = (
+                        "file",
+                        relative,
+                        str(size),
+                        digest.hexdigest(),
+                    )
+                else:
+                    raise RecoveryError("launcher archive contains a link or special entry")
+    except (tarfile.TarError, OSError) as exc:
+        raise RecoveryError(f"cannot inventory launcher archive: {exc}") from exc
+    if not records:
+        raise RecoveryError("launcher archive has an empty recovery bundle")
+    return content_inventory(list(records.values()))
 
 
 def is_at_or_below(path: PurePosixPath, root: PurePosixPath) -> bool:
@@ -666,13 +792,6 @@ def build_disaster_report(args: argparse.Namespace) -> None:
             "release-set and package archive must be supplied together"
         )
     published_package = None
-    if release_set_path and package_archive:
-        published_package = validate_release_package(
-            release_set_path,
-            package_archive,
-            expected_release=args.source_release,
-            expected_commit=args.source_commit,
-        )
     host = read_json(args.host_report, "host restore report")
     postgres = read_json(args.postgres_report, "Postgres restore report")
     expected_objects = read_json(args.expected_object_inventory, "expected object inventory")
@@ -739,6 +858,14 @@ def build_disaster_report(args: argparse.Namespace) -> None:
         raise RecoveryError("source-free recovery bundle is incomplete")
     if any((bundle / forbidden).exists() for forbidden in (".git", "cmd", "internal")):
         raise RecoveryError("recovery bundle unexpectedly contains source checkout state")
+    if release_set_path and package_archive:
+        published_package = validate_release_package(
+            release_set_path,
+            package_archive,
+            expected_release=args.source_release,
+            expected_commit=args.source_commit,
+            bundle_root=bundle,
+        )
     installed = args.installed_root.resolve(strict=True)
     if any(not (installed / relative).exists() for relative in required):
         raise RecoveryError("recovered packaged-host installation is incomplete")
@@ -811,6 +938,7 @@ def build_parser() -> argparse.ArgumentParser:
     package.add_argument("--package", type=Path, required=True)
     package.add_argument("--expected-release", required=True)
     package.add_argument("--expected-commit", required=True)
+    package.add_argument("--bundle-root", type=Path)
     package.add_argument("--output", type=Path)
 
     manifest = subparsers.add_parser("backup-manifest")
@@ -874,6 +1002,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.package,
                 expected_release=args.expected_release,
                 expected_commit=args.expected_commit,
+                bundle_root=args.bundle_root,
             )
             contents = json.dumps(package, indent=2, sort_keys=True) + "\n"
             if args.output:

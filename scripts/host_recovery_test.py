@@ -421,13 +421,22 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertTrue(published["verified"])
         self.assertFalse(published["releaseSetSignatureVerified"])
         self.assertEqual(published["asset"]["sha256"], sha256(package))
+        extract_root = self.root / "published-launcher"
+        with tarfile.open(package, mode="r:gz") as archive:
+            archive.extractall(extract_root, filter="data")
+        published_bundle = (
+            extract_root
+            / "bitriver-launcher-linux-amd64"
+            / "share"
+            / "bitriver-live"
+        )
         recovery.build_disaster_report(
             argparse.Namespace(
                 host_report=host_report,
                 postgres_report=postgres_report,
                 expected_object_inventory=object_inventory,
                 observed_object_inventory=object_inventory,
-                bundle_root=bundle,
+                bundle_root=published_bundle,
                 installed_root=installed,
                 destroyed_source_root=self.root / "destroyed-source",
                 source_release=RELEASE,
@@ -447,6 +456,17 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertEqual(
             report["stages"][0]["id"], "published-package-release-set-binding"
         )
+        (published_bundle / "scripts/host_recovery.py").write_text(
+            "tampered exercised bundle\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(recovery.RecoveryError, "bundle does not match"):
+            recovery.validate_release_package(
+                release_set,
+                package,
+                expected_release=RELEASE,
+                expected_commit=COMMIT,
+                bundle_root=published_bundle,
+            )
         package.write_bytes(package.read_bytes() + b"tampered-package-fixture")
         with self.assertRaisesRegex(recovery.RecoveryError, "does not match"):
             recovery.validate_release_package(

@@ -45,6 +45,12 @@
 - Archive extraction is a pre-mutation trust boundary. Verify tag, commit,
   schema, unique asset entry, size, and SHA-256 before extraction, then refuse
   absolute or parent-traversing members before invoking `tar`.
+- Review hardening must also bind the exercised `--bundle-root` bytes to the
+  verified launcher archive subtree. The low-level published-mode driver
+  accepts those paths independently; completeness alone cannot prevent a
+  caller from pairing a valid archive with a modified extracted bundle.
+  Compare a deterministic content inventory for every regular file and
+  directory beneath `share/bitriver-live` before publishing the passing stage.
 - The rehearsal intentionally destroys only a generated temporary source-host
   root. It must never accept the repository root, operator paths, or an
   existing target root, and it must scan retained evidence for test secrets.
