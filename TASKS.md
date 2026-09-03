@@ -1,5 +1,82 @@
 # TASKS
 
+## Scoped change: critical x/crypto release finding (#1306)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose the blocking release finding and bound the fix
+  - Acceptance criteria:
+    - The scanner finding, fixed version, reachable package surface, production
+      graph, offline replacement, and affected open PRs are reconciled before
+      dependency edits.
+    - `PLAN.md` records scope, exclusions, risk, tests, and rollout ordering.
+  - Check:
+    - Runs `33583657605` and `33583682375` both report critical
+      `CVE-2026-56854` in production binaries through
+      `golang.org/x/crypto v0.54.0`, fixed in `v0.55.0`.
+    - Product source imports only `golang.org/x/crypto/pbkdf2`; the checked-in
+      offline replacement contains only `pbkdf2`, while production-module
+      generation deliberately removes local replacements and downloads the
+      full upstream module. The release policy permits no unresolved criticals.
+
+- [x] Task 2 - Update the canonical dependency and release note
+  - Acceptance criteria:
+    - `go.mod` and `go.sum` resolve `golang.org/x/crypto v0.55.0` without
+      unrelated module churn.
+    - The v1.2.3 draft records the patched critical dependency without claiming
+      broader security qualification.
+  - Check:
+    - `go.mod` now requires `golang.org/x/crypto v0.55.0`; canonical
+      `refresh-go-sum.sh` replaced only the patched module and its selected
+      upstream transitive checksums.
+    - The draft release notes reject immutable RC22 for stable promotion,
+      identify the patched requirement, and require a new scanned candidate
+      without overclaiming the broader #1306 review.
+
+- [x] Task 3 - Prove offline and production dependency modes
+  - Acceptance criteria:
+    - Offline Go tests continue to use the minimal checked-in replacement.
+    - The generated production module downloads and builds against upstream
+      `v0.55.0`; repository hygiene and secret/diff checks pass.
+  - Check:
+    - `GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed all
+      Go and script packages through the checked-in replacement.
+    - A disposable generated production module contained no local x/crypto
+      replacement, downloaded successfully, resolved exactly
+      `golang.org/x/crypto v0.55.0`, and built the Postgres-tagged server.
+    - `go mod tidy -diff` is intentionally not the production checksum oracle:
+      the minimal offline replacements cause it to propose deleting upstream
+      sums. `refresh-go-sum.sh` owns that graph by repository contract.
+    - Committed-secret guard, three Markdown-link unit tests, the 89-file link
+      check, and `git diff --check` passed.
+
+- [-] Task 4 - Run full gates, review, and merge the security update
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh` and protected exact-head CI pass, including
+      the blocking image scan.
+    - The focused PR is reviewed and squash-merged; #1306 receives bounded
+      evidence, and blocked dependency PRs are refreshed from patched `main`.
+  - Check:
+    - Literal `./scripts/verify.sh` passed after Docker Desktop was restored:
+      repository/CI/release-bundle guards, all Go/script packages, migration
+      lifecycle, docs/contract checks, Compose render, rebuilt production
+      images, and canonical quickstart smoke succeeded. Viewer checks correctly
+      skipped because no viewer files changed.
+    - The first attempt stopped before Docker-backed acceptance because the
+      local Linux engine was unavailable; no product check failed. The complete
+      rerun passed, removed its isolated `.env`, and left no matching BitRiver
+      containers. Primary `.env` and generated OME hashes remain
+      `9d57f716...` and `01c44166...` respectively.
+    - Protected exact-head CI, review, squash merge, #1306 evidence, and
+      dependency-PR refresh remain.
+    - Initial protected run `33818521190` passed Ubuntu, macOS, Windows, docs,
+      secret, and merge gates. Manual exact-code image run `33818707700` passed
+      both blocking production-image and native arm64 viewer jobs.
+    - Automated review identified one valid P2 documentation contradiction:
+      RC22 was called rejected but a stale sentence still implied its root
+      could become promotable. The draft now treats its results as historical
+      only and assigns all eight promotion gates to the patched successor.
+
 ## Scoped change: recovered immutable stack production golden path (#1299)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -85,7 +162,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       exact-image shell syntax, and the full exact-digest backup/restore suite
       pass. The next published candidate owns final product acceptance.
 
-- [-] Task 4 - Document, verify, publish, and merge the recovered-stack slice
+- [x] Task 4 - Document, verify, publish, and merge the recovered-stack slice
   - Acceptance criteria:
     - Operator/release guidance documents the exact command, evidence, and
       remaining scheduled/off-host boundary.
@@ -132,10 +209,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       including all Go/script packages, release/docs/contract/CI guards,
       Postgres migrations, Compose render, and canonical quickstart smoke. The
       temporary isolated `.env` was removed and primary contract hashes remain
-      unchanged. Fresh exact-head CI/re-review, squash merge, and the bounded
-      #1299 handoff remain.
+      unchanged.
+    - Exact-head CI run `32563388723` passed Ubuntu `test-all`, macOS/Windows Go,
+      all three quickstart entrypoints, ShellCheck, docs, secret, and merge
+      gates. Codex re-review found no issues at `11aa814a`; all fixed review
+      conversations were resolved without bypassing protection. PR #1401
+      squash-merged to `main` as `efca191c`.
 
-- [ ] Task 5 - Publish and qualify the next immutable candidate
+- [x] Task 5 - Publish and qualify the next immutable candidate
   - Acceptance criteria:
     - The first candidate containing the portable helper scripts publishes from
       merged `main` with an exact release-set/package identity.
@@ -145,7 +226,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - #1299 receives the bounded result and remains open only for genuinely
       outstanding scheduled/off-host RPO evidence.
   - Check:
-    - Blocked until Task 4 merges the reviewed helper implementation.
+    - Annotated tag `v1.2.3-rc.22` points to exact protected-main commit
+      `efca191c`. Release run `32563832114` passed the full environment, Go,
+      viewer, package, five-image build/signature/SBOM, three-distribution
+      package acceptance, pull-only production golden-path, release-set, and
+      prerelease publication gates.
+    - Public `release-set.json` SHA-256
+      `938b22cc5581275bf6788f2144367e49626eff0964586485ba303d339218a2b8`
+      declares the exact tag/commit/repository, five first-party images, and
+      eight dependency digests. The release contains 46 assets including the
+      Linux amd64 launcher.
+    - No-checkout Ubuntu 24.04 clean-host run `32564384318` passed package
+      install, non-root Docker preflight, pull-only systemd activation, smoke,
+      authenticated OME control, same-tag staging, OME/Docker-daemon/full-
+      systemd restart recovery, safe uninstall retention, sanitized evidence,
+      and cleanup in 4m58s.
+    - The exact public RC22 recovered-stack wrapper passed destructive encrypted
+      recovery, original and runtime fresh-database restores through identical
+      release-set Postgres helpers, all 13 exact runtime-image assertions, and
+      the unchanged eight-stage production golden path. It preserved one
+      representative fixture and four pre-existing users, persisted two new
+      users, and recorded RPO 24s, restore-only RTO 22s, total product RTO 110s,
+      and golden path 30s.
+    - Completion report SHA-256
+      `15aba647f1b0049bb961715a822cea047c651a172a41620965520be233e19622`
+      is secret-scanned, binds both helpers to exact Postgres digest
+      `fe0737ba...`, and leaves only production-like scheduled off-host RPO
+      evidence open. Independent cleanup found no rehearsal containers or
+      volumes.
+    - Bounded evidence was posted to #1299 in comment `5379542755`; the issue
+      remains open only for the separately evidenced scheduled/off-host slice.
 
 ## Scoped change: published-package lost-host recovery qualification (#1299)
 
