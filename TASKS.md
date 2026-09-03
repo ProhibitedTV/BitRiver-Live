@@ -69,6 +69,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       `9d57f716...` and `01c44166...` respectively.
     - Protected exact-head CI, review, squash merge, #1306 evidence, and
       dependency-PR refresh remain.
+    - Initial protected run `33818521190` passed Ubuntu, macOS, Windows, docs,
+      secret, and merge gates. Manual exact-code image run `33818707700` passed
+      both blocking production-image and native arm64 viewer jobs.
+    - Automated review identified one valid P2 documentation contradiction:
+      RC22 was called rejected but a stale sentence still implied its root
+      could become promotable. The draft now treats its results as historical
+      only and assigns all eight promotion gates to the patched successor.
 
 ## Scoped change: recovered immutable stack production golden path (#1299)
 
