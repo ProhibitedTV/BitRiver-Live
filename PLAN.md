@@ -1,5 +1,25 @@
 # PLAN
 
+## Current scope - clear critical x/crypto release finding (#1306) (2026-09-03)
+
+- Treat the blocking image-scan finding as a release-critical dependency update:
+  production binaries currently resolve `golang.org/x/crypto v0.54.0`, and
+  Trivy reports fixed critical `CVE-2026-56854` with `v0.55.0` as the patched
+  version. Do not suppress or accept the finding for stable promotion.
+- Update the canonical module requirement and checksums to `v0.55.0`. Preserve
+  the checked-in offline replacement, which contains only the locally required
+  `pbkdf2` implementation and does not vendor the affected SSH package; verify
+  production-module generation removes the replacement and resolves the exact
+  patched upstream graph.
+- Keep this slice dependency-only: do not change application behavior,
+  deployment contracts, CI workflows, scanner thresholds, or operator secrets.
+  Record the security-relevant dependency change in the v1.2.3 draft notes.
+- Verify checksum/module consistency, offline Go tests, production-module
+  download/build identity, repository secret/diff hygiene, and literal
+  `./scripts/verify.sh`. Require protected PR CI including the blocking image
+  scan before squash merge, then refresh the blocked dependency PRs against the
+  patched `main` rather than rerunning their stale vulnerable commits.
+
 ## Current scope - recovered immutable stack production golden path (#1299) (2026-08-22)
 
 - Extend the merged published-package lost-host rehearsal with an explicit
@@ -103,6 +123,23 @@
   `git diff --check`, and literal `./scripts/verify.sh`. Publish a focused PR,
   resolve automated review, require protected exact-head CI, squash merge, and
   post a bounded #1299 handoff before starting scheduled/off-host RPO work.
+
+### Immutable candidate execution result
+
+- PR #1401 merged the reviewed portable-helper implementation to protected
+  `main` as `efca191c`. Annotated tag `v1.2.3-rc.22` points to that exact commit,
+  and its complete release workflow passed before qualification.
+- Independently downloaded `release-set.json` has SHA-256 `938b22cc...` and
+  names the exact tag, commit, repository, five first-party images, and eight
+  dependency digests. The no-checkout Ubuntu clean-host workflow passed against
+  the same tag/hash.
+- `test-recovered-stack-golden-path.sh` passed against the exact public RC22
+  release set/package. Secret-scanned completion evidence binds both Postgres
+  helper identities and all 13 observed services to the release set; cleanup
+  left no rehearsal containers or volumes.
+- #1299 now records the bounded release, clean-host, and recovered-stack result.
+  Only production-like scheduled/off-host backup freshness and RPO evidence
+  remains open; no stable-promotion or off-host-durability claim is inferred.
 
 ## Current scope - published-package lost-host recovery qualification (#1299) (2026-08-21)
 
