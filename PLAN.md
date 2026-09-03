@@ -1,5 +1,25 @@
 # PLAN
 
+## Current scope - clear critical x/crypto release finding (#1306) (2026-09-03)
+
+- Treat the blocking image-scan finding as a release-critical dependency update:
+  production binaries currently resolve `golang.org/x/crypto v0.54.0`, and
+  Trivy reports fixed critical `CVE-2026-56854` with `v0.55.0` as the patched
+  version. Do not suppress or accept the finding for stable promotion.
+- Update the canonical module requirement and checksums to `v0.55.0`. Preserve
+  the checked-in offline replacement, which contains only the locally required
+  `pbkdf2` implementation and does not vendor the affected SSH package; verify
+  production-module generation removes the replacement and resolves the exact
+  patched upstream graph.
+- Keep this slice dependency-only: do not change application behavior,
+  deployment contracts, CI workflows, scanner thresholds, or operator secrets.
+  Record the security-relevant dependency change in the v1.2.3 draft notes.
+- Verify checksum/module consistency, offline Go tests, production-module
+  download/build identity, repository secret/diff hygiene, and literal
+  `./scripts/verify.sh`. Require protected PR CI including the blocking image
+  scan before squash merge, then refresh the blocked dependency PRs against the
+  patched `main` rather than rerunning their stale vulnerable commits.
+
 ## Current scope - recovered immutable stack production golden path (#1299) (2026-08-22)
 
 - Extend the merged published-package lost-host rehearsal with an explicit

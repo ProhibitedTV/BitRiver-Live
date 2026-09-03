@@ -1,5 +1,82 @@
 # TASKS
 
+## Scoped change: critical x/crypto release finding (#1306)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose the blocking release finding and bound the fix
+  - Acceptance criteria:
+    - The scanner finding, fixed version, reachable package surface, production
+      graph, offline replacement, and affected open PRs are reconciled before
+      dependency edits.
+    - `PLAN.md` records scope, exclusions, risk, tests, and rollout ordering.
+  - Check:
+    - Runs `33583657605` and `33583682375` both report critical
+      `CVE-2026-56854` in production binaries through
+      `golang.org/x/crypto v0.54.0`, fixed in `v0.55.0`.
+    - Product source imports only `golang.org/x/crypto/pbkdf2`; the checked-in
+      offline replacement contains only `pbkdf2`, while production-module
+      generation deliberately removes local replacements and downloads the
+      full upstream module. The release policy permits no unresolved criticals.
+
+- [x] Task 2 - Update the canonical dependency and release note
+  - Acceptance criteria:
+    - `go.mod` and `go.sum` resolve `golang.org/x/crypto v0.55.0` without
+      unrelated module churn.
+    - The v1.2.3 draft records the patched critical dependency without claiming
+      broader security qualification.
+  - Check:
+    - `go.mod` now requires `golang.org/x/crypto v0.55.0`; canonical
+      `refresh-go-sum.sh` replaced only the patched module and its selected
+      upstream transitive checksums.
+    - The draft release notes reject immutable RC22 for stable promotion,
+      identify the patched requirement, and require a new scanned candidate
+      without overclaiming the broader #1306 review.
+
+- [x] Task 3 - Prove offline and production dependency modes
+  - Acceptance criteria:
+    - Offline Go tests continue to use the minimal checked-in replacement.
+    - The generated production module downloads and builds against upstream
+      `v0.55.0`; repository hygiene and secret/diff checks pass.
+  - Check:
+    - `GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed all
+      Go and script packages through the checked-in replacement.
+    - A disposable generated production module contained no local x/crypto
+      replacement, downloaded successfully, resolved exactly
+      `golang.org/x/crypto v0.55.0`, and built the Postgres-tagged server.
+    - `go mod tidy -diff` is intentionally not the production checksum oracle:
+      the minimal offline replacements cause it to propose deleting upstream
+      sums. `refresh-go-sum.sh` owns that graph by repository contract.
+    - Committed-secret guard, three Markdown-link unit tests, the 89-file link
+      check, and `git diff --check` passed.
+
+- [-] Task 4 - Run full gates, review, and merge the security update
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh` and protected exact-head CI pass, including
+      the blocking image scan.
+    - The focused PR is reviewed and squash-merged; #1306 receives bounded
+      evidence, and blocked dependency PRs are refreshed from patched `main`.
+  - Check:
+    - Literal `./scripts/verify.sh` passed after Docker Desktop was restored:
+      repository/CI/release-bundle guards, all Go/script packages, migration
+      lifecycle, docs/contract checks, Compose render, rebuilt production
+      images, and canonical quickstart smoke succeeded. Viewer checks correctly
+      skipped because no viewer files changed.
+    - The first attempt stopped before Docker-backed acceptance because the
+      local Linux engine was unavailable; no product check failed. The complete
+      rerun passed, removed its isolated `.env`, and left no matching BitRiver
+      containers. Primary `.env` and generated OME hashes remain
+      `9d57f716...` and `01c44166...` respectively.
+    - Protected exact-head CI, review, squash merge, #1306 evidence, and
+      dependency-PR refresh remain.
+    - Initial protected run `33818521190` passed Ubuntu, macOS, Windows, docs,
+      secret, and merge gates. Manual exact-code image run `33818707700` passed
+      both blocking production-image and native arm64 viewer jobs.
+    - Automated review identified one valid P2 documentation contradiction:
+      RC22 was called rejected but a stale sentence still implied its root
+      could become promotable. The draft now treats its results as historical
+      only and assigns all eight promotion gates to the patched successor.
+
 ## Scoped change: recovered immutable stack production golden path (#1299)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
