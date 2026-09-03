@@ -104,6 +104,23 @@
   resolve automated review, require protected exact-head CI, squash merge, and
   post a bounded #1299 handoff before starting scheduled/off-host RPO work.
 
+### Immutable candidate execution result
+
+- PR #1401 merged the reviewed portable-helper implementation to protected
+  `main` as `efca191c`. Annotated tag `v1.2.3-rc.22` points to that exact commit,
+  and its complete release workflow passed before qualification.
+- Independently downloaded `release-set.json` has SHA-256 `938b22cc...` and
+  names the exact tag, commit, repository, five first-party images, and eight
+  dependency digests. The no-checkout Ubuntu clean-host workflow passed against
+  the same tag/hash.
+- `test-recovered-stack-golden-path.sh` passed against the exact public RC22
+  release set/package. Secret-scanned completion evidence binds both Postgres
+  helper identities and all 13 observed services to the release set; cleanup
+  left no rehearsal containers or volumes.
+- #1299 now records the bounded release, clean-host, and recovered-stack result.
+  Only production-like scheduled/off-host backup freshness and RPO evidence
+  remains open; no stable-promotion or off-host-durability claim is inferred.
+
 ## Current scope - published-package lost-host recovery qualification (#1299) (2026-08-21)
 
 - Extend the existing disposable lost-host rehearsal so it can consume an

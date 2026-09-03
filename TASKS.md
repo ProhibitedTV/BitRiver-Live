@@ -85,7 +85,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       exact-image shell syntax, and the full exact-digest backup/restore suite
       pass. The next published candidate owns final product acceptance.
 
-- [-] Task 4 - Document, verify, publish, and merge the recovered-stack slice
+- [x] Task 4 - Document, verify, publish, and merge the recovered-stack slice
   - Acceptance criteria:
     - Operator/release guidance documents the exact command, evidence, and
       remaining scheduled/off-host boundary.
@@ -132,10 +132,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       including all Go/script packages, release/docs/contract/CI guards,
       Postgres migrations, Compose render, and canonical quickstart smoke. The
       temporary isolated `.env` was removed and primary contract hashes remain
-      unchanged. Fresh exact-head CI/re-review, squash merge, and the bounded
-      #1299 handoff remain.
+      unchanged.
+    - Exact-head CI run `32563388723` passed Ubuntu `test-all`, macOS/Windows Go,
+      all three quickstart entrypoints, ShellCheck, docs, secret, and merge
+      gates. Codex re-review found no issues at `11aa814a`; all fixed review
+      conversations were resolved without bypassing protection. PR #1401
+      squash-merged to `main` as `efca191c`.
 
-- [ ] Task 5 - Publish and qualify the next immutable candidate
+- [x] Task 5 - Publish and qualify the next immutable candidate
   - Acceptance criteria:
     - The first candidate containing the portable helper scripts publishes from
       merged `main` with an exact release-set/package identity.
@@ -145,7 +149,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - #1299 receives the bounded result and remains open only for genuinely
       outstanding scheduled/off-host RPO evidence.
   - Check:
-    - Blocked until Task 4 merges the reviewed helper implementation.
+    - Annotated tag `v1.2.3-rc.22` points to exact protected-main commit
+      `efca191c`. Release run `32563832114` passed the full environment, Go,
+      viewer, package, five-image build/signature/SBOM, three-distribution
+      package acceptance, pull-only production golden-path, release-set, and
+      prerelease publication gates.
+    - Public `release-set.json` SHA-256
+      `938b22cc5581275bf6788f2144367e49626eff0964586485ba303d339218a2b8`
+      declares the exact tag/commit/repository, five first-party images, and
+      eight dependency digests. The release contains 46 assets including the
+      Linux amd64 launcher.
+    - No-checkout Ubuntu 24.04 clean-host run `32564384318` passed package
+      install, non-root Docker preflight, pull-only systemd activation, smoke,
+      authenticated OME control, same-tag staging, OME/Docker-daemon/full-
+      systemd restart recovery, safe uninstall retention, sanitized evidence,
+      and cleanup in 4m58s.
+    - The exact public RC22 recovered-stack wrapper passed destructive encrypted
+      recovery, original and runtime fresh-database restores through identical
+      release-set Postgres helpers, all 13 exact runtime-image assertions, and
+      the unchanged eight-stage production golden path. It preserved one
+      representative fixture and four pre-existing users, persisted two new
+      users, and recorded RPO 24s, restore-only RTO 22s, total product RTO 110s,
+      and golden path 30s.
+    - Completion report SHA-256
+      `15aba647f1b0049bb961715a822cea047c651a172a41620965520be233e19622`
+      is secret-scanned, binds both helpers to exact Postgres digest
+      `fe0737ba...`, and leaves only production-like scheduled off-host RPO
+      evidence open. Independent cleanup found no rehearsal containers or
+      volumes.
+    - Bounded evidence was posted to #1299 in comment `5379542755`; the issue
+      remains open only for the separately evidenced scheduled/off-host slice.
 
 ## Scoped change: published-package lost-host recovery qualification (#1299)
 
