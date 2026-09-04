@@ -93,7 +93,10 @@ func TestDependencyExceptionPolicyIsTimeBounded(t *testing.T) {
 		"ISO expiry date no more than 30 days",
 		"scanner rejects incomplete or expired entries",
 		"Never use `continue-on-error`",
-		"review it by 2026-08-12",
+		"Browserslist 4.28.9",
+		"PostCSS 8.5.28",
+		"Sharp 0.35.3",
+		"review it by 2026-09-18",
 	} {
 		if !strings.Contains(policy, required) {
 			t.Errorf("dependency policy missing %q", required)

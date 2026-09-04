@@ -77,10 +77,10 @@ Go exceptions live in `scripts/govulncheck-baseline.json`; the scanner rejects i
 
 ## Current below-threshold disposition
 
-As of 2026-07-31, the viewer uses Next.js 16.2.11 with explicit fixed PostCSS
-8.5.22 and Sharp 0.35.3 overrides. A clean production-only npm audit reports
-zero findings at the high/critical blocking threshold. The overrides remain
-release inputs and must be reevaluated whenever Next.js updates its transitive
-pins; do not remove them without a clean install, audit, test, and production
-build. Maintainers own this temporary override set and will review it by 2026-08-12
-even if no aligned Next.js release is available by then.
+As of 2026-09-04, the viewer uses Next.js 16.3.0. Browserslist 4.28.9,
+PostCSS 8.5.28, and Sharp 0.35.3 are explicit fixed overrides. A clean npm audit
+reports zero findings, including at the high/critical blocking threshold. They
+remain release inputs and must be reevaluated whenever Next.js or the viewer
+toolchain updates its transitive pins; do not remove them without a clean install,
+audit, test, and production build. Maintainers own this temporary override set
+and will review it by 2026-09-18 even if no aligned upstream release is available.

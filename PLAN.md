@@ -1,5 +1,24 @@
 # PLAN
 
+## Current scope - clear viewer verification blockers (2026-09-04)
+
+- Preserve the intended Jest unit boundary while making discovery portable in
+  nested Windows worktrees: replace the absolute `<rootDir>` `testMatch` with
+  the equivalent root-independent `**/__tests__` glob. Do not use Jest's broad
+  defaults, which also collect the separate Playwright `tests/*.spec.ts` files.
+- Remove newly published npm audit findings without suppressions. Pin current
+  fixed `browserslist 4.28.9` and `postcss 8.5.28`, refresh the exact lockfile,
+  align the PostCSS invariant, and update the dependency-policy disposition so
+  maintainers know which temporary overrides remain release inputs.
+- Keep shipped UI behavior, APIs, deployment contracts, CI workflows, and
+  operator configuration unchanged. Record the Windows discovery result as a
+  bounded #1307 finding, not closure of its browser/device compatibility scope.
+- Require clean install, exact resolved graph, zero-high npm audit, strict lint,
+  all 26 Jest suites without Playwright-spec collection, production build,
+  focused baseline test, literal `./scripts/verify.sh`, protected cross-platform
+  CI, viewer integration, native arm64, production image scan, and review before
+  squash merge. Refresh #1406 only after this prerequisite is on `main`.
+
 ## Current scope - clear critical x/crypto release finding (#1306) (2026-09-03)
 
 - Treat the blocking image-scan finding as a release-critical dependency update:
