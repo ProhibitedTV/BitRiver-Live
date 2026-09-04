@@ -1,5 +1,93 @@
 # TASKS
 
+## Scoped change: viewer runtime dependency qualification (#1406)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Reconcile the runtime group with current main
+  - Acceptance criteria:
+    - The exact direct/lockfile changes, upstream risks, stale CI failure, and
+      relationship to the merged viewer-verification baseline are understood.
+    - `PLAN.md` records scope, exclusions, ordering, and required proof first.
+  - Check:
+    - PR #1406 changes only `hls.js 1.6.17 -> 1.7.1`, `next 16.3.0 ->
+      16.3.3`, `ovenplayer 0.10.53 -> 0.10.54`, and their exact lock graph.
+      The earlier Ubuntu failure was the stale Next.js runtime invariant, while
+      native arm64 and production image scans passed.
+    - Remote head `5efc73a5` cleanly merges `main` at `06895854`, preserving
+      the portable Jest selector and fixed Browserslist/PostCSS overrides.
+
+- [x] Task 2 - Align reviewed runtime evidence and release documentation
+  - Acceptance criteria:
+    - The runtime invariant requires all three intentional direct versions.
+    - Dependency policy and draft release notes describe the current Next.js
+      pin and its security relevance without claiming unpublished qualification.
+    - No tooling, UI logic, API, deployment contract, or unrelated lock change
+      enters the diff.
+  - Check:
+    - The invariant now requires hls.js 1.7.1, Next.js 16.3.3, and OvenPlayer
+      0.10.54. The dependency policy names Next.js 16.3.3, and the v1.2.3 draft
+      records both upstream critical advisories while explicitly requiring a
+      newly qualified immutable BitRiver candidate.
+    - The focused runtime/policy tests passed with the repository's Go 1.26.0
+      toolchain. Three link-checker unit tests and all 89 tracked public-document
+      links passed; `git diff --check` passed. The PR lock diff is limited to the
+      three direct packages, matching Next SWC binaries, and `@swc/helpers`.
+    - A clean Next.js 16.3.3 build added its generated `root-params.d.ts` type
+      reference to tracked `next-env.d.ts`; retaining that generated output keeps
+      subsequent production builds clean without changing application logic.
+    - An initial focused command selected the Go 1.25.6 launcher under
+      `GOTOOLCHAIN=local` and stopped before tests; rerunning through the
+      installed Go 1.26.0 toolchain passed. No product failure was masked.
+
+- [x] Task 3 - Run focused viewer qualification
+  - Acceptance criteria:
+    - Clean install resolves the exact intended versions with zero audit findings.
+    - Strict lint, all Jest suites, production build, and Playwright integration
+      pass against the updated hls.js/Next.js/OvenPlayer runtime.
+  - Check:
+    - Node 24.13.0/npm 11.6.2 clean-installed 667 packages from the lockfile;
+      the direct graph resolved exactly hls.js 1.7.1, Next.js 16.3.3, and
+      OvenPlayer 0.10.54, and both install-time and explicit npm audits reported
+      zero vulnerabilities.
+    - Strict lint, 26 Jest suites / 218 tests / 4 snapshots, TypeScript, and the
+      Next.js 16.3.3 production build passed. After clearing only the verified
+      generated `.next` directory, the clean unit rerun emitted no stale
+      standalone-package collision warning.
+    - All 36 Playwright scenarios passed against the fresh standalone build,
+      covering playback/chat and recovery, creator workflows, accessibility,
+      responsive navigation/layout, auth, profile, and theme behavior.
+    - The first Playwright launch stopped before product assertions because the
+      exact Chromium revision was absent, then hung during teardown. That test
+      process alone was interrupted; installing the Playwright-managed Chromium
+      revision and rerunning with access to it passed all 36 scenarios.
+
+- [-] Task 4 - Run full gates, review, and merge
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh` and protected exact-head CI pass, including
+      cross-platform quickstart, viewer integration, arm64, and image scanning.
+    - Review is resolved and the focused PR is squash-merged without absorbing
+      #1407 or #1404.
+  - Check:
+    - Literal `./scripts/verify.sh` passed end to end with Go 1.26.0 and the
+      LF-only disposable Compose env: repository/release/docs/contract guards,
+      all Go packages, Postgres lifecycle, exact production image builds,
+      healthy quickstart smoke, strict viewer lint, and 26 Jest suites / 218
+      tests / 4 snapshots succeeded. The Linux installer lifecycle was the only
+      intentional platform skip.
+    - Two earlier attempts stopped on disposable-env setup before product
+      acceptance: the first lacked two public loopback keys, and the second
+      encoded the temporary file as CRLF. Neither changed product files. The
+      successful rerun removed its temporary env and reported
+      `source_env_unchanged=True` and `temporary_env_removed=True`.
+    - Protected run `33893528639` passed Ubuntu, Windows/macOS Go, all three
+      quickstart entrypoints, viewer integration/build/audit, native arm64,
+      production image scan, docs, and secret guards. Its merge gate rejected
+      only the scorecard because the changed draft release note requires the
+      `release packaging` classification; the PR body is corrected and a new
+      exact-head run is required.
+    - Protected exact-head CI, review, and squash merge remain.
+
 ## Scoped change: viewer verification blockers
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -39,7 +127,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       restored. The temporary env was removed and the operator `.env` hash
       remained unchanged; the Linux installer lifecycle was platform-skipped.
 
-- [-] Task 4 - Complete protected review and merge
+- [x] Task 4 - Complete protected review and merge
   - Acceptance criteria:
     - Exact-head protected CI passes cross-platform Go/quickstart, viewer
       integration/build/audit, native arm64, production image scan, and merge gate.
@@ -50,7 +138,11 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       review correctly required this scoped ledger and an updated dependency
       disposition. After those fixes, the focused dependency-policy/baseline
       tests, all 89 tracked public-document links, and literal
-      `./scripts/verify.sh` passed; a new exact-head run is required after push.
+      `./scripts/verify.sh` passed.
+    - Fresh exact-head run `33890367853` passed every required gate and both
+      review threads were resolved. PR #1412 squash-merged as `06895854`;
+      #1307 received bounded Windows/Jest evidence, and #1406 refreshed from
+      that exact clean baseline as remote head `5efc73a5`.
 
 ## Scoped change: critical x/crypto release finding (#1306)
 
