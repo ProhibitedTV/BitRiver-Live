@@ -47,7 +47,8 @@
   },
   "overrides": {
     "brace-expansion": "$brace-expansion",
-    "postcss": "8.5.22",
+    "browserslist": "4.28.9",
+    "postcss": "8.5.28",
     "sharp": "0.35.3"
   }
 }
