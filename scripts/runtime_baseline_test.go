@@ -197,7 +197,7 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 		`"@types/node": "26.2.0"`,
 		`"eslint": "9.39.5"`,
 		`"typescript": "6.0.3"`,
-		`"postcss": "8.5.22"`,
+		`"postcss": "8.5.28"`,
 		`"sharp": "0.35.3"`,
 	} {
 		if !strings.Contains(packageJSON, required) {

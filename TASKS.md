@@ -1,5 +1,57 @@
 # TASKS
 
+## Scoped change: viewer verification blockers
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose discovery and audit failures
+  - Acceptance criteria:
+    - The Windows path failure, intended Jest/Playwright boundary, advisories,
+      fixed versions, and existing dependency policy are reconciled before edits.
+    - `PLAN.md` records scope, risks, exclusions, ordering, and required proof.
+  - Check:
+    - The absolute `<rootDir>` selector produced a mixed-separator Windows glob.
+      Removing it entirely ran 26 intended Jest suites plus 13 Playwright specs,
+      proving an equivalent root-independent unit selector is required.
+    - npm reported high Browserslist advisories through `4.28.6` and a moderate
+      PostCSS advisory through `8.5.22`; current fixed releases are `4.28.9` and
+      `8.5.28`. No focused open dependency PR covered either finding.
+
+- [x] Task 2 - Implement portable discovery and patched overrides
+  - Acceptance criteria:
+    - Jest selects only `__tests__/**/*.test.ts(x)` without an absolute root glob.
+    - Package metadata, lockfile, baseline test, and dependency policy agree on
+      the patched override set without scanner suppression or unrelated upgrades.
+  - Check:
+    - The relative selector preserves the intended unit-test boundary.
+      `browserslist 4.28.9` and `postcss 8.5.28` resolve exactly; the lockfile
+      contains only their compatible transitive refresh and npm metadata changes.
+
+- [x] Task 3 - Run local release gates
+  - Acceptance criteria:
+    - Clean install, lint, unit tests, production build, audit, focused baseline,
+      repository hygiene, contract, Compose, image build, and smoke checks pass.
+  - Check:
+    - `npm ci`, strict lint, 26 Jest suites / 218 tests / 4 snapshots, Next 16.3.0
+      production build, zero-vulnerability npm audit, and the focused Go baseline
+      test passed in the nested Windows worktree.
+    - Literal `./scripts/verify.sh` passed end to end after Docker Desktop was
+      restored. The temporary env was removed and the operator `.env` hash
+      remained unchanged; the Linux installer lifecycle was platform-skipped.
+
+- [-] Task 4 - Complete protected review and merge
+  - Acceptance criteria:
+    - Exact-head protected CI passes cross-platform Go/quickstart, viewer
+      integration/build/audit, native arm64, production image scan, and merge gate.
+    - Review feedback is addressed and resolved before squash merge; #1307 gets
+      bounded evidence and #1406 refreshes only from the merged clean baseline.
+  - Check:
+    - Initial exact-head run `33887774101` passed every required gate. Automated
+      review correctly required this scoped ledger and an updated dependency
+      disposition. After those fixes, the focused dependency-policy/baseline
+      tests, all 89 tracked public-document links, and literal
+      `./scripts/verify.sh` passed; a new exact-head run is required after push.
+
 ## Scoped change: critical x/crypto release finding (#1306)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
