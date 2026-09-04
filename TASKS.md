@@ -80,6 +80,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       encoded the temporary file as CRLF. Neither changed product files. The
       successful rerun removed its temporary env and reported
       `source_env_unchanged=True` and `temporary_env_removed=True`.
+    - Protected run `33893528639` passed Ubuntu, Windows/macOS Go, all three
+      quickstart entrypoints, viewer integration/build/audit, native arm64,
+      production image scan, docs, and secret guards. Its merge gate rejected
+      only the scorecard because the changed draft release note requires the
+      `release packaging` classification; the PR body is corrected and a new
+      exact-head run is required.
     - Protected exact-head CI, review, and squash merge remain.
 
 ## Scoped change: viewer verification blockers
