@@ -1,5 +1,37 @@
 # PLAN
 
+## Current scope - qualify viewer tooling updates (#1413) (2026-09-04)
+
+- Qualify the refreshed Dependabot tooling group on current `main`:
+  `@testing-library/react 16.3.3`, `@testing-library/user-event 14.6.6`,
+  `@types/node 26.4.0`, `@types/react-dom 19.2.5`,
+  `eslint-config-next 16.3.4`, `jest 30.5.1`, and
+  `jest-environment-jsdom 30.5.1`, together with their exact lock graph.
+- Keep this slice development-only. Preserve Node 24/npm 11, Next.js 16.3.3,
+  React 19.2.8, shipped viewer behavior, APIs, deployment contracts, CI
+  workflows, and the separate ESLint 10 major in #1404. Align the checked
+  dependency invariant without changing user-facing or operator documentation.
+- Treat Jest 30.5 as the primary compatibility risk because it changes resolver,
+  runtime, haste-map, and filesystem-watcher behavior. Cover it with all 26
+  typed Jest suites and stable snapshot counts; cover Testing Library event and
+  focus semantics with the existing interaction suite, and type/config changes
+  through strict lint, TypeScript, and a production build.
+- Keep repeated local qualification clean after a production build by making
+  the existing generated `.next` module-path exclusion separator-independent.
+  Require a regression check for that portable ignore and a post-build Jest
+  rerun with no standalone-package haste collision.
+- Review the two new transitive install scripts rather than leaving npm's
+  advisory unresolved. Deny `@parcel/watcher` and `unrs-resolver` lifecycle
+  scripts explicitly: their exact platform binding packages are present in the
+  lock graph, while the scripts only build from source or fetch a missing
+  fallback. Prove the denial with a fresh Node 24 container install/build and
+  the protected native-arm64 gate.
+- Require a clean install, exact direct versions, zero-vulnerability audit,
+  focused invariant checks, Playwright integration, literal
+  `./scripts/verify.sh`, protected cross-platform CI, native arm64 and
+  production image scans, review, and squash merge. Record #1406's verified
+  merge before advancing these tasks.
+
 ## Current scope - qualify viewer runtime updates (#1406) (2026-09-04)
 
 - Qualify the focused Dependabot runtime group on the clean viewer-verification

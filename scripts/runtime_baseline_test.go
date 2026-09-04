@@ -196,15 +196,28 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 		`"ovenplayer": "0.10.54"`,
 		`"react": "19.2.8"`,
 		`"react-dom": "19.2.8"`,
-		`"@types/node": "26.2.0"`,
+		`"@testing-library/react": "16.3.3"`,
+		`"@testing-library/user-event": "14.6.6"`,
+		`"@types/node": "26.4.0"`,
+		`"@types/react-dom": "19.2.5"`,
 		`"eslint": "9.39.5"`,
+		`"eslint-config-next": "16.3.4"`,
+		`"jest": "30.5.1"`,
+		`"jest-environment-jsdom": "30.5.1"`,
 		`"typescript": "6.0.3"`,
 		`"postcss": "8.5.28"`,
 		`"sharp": "0.35.3"`,
+		`"@parcel/watcher": false`,
+		`"unrs-resolver": false`,
 	} {
 		if !strings.Contains(packageJSON, required) {
 			t.Errorf("viewer package.json missing runtime invariant %q", required)
 		}
+	}
+
+	jestConfig := readRepoFile(t, viewerRoot, "jest.config.js")
+	if !strings.Contains(jestConfig, `modulePathIgnorePatterns: ["[/\\\\]\\.next[/\\\\]"]`) {
+		t.Fatal("viewer Jest config must ignore generated .next modules on Windows and POSIX paths")
 	}
 
 	viewerDockerfile := readRepoFile(t, viewerRoot, "Dockerfile")
