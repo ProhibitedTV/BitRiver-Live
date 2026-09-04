@@ -191,7 +191,9 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, required := range []string{
 		`"node": ">=24 <25"`,
 		`"npm": ">=11 <12"`,
-		`"next": "16.3.0"`,
+		`"hls.js": "1.7.1"`,
+		`"next": "16.3.3"`,
+		`"ovenplayer": "0.10.54"`,
 		`"react": "19.2.8"`,
 		`"react-dom": "19.2.8"`,
 		`"@types/node": "26.2.0"`,

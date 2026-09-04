@@ -1,5 +1,24 @@
 # PLAN
 
+## Current scope - qualify viewer runtime updates (#1406) (2026-09-04)
+
+- Qualify the focused Dependabot runtime group on the clean viewer-verification
+  baseline: `hls.js 1.7.1`, `next 16.3.3`, and `ovenplayer 0.10.54`. Treat the
+  Next.js patch as security-relevant because its release fixes unauthenticated
+  RCE advisories; do not split it away from the already-generated exact lockfile.
+- Preserve React, viewer tooling, temporary fixed overrides, shipped routes,
+  player selection/fallback behavior, APIs, and the deployment contract. Align
+  the checked runtime invariant and dependency-policy disposition with the new
+  direct versions; do not absorb the separate tooling or ESLint major PRs.
+- Cover the hls.js minor-version type narrowing and OvenPlayer caption/subtitle
+  behavior through strict lint, the existing typed unit suite, production build,
+  and Playwright integration. Require a clean install, exact resolved versions,
+  zero-vulnerability audit, and focused runtime/policy checks before the full gate.
+- Require literal `./scripts/verify.sh`, protected cross-platform Go/quickstart,
+  viewer integration/build/audit, native arm64, production image scan, review,
+  and squash merge. Update the preceding viewer task only with verified merged
+  evidence, and keep the broader browser/device roadmap issue #1307 open.
+
 ## Current scope - clear viewer verification blockers (2026-09-04)
 
 - Preserve the intended Jest unit boundary while making discovery portable in
