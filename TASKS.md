@@ -1,5 +1,97 @@
 # TASKS
 
+## Scoped change: viewer tooling dependency qualification (#1413)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Reconcile the tooling group with current main
+  - Acceptance criteria:
+    - The exact direct/lockfile changes, peer ranges, upstream risks, stale CI
+      failure, and relationship to the merged runtime baseline are understood.
+    - `PLAN.md` records scope, exclusions, ordering, and required proof first.
+  - Check:
+    - PR #1413 contains seven development-only direct updates and their exact
+      lock graph. Its Testing Library, React DOM types, Next ESLint config, and
+      Jest peer/engine ranges accept the repository's Node 24, React 19,
+      TypeScript 6, and ESLint 9 baseline.
+    - Jest 30.5 changes resolver, runtime, haste-map, and watcher behavior, so
+      passing only dependency installation is insufficient. The earlier Ubuntu
+      failure is the stale `@types/node 26.2.0` invariant, not a product failure.
+    - Remote head `fcb7def9` merges current `main` at `8c2b7e65`; #1406 is
+      squash-merged with protected run `33894459226` fully passing. The separate
+      ESLint 10 major in #1404 remains excluded.
+
+- [x] Task 2 - Align the tooling invariant and exact dependency graph
+  - Acceptance criteria:
+    - The checked baseline requires all seven intentional tooling versions.
+    - A clean install resolves the exact direct graph without audit findings,
+      peer conflicts, generated-file drift, or unrelated product changes.
+    - New dependency lifecycle scripts are explicitly reviewed and denied when
+      exact optional native bindings make their build/download fallbacks
+      unnecessary.
+  - Check:
+    - The checked baseline now requires all seven intentional direct versions;
+      its focused Go test passed with the repository's Go 1.26.0 toolchain.
+    - Node 24.13.0/npm 11.6.2 clean-installed 669 packages and audited the
+      resulting 670-package graph with zero vulnerabilities. All seven direct
+      dependencies resolve exactly to the requested versions with compatible
+      peer and engine ranges.
+    - Clearing only the isolated generated `.next` directory before install
+      left no generated-file or application-code drift; `git diff --check`
+      passed. The product/runtime and deployment contracts remain unchanged.
+    - Node 24's current container npm initially reported unreviewed scripts for
+      `@parcel/watcher 2.6.0` and `unrs-resolver 1.12.2`. Inspection shows the
+      former only builds when explicitly requested and the latter fetches a
+      fallback only when an exact optional binding is missing. Both are now
+      explicitly denied; exact optional platform packages remain in the lock.
+    - A fresh Node 24/npm 11.16.0 container install applied that policy without
+      an unreviewed-script warning, audited 671 packages with zero findings, and
+      completed the Next.js production build. The expanded Go invariant and
+      `git diff --check` pass.
+
+- [x] Task 3 - Run focused viewer qualification
+  - Acceptance criteria:
+    - Strict lint, all typed Jest suites with stable snapshots, TypeScript, and
+      the production build pass against the updated tooling.
+    - All Playwright scenarios pass against the clean production build.
+    - A post-build Jest rerun ignores generated standalone metadata without a
+      Windows path-separator haste collision.
+  - Check:
+    - Strict ESLint completed with zero warnings. Jest 30.5.1 ran all 26 suites,
+      218 tests, and 4 snapshots successfully under Node 24, covering typed
+      rendering, interactions, focus/auth flows, playback, and creator paths.
+    - Next.js 16.3.3 compiled the production viewer successfully and completed
+      TypeScript, page-data collection, and all 10 static-page generations with
+      no tracked generated-file drift.
+    - All 36 Playwright scenarios passed against the rebuilt standalone viewer,
+      including playback/chat recovery, creator workflows, accessibility,
+      responsive layout/navigation, auth, profile, tipping, and theme behavior.
+    - The first literal verifier's post-build Jest phase passed but warned that
+      the root and generated standalone `package.json` files shared a haste
+      name; the slash-only `.next` exclusion did not match Windows paths. The
+      exclusion now matches Windows and POSIX separators, its focused Go guard
+      passes, and a post-build rerun again passed 26 suites / 218 tests / 4
+      snapshots without the collision warning.
+    - The hardened Node 24 container also passed all 26 Jest suites, 218 tests,
+      and 4 snapshots with the reviewed transitive scripts denied.
+
+- [-] Task 4 - Run full gates, review, and merge
+  - Acceptance criteria:
+    - Literal `./scripts/verify.sh` and protected exact-head CI pass, including
+      cross-platform quickstart, viewer integration, arm64, and image scanning.
+    - Review is resolved and the focused PR is squash-merged without absorbing
+      the ESLint 10 major or changing runtime/deployment contracts.
+  - Check:
+    - Literal `./scripts/verify.sh` passed on the finished diff: repository,
+      release, docs, and contract guards; all Go packages; Postgres lifecycle;
+      exact production image builds; healthy quickstart smoke; strict viewer
+      lint; and 26 Jest suites / 218 tests / 4 snapshots succeeded without the
+      generated-package collision. The Linux installer lifecycle was the only
+      intentional platform skip.
+    - The final verifier's disposable LF-only Compose env was removed, while
+      the source `.env` and generated OME contract hashes remained unchanged.
+      Protected exact-head CI, review, and squash merge remain.
+
 ## Scoped change: viewer runtime dependency qualification (#1406)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -62,7 +154,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       process alone was interrupted; installing the Playwright-managed Chromium
       revision and rerunning with access to it passed all 36 scenarios.
 
-- [-] Task 4 - Run full gates, review, and merge
+- [x] Task 4 - Run full gates, review, and merge
   - Acceptance criteria:
     - Literal `./scripts/verify.sh` and protected exact-head CI pass, including
       cross-platform quickstart, viewer integration, arm64, and image scanning.
@@ -86,7 +178,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       only the scorecard because the changed draft release note requires the
       `release packaging` classification; the PR body is corrected and a new
       exact-head run is required.
-    - Protected exact-head CI, review, and squash merge remain.
+    - Protected exact-head run `33894459226` passed all required and optional
+      gates with the corrected scorecard. No review threads or unresolved
+      feedback remained, and #1406 was squash-merged as `8c2b7e65`.
 
 ## Scoped change: viewer verification blockers
 
