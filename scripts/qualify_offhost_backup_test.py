@@ -25,7 +25,7 @@ class FakeObjectClient:
     def list_objects(self, bucket: str, prefix: str) -> list[dict[str, object]]:
         self._check_bucket(bucket)
         return [
-            {"Key": key, "Size": len(value), "ETag": hashlib.md5(value).hexdigest()}  # noqa: S324 - fixture metadata only
+            {"Key": key, "Size": len(value)}
             for key, value in sorted(self.objects.items())
             if key.startswith(prefix)
         ]
