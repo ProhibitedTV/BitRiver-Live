@@ -1,0 +1,44 @@
+## Scoped change: scheduled off-host backup freshness qualification (#1299)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Reconcile the remaining #1299 evidence boundary
+  - Acceptance criteria:
+    - Existing producer/upload/restore contracts and the exact remaining issue acceptance are inspected before claiming completion.
+    - Scope stays read-only and does not alter the deployment or backup producer.
+  - Check:
+    - #1299 already has published-package and recovered-stack proof; only production-like scheduled/off-host freshness/RPO evidence remains.
+    - `backup-postgres.sh` publishes archive/manifest/checksum trios to an S3-compatible destination and canonical restore enforces a stricter v1 manifest contract than the first verifier draft.
+
+- [x] Task 2 - Implement read-only remote qualification and focused coverage
+  - Acceptance criteria:
+    - Complete remote sets, retention, checksum integrity, freshness, exact candidate identity, canonical manifest evidence, and atomic secret-safe reporting fail closed.
+    - The existing producer's prefix semantics are preserved exactly.
+  - Check:
+    - Added `qualify_offhost_backup.py`, deterministic Python coverage, a cross-platform Go test wrapper, and the operator runbook without changing Compose, env, producer, restore code, CI workflows, or remote objects.
+
+- [x] Task 3 - Harden the verifier from automated review
+  - Acceptance criteria:
+    - Empty/malformed migration evidence, non-integer row counts, incomplete tool/consistency metadata, omitted candidate identity, false scheduler provenance, and configured prefix separators cannot produce false proof.
+    - AWS failure reporting cannot echo endpoint/userinfo/provider stderr into retained release evidence.
+  - Check:
+    - The verifier now mirrors canonical restore manifest checks, requires both expected release and full commit, reports scheduler provenance as unproven, preserves exact producer prefix bytes, and returns generic AWS access failures. Regression cases cover each review finding.
+
+- [x] Task 4 - Run protected repository qualification
+  - Acceptance criteria:
+    - Python/Go focused tests, docs consistency, literal repository verification, cross-platform Go/quickstart gates, and aggregate merge gate pass.
+  - Check:
+    - Protected CI run `34714412222` passed on hardened head `cf1145c1`, including Ubuntu `test-all`, docs consistency, macOS/Windows Go, all three quickstart entrypoint jobs, committed-secret guard, and the aggregate Merge gate.
+
+- [-] Task 5 - Resolve review, refresh exact-head CI, and merge the tooling slice
+  - Acceptance criteria:
+    - Required PLAN/TASKS records and runbook claims are current.
+    - All five review conversations have evidence-backed replies and are resolved.
+    - A fresh exact-head protected run passes after ledger/doc updates and the PR is squash-merged without bypassing conversation resolution or Merge gate.
+    - #1299 remains open for real scheduled/off-host execution evidence.
+  - Check:
+    - Review hardening and runbook correction are implemented. This ledger update closes the planning-artifact review finding; final exact-head CI, thread resolution, and squash merge remain before Task 5 is complete.
+
+### Workflow correction note
+
+- This scoped implementation preceded its PLAN/TASKS entry because safe partial mutation of the large ledger files was not initially available through the connector. Review identified the violation before merge. The record is corrected transparently rather than claiming the required ordering occurred.
