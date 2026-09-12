@@ -1,0 +1,44 @@
+name: Temporary viewer compatibility ledger update
+
+on:
+  push:
+    branches:
+      - feat/1307-viewer-compatibility-matrix
+    paths:
+      - scripts/.viewer-compat-ledger-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update-ledgers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/1307-viewer-compatibility-matrix
+          fetch-depth: 0
+      - name: Prepend PLAN and TASKS
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -Fq '## Current scope - viewer compatibility matrix (#1307)' PLAN.md; then
+            { head -n 1 PLAN.md; printf '\n'; cat scripts/.viewer-compat-plan.txt; printf '\n'; tail -n +2 PLAN.md; } > PLAN.md.new
+            mv PLAN.md.new PLAN.md
+          fi
+          if ! grep -Fq '## Scoped change: viewer compatibility matrix (#1307)' TASKS.md; then
+            { head -n 1 TASKS.md; printf '\n'; cat scripts/.viewer-compat-tasks.txt; printf '\n'; tail -n +2 TASKS.md; } > TASKS.md.new
+            mv TASKS.md.new TASKS.md
+          fi
+      - name: Commit ledgers and remove temporary updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/finish-1307-ledgers.yml scripts/.viewer-compat-plan.txt scripts/.viewer-compat-tasks.txt scripts/.viewer-compat-ledger-trigger
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'docs: plan viewer compatibility qualification'
+          git push origin HEAD:feat/1307-viewer-compatibility-matrix
