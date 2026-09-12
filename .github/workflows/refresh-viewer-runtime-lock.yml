@@ -38,7 +38,9 @@ jobs:
           fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
           NODE
           cd web/viewer
-          npm install --package-lock-only --ignore-scripts
+          rm -rf node_modules
+          npm install --ignore-scripts
+          rm -rf node_modules
           npm ci --ignore-scripts
           npm audit --audit-level=high
 
