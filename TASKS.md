@@ -9,37 +9,41 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Current Playwright config, browser installation, standalone-server boundary, mobile/layout tests, channel/chat/playback tests, accessibility tests, and #1307 acceptance are inspected before implementation.
     - PLAN records the full-Chromium versus cross-engine critical-matrix split and honest real-media/device non-claims.
   - Check:
-    - Current `playwright.config.ts` defines one generic 1280x720 project and viewer CI installs Playwright browsers then runs the existing integration suite.
-    - Existing tests already cover channel playback/chat recovery, creator flows, accessibility, mobile navigation, multiple narrow widths, and horizontal overflow; the new matrix can reuse those contracts rather than inventing parallel product paths.
+    - Current viewer CI installs Playwright browsers and runs the integration suite against the production standalone server boundary.
+    - Existing tests cover channel playback/chat recovery, creator flows, accessibility, mobile navigation, multiple narrow widths, and horizontal overflow; the matrix reuses those product contracts rather than inventing parallel paths.
 
-- [-] Task 2 - Define browser/device projects and critical suite
+- [x] Task 2 - Define browser/device projects and critical suite
   - Acceptance criteria:
     - Chromium, Firefox, WebKit, Android/Chrome emulation, and iPhone/WebKit emulation are named projects with explicit stable configuration.
     - Current full integration remains covered on Chromium while a focused compatibility set runs on every declared project.
     - No blanket retry policy or test-only product bypass is introduced.
   - Check:
-    - Implementation pending after this ledger commit.
+    - `playwright.config.ts` now preserves `chromium-regression` and adds focused `chromium-compat`, `firefox-compat`, `webkit-compat`, `android-chrome-compat`, and `iphone-webkit-compat` projects with `retries: 0`.
+    - The focused suite covers HLS capability/fallback state, chat read/send/auth fallback, transient playback recovery, signed-out auth/navigation + axe, creator live setup, touch navigation, and horizontal overflow.
+    - Firefox qualification exposed a real unsupported-HLS loading hang; the viewer now moves to the explicit Stream unavailable state when neither hls.js/MSE nor native HLS is usable instead of weakening the test.
 
-- [ ] Task 3 - Publish support matrix and compatibility boundaries
+- [x] Task 3 - Publish support matrix and compatibility boundaries
   - Acceptance criteria:
     - Viewer/operator/testing docs identify supported engine/device classes, browser-version policy, protocol/media caveats, CI-emulation limits, and real-media follow-up.
     - Unsupported/unproved combinations are explicit rather than silently presented as supported.
   - Check:
-    - Pending.
+    - `docs/viewer-compatibility.md` publishes the release-blocking matrix and explicitly separates Playwright engine/device evidence from shipping Safari/device certification and real-media protocol qualification.
+    - Firefox HLS is capability-gated honestly; WebRTC, audible autoplay, fullscreen/PiP, quality selection, soft-keyboard behavior, and physical-device claims remain bounded to evidence actually produced.
 
-- [ ] Task 4 - Qualify locally and through protected CI
+- [-] Task 4 - Qualify locally and through protected CI
   - Acceptance criteria:
     - Clean install/audit/lint/Jest/build, cross-engine critical projects, full Chromium suite, focused static contracts, and literal viewer verification pass.
     - Protected viewer CI and Merge gate pass on the exact reviewed head with review findings resolved.
   - Check:
-    - Pending.
+    - Split qualification run `34721882296` passed all six Playwright projects on the fixed code: full Chromium regression plus Chromium, Firefox, desktop WebKit, Android/Chrome, and iPhone/WebKit compatibility projects.
+    - Protected pull-request CI, the normal Viewer CI integration/build/audit gate, review, and aggregate Merge gate remain required on the cleaned exact head.
 
 - [ ] Task 5 - Record bounded #1307 evidence
   - Acceptance criteria:
     - Repository-side browser/device matrix evidence is attached to #1307.
     - #1307 closes only if all issue acceptance, including required real-media engine-class evidence, is genuinely met; otherwise remaining external/device proof stays explicit.
   - Check:
-    - Pending.
+    - Pending protected PR evidence and final issue disposition. The repository matrix deliberately does not convert mocked Playwright media routes into per-engine real-media or physical-device claims.
 
 
 ## Scoped change: scheduled off-host backup freshness qualification (#1299)
