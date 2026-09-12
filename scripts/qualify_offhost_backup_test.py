@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Callable
 
 from scripts import qualify_offhost_backup as proof
 
@@ -49,10 +50,17 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def make_set(stamp: str, *, release: str = RELEASE, commit: str = COMMIT, archive: bytes | None = None) -> dict[str, bytes]:
+def make_set(
+    stamp: str,
+    *,
+    prefix: str = PREFIX,
+    release: str = RELEASE,
+    commit: str = COMMIT,
+    archive: bytes | None = None,
+) -> dict[str, bytes]:
     archive = archive if archive is not None else (f"backup-{stamp}".encode("utf-8") * 7)
     stem = f"bitriver-postgres-{stamp}.sql.gz"
-    archive_key = f"{PREFIX}/{stem}"
+    archive_key = f"{prefix}/{stem}"
     created = dt.datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
     manifest = {
         "schemaVersion": proof.BACKUP_SCHEMA,
@@ -97,11 +105,31 @@ def make_set(stamp: str, *, release: str = RELEASE, commit: str = COMMIT, archiv
     }
 
 
-def fixture_remote() -> dict[str, bytes]:
+def fixture_remote(*, prefix: str = PREFIX) -> dict[str, bytes]:
     objects: dict[str, bytes] = {}
     for stamp in ("20260910T020000Z", "20260911T020000Z", "20260912T020000Z"):
-        objects.update(make_set(stamp))
+        objects.update(make_set(stamp, prefix=prefix))
     return objects
+
+
+def mutate_manifest(
+    objects: dict[str, bytes],
+    stamp: str,
+    mutate: Callable[[dict[str, Any]], None],
+    *,
+    prefix: str = PREFIX,
+) -> None:
+    archive_key = f"{prefix}/bitriver-postgres-{stamp}.sql.gz"
+    manifest_key = archive_key + ".manifest.json"
+    checksum_key = archive_key + ".sha256"
+    payload = json.loads(objects[manifest_key])
+    mutate(payload)
+    manifest_bytes = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    objects[manifest_key] = manifest_bytes
+    objects[checksum_key] = (
+        f"{sha256(objects[archive_key])}  {Path(archive_key).name}\n"
+        f"{sha256(manifest_bytes)}  {Path(manifest_key).name}\n"
+    ).encode("utf-8")
 
 
 class OffhostBackupQualificationTests(unittest.TestCase):
@@ -136,6 +164,9 @@ class OffhostBackupQualificationTests(unittest.TestCase):
         self.assertEqual(report["remote"]["completeSetCount"], 3)  # type: ignore[index]
         self.assertEqual(report["latest"]["observedRpoSeconds"], 16 * 60 * 60)  # type: ignore[index]
         self.assertTrue(report["latest"]["checksumVerified"])  # type: ignore[index]
+        self.assertTrue(report["latest"]["candidateIdentityVerified"])  # type: ignore[index]
+        self.assertTrue(report["claims"]["remoteFreshness"])  # type: ignore[index]
+        self.assertFalse(report["claims"]["scheduledProvenance"])  # type: ignore[index]
         self.assertFalse(report["claims"]["restoreProvenByThisReport"])  # type: ignore[index]
         self.assertEqual(
             client.downloaded,
@@ -145,6 +176,34 @@ class OffhostBackupQualificationTests(unittest.TestCase):
                 f"{PREFIX}/bitriver-postgres-20260912T020000Z.sql.gz.sha256",
             ],
         )
+
+    def test_preserves_trailing_separator_from_producer_prefix(self) -> None:
+        prefix = "bitriver-live/postgres/"
+        report = proof.qualify(
+            FakeObjectClient(fixture_remote(prefix=prefix)),
+            bucket=BUCKET,
+            prefix=prefix,
+            max_age_seconds=86400,
+            min_complete_sets=3,
+            expected_release=RELEASE,
+            expected_commit=COMMIT,
+            now=NOW,
+        )
+        self.assertEqual(report["remote"]["prefix"], prefix)  # type: ignore[index]
+        self.assertEqual(  # type: ignore[index]
+            report["latest"]["archiveKey"],
+            "bitriver-live/postgres//bitriver-postgres-20260912T020000Z.sql.gz",
+        )
+
+    def test_refuses_missing_or_invalid_candidate_identity(self) -> None:
+        with self.assertRaisesRegex(proof.QualificationError, "expected release"):
+            self.qualify(fixture_remote(), expected_release="")
+        with self.assertRaisesRegex(proof.QualificationError, "expected commit"):
+            self.qualify(fixture_remote(), expected_commit="")
+
+        parser = proof.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--bucket", BUCKET, "--report", "proof.json"])
 
     def test_refuses_stale_newest_set(self) -> None:
         with self.assertRaisesRegex(proof.QualificationError, "stale"):
@@ -181,18 +240,66 @@ class OffhostBackupQualificationTests(unittest.TestCase):
 
     def test_refuses_manifest_archive_metadata_mismatch_even_with_rewritten_checksum(self) -> None:
         objects = fixture_remote()
-        archive_key = f"{PREFIX}/bitriver-postgres-20260912T020000Z.sql.gz"
-        manifest_key = archive_key + ".manifest.json"
-        checksum_key = archive_key + ".sha256"
-        payload = json.loads(objects[manifest_key])
-        payload["archive"]["sizeBytes"] += 1
-        manifest_bytes = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        objects[manifest_key] = manifest_bytes
-        objects[checksum_key] = (
-            f"{sha256(objects[archive_key])}  {Path(archive_key).name}\n"
-            f"{sha256(manifest_bytes)}  {Path(manifest_key).name}\n"
-        ).encode("utf-8")
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["archive"].__setitem__("sizeBytes", payload["archive"]["sizeBytes"] + 1),
+        )
         with self.assertRaisesRegex(proof.QualificationError, "archive size"):
+            self.qualify(objects)
+
+    def test_refuses_empty_or_invalid_migration_evidence(self) -> None:
+        objects = fixture_remote()
+        mutate_manifest(objects, "20260912T020000Z", lambda payload: payload["database"].__setitem__("migrations", []))
+        with self.assertRaisesRegex(proof.QualificationError, "migrations must be a non-empty array"):
+            self.qualify(objects)
+
+        objects = fixture_remote()
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["database"]["migrations"][0].__setitem__("status", "failed"),
+        )
+        with self.assertRaisesRegex(proof.QualificationError, "is not applied"):
+            self.qualify(objects)
+
+        objects = fixture_remote()
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["database"]["migrations"][0].__setitem__("checksumSha256", "bad"),
+        )
+        with self.assertRaisesRegex(proof.QualificationError, "migration\[0\] checksum is invalid"):
+            self.qualify(objects)
+
+    def test_refuses_invalid_row_count_evidence(self) -> None:
+        objects = fixture_remote()
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["database"]["rowCounts"].__setitem__("users", "4"),
+        )
+        with self.assertRaisesRegex(proof.QualificationError, "non-negative integer"):
+            self.qualify(objects)
+
+        objects = fixture_remote()
+        mutate_manifest(objects, "20260912T020000Z", lambda payload: payload["database"].__setitem__("rowCounts", {}))
+        with self.assertRaisesRegex(proof.QualificationError, "non-empty row-count evidence"):
+            self.qualify(objects)
+
+    def test_refuses_missing_tool_and_consistency_evidence(self) -> None:
+        objects = fixture_remote()
+        mutate_manifest(objects, "20260912T020000Z", lambda payload: payload.__setitem__("tools", {}))
+        with self.assertRaisesRegex(proof.QualificationError, "tools.pgDump"):
+            self.qualify(objects)
+
+        objects = fixture_remote()
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["consistency"].__setitem__("snapshot", "best-effort"),
+        )
+        with self.assertRaisesRegex(proof.QualificationError, "snapshot consistency"):
             self.qualify(objects)
 
     def test_refuses_wrong_release_and_commit(self) -> None:
