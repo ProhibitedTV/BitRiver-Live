@@ -16,21 +16,28 @@ The supported single-host recovery defaults remain:
 `scripts/qualify_offhost_backup.py` is read-only. Against one configured
 S3-compatible bucket/prefix it:
 
-1. Lists all `bitriver-postgres-*.sql.gz` backup assets.
+1. Lists all `bitriver-postgres-*.sql.gz` backup assets beneath the exact prefix
+   shape used by the existing producer, including configured separator bytes.
 2. Refuses any incomplete remote set. Every timestamp must have an archive,
-   `manifest.json`, and `.sha256` companion.
+   `.manifest.json`, and `.sha256` companion.
 3. Requires the configured minimum retained complete sets (default: 3).
 4. Downloads only the newest complete trio and verifies the checksum file
    against the downloaded archive and manifest bytes.
-5. Verifies the `bitriver.postgres-backup/v1` manifest, archive name/hash/size,
-   exact release/commit identity, migration fingerprint, and non-empty row-count
-   evidence.
+5. Verifies the complete `bitriver.postgres-backup/v1` manifest contract used by
+   restore: archive identity/hash/size, exact candidate release and full commit,
+   database/server identity, a non-empty applied migration set with valid
+   checksums, the migration fingerprint, numeric non-empty table row counts,
+   pg_dump/psql identity, and exported-snapshot/exact-row-count consistency.
 6. Measures backup age from manifest `createdAt` and fails when it exceeds the
    configured RPO threshold (default: 86,400 seconds).
 7. Writes one `bitriver.offhost-backup-proof/v1` JSON report without AWS
-   credentials, database credentials, or backup payload contents.
+   credentials, database credentials, provider stderr, command arguments, or
+   backup payload contents.
 
-The verifier never deletes, prunes, uploads, or rewrites remote objects.
+The verifier never deletes, prunes, uploads, or rewrites remote objects. It also
+does **not** infer scheduler provenance: a manual invocation of
+`backup-postgres.sh` can produce the same valid trio as a scheduled invocation.
+Scheduler execution evidence is therefore retained separately.
 
 ## Production-like qualification
 
@@ -55,6 +62,10 @@ python3 scripts/qualify_offhost_backup.py \
   --min-complete-sets 3 \
   --report ./offhost-backup-proof.json
 ```
+
+Both `--expected-release` and `--expected-commit` are required for a qualifying
+report. This prevents a fresh backup from a different otherwise-valid release
+candidate from being accepted accidentally.
 
 For MinIO or another S3-compatible service, add the endpoint used by the
 scheduler:
@@ -96,24 +107,29 @@ evidence.
 For the exact release candidate attach or link:
 
 - the secret-safe `bitriver.offhost-backup-proof/v1` report;
-- scheduler timestamps showing the backup was produced by the scheduled path;
+- scheduler timestamps or CronJob/service logs proving the selected remote set
+  was produced by the scheduled path;
 - the failure-path result proving remote upload errors are visible/non-zero;
 - confirmation that the local disposable copy was removed before the remote
   re-verification;
 - the independent restore/recovery report already required by the production
   release process.
 
-A passing off-host report proves remote-set completeness, integrity, freshness,
-and the configured retained-set minimum. It **does not** by itself prove an
-S3 provider's durability SLA, a restore, encrypted host-state recovery, alert
-delivery, or stable-release promotion. Those claims require their own existing
-release evidence.
+A passing off-host report proves remote-set completeness, byte integrity,
+freshness, canonical manifest validity, exact candidate identity, and the
+configured retained-set minimum. It **does not** by itself prove scheduled
+provenance, an S3 provider's durability SLA, a restore, encrypted host-state
+recovery, alert delivery, or stable-release promotion. Those claims require
+their own existing release evidence.
 
 ## Focused tests
 
 The verifier has deterministic unit coverage and is also invoked from the
 `scripts` Go test package, so the normal repository Go gate exercises it on
-Linux, macOS, and Windows:
+Linux, macOS, and Windows. The suite includes canonical manifest-shape refusal,
+exact candidate identity, producer-prefix separator parity, stale RPO,
+retention, incomplete sets, checksum corruption, report atomicity, and
+credential-safe AWS failures.
 
 ```bash
 python3 -m unittest scripts.qualify_offhost_backup_test
