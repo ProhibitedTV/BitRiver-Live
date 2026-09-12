@@ -1,0 +1,64 @@
+## Current scope - scheduled off-host backup freshness qualification (#1299) (2026-09-12)
+
+- Finish #1299's remaining repository-solvable scheduled/off-host slice by
+  qualifying the existing `bitriver.postgres-backup/v1` objects already emitted
+  by `scripts/backup-postgres.sh`; do not add a second producer, scheduler, or
+  remote-storage format.
+- Add one read-only S3-compatible verifier that fails closed on incomplete
+  remote trios, stale newest evidence, insufficient retained complete sets,
+  checksum/manifest mismatch, canonical manifest-shape violations, or a backup
+  that does not match the exact candidate release and full source commit.
+- Mirror the restore-side v1 manifest contract: archive identity/size/hash,
+  database/server identity, non-empty applied migration entries with checksums,
+  migration fingerprint, numeric non-empty row counts, pg_dump/psql identity,
+  and exported-snapshot/exact-row-count consistency are all release evidence.
+- Preserve the producer's exact `${UPLOAD_PREFIX}/${BACKUP_BASENAME}` key
+  construction, including configured leading/trailing separators. The verifier
+  must not normalize a prefix into a namespace the producer did not write.
+- Keep scheduler provenance separate from object validity. A manual producer run
+  creates the same trio, so the verifier report may prove remote completeness,
+  integrity, freshness, retention, and candidate identity but must never claim
+  that the scheduler produced the selected set without separate scheduler logs.
+- Credentials stay in the AWS credential chain. Provider stderr and command
+  arguments are not retained in errors/reports; the verifier performs only list
+  and download operations and never mutates remote storage.
+
+### Risks and evidence boundaries
+
+- A fresh, checksum-valid trio is insufficient if its manifest would be rejected
+  by canonical restore or belongs to another release. Require the full existing
+  manifest contract and mandatory candidate identity inputs before `status=pass`.
+- Remote object retention is operator/storage policy; the repository verifier
+  only proves a configured minimum complete-set count and does not prune S3.
+- A passing report is not restore proof, scheduler provenance, provider durability
+  SLA evidence, alert-delivery evidence, host-state recovery, or stable promotion.
+  Existing recovery reports remain separate release inputs.
+- Production-like completion still requires a real scheduled endpoint: multiple
+  scheduled cycles, visible non-zero remote-failure behavior, local-copy-loss
+  re-verification from remote bytes, retained scheduler provenance, and the
+  resulting secret-safe report. Repository tests cannot manufacture that proof.
+- No Compose, root `.env`, generated OME config, CI workflow, backup producer,
+  restore implementation, or remote object mutation belongs in this slice.
+
+### Test and rollout plan
+
+- Deterministic Python tests cover happy path, RPO staleness, incomplete sets,
+  retention minimum, checksum corruption, complete canonical manifest shape,
+  migration/row-count/tool/consistency refusal, exact candidate identity,
+  producer prefix-separator parity, atomic reporting, and secret-safe AWS errors.
+- A Go contract wrapper runs the Python suite through normal Linux/macOS/Windows
+  repository Go gates without adding a new permanent CI workflow.
+- Run docs consistency and literal `./scripts/verify.sh` through protected CI,
+  resolve automated review, require the exact-head aggregate Merge gate, and
+  squash merge only after every review conversation is resolved.
+- Keep #1299 open after the repository tool lands until live production-like
+  scheduled/off-host evidence is executed and retained against an actual remote
+  endpoint.
+
+### Process note
+
+- Implementation began before this PLAN/TASKS record because the active connector
+  initially exposed only whole-file replacement for these very large ledgers.
+  Automated review correctly flagged the workflow violation. The ledgers are
+  being amended safely before merge, and no exception to the required workflow
+  is claimed for future scoped changes.
