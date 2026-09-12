@@ -34,7 +34,7 @@ func TestViewerCompatibilityMatrixContract(t *testing.T) {
 
 	compatibilitySpec := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "tests", "compatibility.spec.ts"))
 	for _, required := range []string{
-		`watches HLS, reads chat, and sends a message`,
+		`handles HLS capability, reads chat, and sends a message`,
 		`recovers when the playback API returns a transient failure`,
 		`signed-out navigation, auth, and accessibility`,
 		`loads the creator live setup`,
