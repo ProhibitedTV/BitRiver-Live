@@ -181,6 +181,9 @@ export function Player({
       };
     }
 
+    // Some engines/builds expose neither MSE support usable by hls.js nor native HLS.
+    // Do not leave viewers parked on an indefinite loading state when playback is impossible.
+    setRuntimeState(UIState.StreamUnavailable);
     return undefined;
   }, [channelId, playback, playbackSourceKey, playerId, scheduleUnavailableWithGrace, clearErrorTimeout]);
 
