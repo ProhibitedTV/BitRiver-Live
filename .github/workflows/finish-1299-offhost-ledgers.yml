@@ -1,11 +1,11 @@
-name: Finish #1299 off-host planning ledgers
+name: Finish off-host planning ledgers
 
 on:
   push:
     branches:
       - chore/1299-scheduled-offhost-backup-proof
     paths:
-      - .github/workflows/finish-1299-offhost-ledgers.yml
+      - scripts/.offhost-tasks-section.txt
 
 permissions:
   contents: write
@@ -20,169 +20,38 @@ jobs:
           ref: chore/1299-scheduled-offhost-backup-proof
           fetch-depth: 0
 
-      - name: Prepend current PLAN and TASKS records
+      - name: Update PLAN and TASKS
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          plan = """## Current scope - scheduled off-host backup freshness qualification (#1299) (2026-09-12)
+          specs = [
+              (Path("PLAN.md"), Path("scripts/.offhost-plan-section.txt"), "# PLAN", "## Current scope - scheduled off-host backup freshness qualification (#1299)"),
+              (Path("TASKS.md"), Path("scripts/.offhost-tasks-section.txt"), "# TASKS", "## Scoped change: scheduled off-host backup freshness qualification (#1299)"),
+          ]
 
-- Finish #1299's remaining repository-solvable scheduled/off-host slice by
-  qualifying the existing `bitriver.postgres-backup/v1` objects already emitted
-  by `scripts/backup-postgres.sh`; do not add a second producer, scheduler, or
-  remote-storage format.
-- Add one read-only S3-compatible verifier that fails closed on incomplete
-  remote trios, stale newest evidence, insufficient retained complete sets,
-  checksum/manifest mismatch, canonical manifest-shape violations, or a backup
-  that does not match the exact candidate release and full source commit.
-- Mirror the restore-side v1 manifest contract: archive identity/size/hash,
-  database/server identity, non-empty applied migration entries with checksums,
-  migration fingerprint, numeric non-empty row counts, pg_dump/psql identity,
-  and exported-snapshot/exact-row-count consistency are all release evidence.
-- Preserve the producer's exact `${UPLOAD_PREFIX}/${BACKUP_BASENAME}` key
-  construction, including configured leading/trailing separators. The verifier
-  must not normalize a prefix into a namespace the producer did not write.
-- Keep scheduler provenance separate from object validity. A manual producer run
-  creates the same trio, so the verifier report may prove remote completeness,
-  integrity, freshness, retention, and candidate identity but must never claim
-  that the scheduler produced the selected set without separate scheduler logs.
-- Credentials stay in the AWS credential chain. Provider stderr and command
-  arguments are not retained in errors/reports; the verifier performs only list
-  and download operations and never mutates remote storage.
-
-### Risks and evidence boundaries
-
-- A fresh, checksum-valid trio is insufficient if its manifest would be rejected
-  by canonical restore or belongs to another release. Require the full existing
-  manifest contract and mandatory candidate identity inputs before `status=pass`.
-- Remote object retention is operator/storage policy; the repository verifier
-  only proves a configured minimum complete-set count and does not prune S3.
-- A passing report is not restore proof, scheduler provenance, provider durability
-  SLA evidence, alert-delivery evidence, host-state recovery, or stable promotion.
-  Existing recovery reports remain separate release inputs.
-- Production-like completion still requires a real scheduled endpoint: multiple
-  scheduled cycles, visible non-zero remote-failure behavior, local-copy-loss
-  re-verification from remote bytes, retained scheduler provenance, and the
-  resulting secret-safe report. Repository tests cannot manufacture that proof.
-- No Compose, root `.env`, generated OME config, CI workflow, backup producer,
-  restore implementation, or remote object mutation belongs in this slice.
-
-### Test and rollout plan
-
-- Deterministic Python tests cover happy path, RPO staleness, incomplete sets,
-  retention minimum, checksum corruption, complete canonical manifest shape,
-  migration/row-count/tool/consistency refusal, exact candidate identity,
-  producer prefix-separator parity, atomic reporting, and secret-safe AWS errors.
-- A Go contract wrapper runs the Python suite through normal Linux/macOS/Windows
-  repository Go gates without adding a new permanent CI workflow.
-- Run docs consistency and literal `./scripts/verify.sh` through protected CI,
-  resolve automated review, require the exact-head aggregate Merge gate, and
-  squash merge only after every review conversation is resolved.
-- Keep #1299 open after the repository tool lands until live production-like
-  scheduled/off-host evidence is executed and retained against an actual remote
-  endpoint.
-
-### Process note
-
-- Implementation began before this PLAN/TASKS record because the active connector
-  initially exposed only whole-file replacement for these very large ledgers.
-  Automated review correctly flagged the workflow violation. The ledgers are
-  being amended safely before merge, and no exception to the required workflow
-  is claimed for future scoped changes.
-"""
-
-          tasks = """## Scoped change: scheduled off-host backup freshness qualification (#1299)
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Reconcile the remaining #1299 evidence boundary
-  - Acceptance criteria:
-    - Existing producer/upload/restore contracts and the exact remaining issue
-      acceptance are inspected before claiming completion.
-    - Scope stays read-only and does not alter the deployment or backup producer.
-  - Check:
-    - #1299 already has published-package and recovered-stack proof; only
-      production-like scheduled/off-host freshness/RPO evidence remains.
-    - `backup-postgres.sh` publishes archive/manifest/checksum trios to an
-      S3-compatible destination and canonical restore enforces a stricter v1
-      manifest contract than the first verifier draft.
-
-- [x] Task 2 - Implement read-only remote qualification and focused coverage
-  - Acceptance criteria:
-    - Complete remote sets, retention, checksum integrity, freshness, exact
-      candidate identity, canonical manifest evidence, and atomic secret-safe
-      reporting fail closed.
-    - The existing producer's prefix semantics are preserved exactly.
-  - Check:
-    - Added `qualify_offhost_backup.py`, deterministic Python coverage, a
-      cross-platform Go test wrapper, and the operator runbook without changing
-      Compose, env, producer, restore code, CI workflows, or remote objects.
-
-- [x] Task 3 - Harden the verifier from automated review
-  - Acceptance criteria:
-    - Empty/malformed migration evidence, non-integer row counts, incomplete
-      tool/consistency metadata, omitted candidate identity, false scheduler
-      provenance, and configured prefix separators cannot produce false proof.
-    - AWS failure reporting cannot echo endpoint/userinfo/provider stderr into
-      retained release evidence.
-  - Check:
-    - The verifier now mirrors canonical restore manifest checks, requires both
-      expected release and full commit, reports scheduled provenance as unproven,
-      preserves exact producer prefix bytes, and returns generic AWS access
-      failures. Regression cases cover each review finding.
-
-- [x] Task 4 - Run protected repository qualification
-  - Acceptance criteria:
-    - Python/Go focused tests, docs consistency, literal repository verification,
-      cross-platform Go/quickstart gates, and aggregate merge gate pass.
-  - Check:
-    - Protected CI run `34714412222` passed on hardened head `cf1145c1`, including
-      Ubuntu `test-all`, docs consistency, macOS/Windows Go, all three quickstart
-      entrypoint jobs, committed-secret guard, and the aggregate Merge gate.
-
-- [-] Task 5 - Resolve review, refresh exact-head CI, and merge the tooling slice
-  - Acceptance criteria:
-    - Required PLAN/TASKS records and runbook claims are current.
-    - All five review conversations have evidence-backed replies and are resolved.
-    - A fresh exact-head protected run passes after ledger/doc updates and the PR
-      is squash-merged without bypassing conversation resolution or Merge gate.
-    - #1299 remains open for real scheduled/off-host execution evidence.
-  - Check:
-    - Review hardening and runbook correction are implemented. This ledger update
-      closes the planning-artifact review finding; final exact-head CI, thread
-      resolution, and squash merge remain before Task 5 is complete.
-
-### Workflow correction note
-
-- This scoped implementation preceded its PLAN/TASKS entry because safe partial
-  mutation of the large ledger files was not initially available through the
-  connector. Review identified the violation before merge. The record is being
-  corrected transparently rather than claiming the required ordering occurred.
-"""
-
-          for filename, title, section, marker in (
-              ("PLAN.md", "# PLAN", plan, "## Current scope - scheduled off-host backup freshness qualification (#1299)"),
-              ("TASKS.md", "# TASKS", tasks, "## Scoped change: scheduled off-host backup freshness qualification (#1299)"),
-          ):
-              path = Path(filename)
-              text = path.read_text(encoding="utf-8")
+          for target, addition, title, marker in specs:
+              text = target.read_text(encoding="utf-8")
               if marker in text:
                   continue
-              prefix = title + "\n"
-              if not text.startswith(prefix):
-                  raise SystemExit(f"unexpected {filename} header")
-              remainder = text[len(prefix):].lstrip("\n")
-              path.write_text(prefix + "\n" + section.rstrip() + "\n\n" + remainder, encoding="utf-8")
+              if not text.startswith(title + "\n"):
+                  raise SystemExit(f"unexpected header in {target}")
+              section = addition.read_text(encoding="utf-8").rstrip()
+              remainder = text[len(title) + 1:].lstrip("\n")
+              target.write_text(title + "\n\n" + section + "\n\n" + remainder, encoding="utf-8")
           PY
 
-      - name: Remove temporary workflow and commit ledgers
+      - name: Commit ledgers and remove helper files
         shell: bash
         run: |
-          rm -f .github/workflows/finish-1299-offhost-ledgers.yml
+          rm -f \
+            .github/workflows/finish-1299-offhost-ledgers.yml \
+            scripts/.offhost-plan-section.txt \
+            scripts/.offhost-tasks-section.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PLAN.md TASKS.md .github/workflows/finish-1299-offhost-ledgers.yml
+          git add -A PLAN.md TASKS.md .github/workflows/finish-1299-offhost-ledgers.yml scripts/.offhost-plan-section.txt scripts/.offhost-tasks-section.txt
           git diff --cached --check
           git commit -m "docs: record off-host backup qualification plan"
           git push origin HEAD:chore/1299-scheduled-offhost-backup-proof
