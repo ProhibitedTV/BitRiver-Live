@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Qualify scheduled S3-compatible PostgreSQL backup evidence for #1299.
+"""Qualify S3-compatible PostgreSQL backup evidence for #1299.
 
 This is intentionally a read-only verifier. It consumes the three-file backup
 sets produced by scripts/backup-postgres.sh, validates the newest complete set,
-and emits secret-safe release evidence. It never creates, deletes, or mutates
-remote objects.
+and emits secret-safe release evidence. It never creates, deletes, prunes, or
+mutates remote objects.
+
+A passing report proves remote completeness, integrity, freshness, retention,
+and exact candidate identity. Scheduler provenance remains a separate operator
+evidence requirement because the backup trio itself does not distinguish a
+scheduled producer run from a manual invocation.
 """
 
 from __future__ import annotations
@@ -83,8 +88,8 @@ def sha256_file(path: Path) -> str:
 
 
 def redact_command(command: Iterable[str]) -> list[str]:
-    # No credentials are ever passed as command-line arguments. Keep this
-    # helper defensive so a future option cannot accidentally enter errors.
+    """Return a defensive display form without credential-shaped argument values."""
+
     sensitive = ("access-key", "secret", "token", "password", "credential")
     redacted: list[str] = []
     hide_next = False
@@ -130,9 +135,7 @@ class AWSCLIClient:
         except FileNotFoundError as exc:
             raise QualificationError("required command not found: aws") from exc
         except subprocess.CalledProcessError as exc:
-            safe = " ".join(redact_command(command))
-            message = (exc.stderr or "AWS CLI request failed").strip().splitlines()[-1]
-            raise QualificationError(f"AWS CLI request failed ({safe}): {message}") from exc
+            raise QualificationError("AWS CLI request failed while accessing remote backup evidence") from exc
 
     def list_objects(self, bucket: str, prefix: str) -> list[dict[str, Any]]:
         result = self._run(
@@ -160,31 +163,30 @@ class AWSCLIClient:
         self._run(["s3", "cp", f"s3://{bucket}/{key}", str(destination), "--only-show-errors"])
 
 
+def _producer_prefix_part(prefix: str) -> str:
+    """Mirror backup-postgres.sh's exact `${UPLOAD_PREFIX}/${BACKUP_BASENAME}` seam."""
+
+    return prefix + "/"
+
+
 def _relative_key(key: str, prefix: str) -> str:
-    normalized = prefix.strip("/")
-    if not normalized:
-        return key
-    marker = normalized + "/"
+    marker = _producer_prefix_part(prefix)
     if key.startswith(marker):
         return key[len(marker) :]
-    if key == normalized:
-        return ""
     return key
 
 
 def discover_sets(objects: Iterable[Mapping[str, Any]], prefix: str) -> list[BackupSet]:
     grouped: dict[str, dict[str, Any]] = {}
-    matched_keys: set[str] = set()
 
     for item in objects:
         key = item.get("Key")
         if not isinstance(key, str):
             continue
         relative = _relative_key(key, prefix)
-        match = BACKUP_RE.match(relative)
+        match = BACKUP_RE.fullmatch(relative)
         if not match:
             continue
-        matched_keys.add(key)
         stem = match.group("stem")
         suffix = match.group("suffix")
         group = grouped.setdefault(stem, {"stamp": match.group("stamp")})
@@ -202,8 +204,7 @@ def discover_sets(objects: Iterable[Mapping[str, Any]], prefix: str) -> list[Bac
 
     incomplete: list[str] = []
     complete: list[BackupSet] = []
-    normalized_prefix = prefix.strip("/")
-    prefix_part = f"{normalized_prefix}/" if normalized_prefix else ""
+    prefix_part = _producer_prefix_part(prefix)
 
     for stem, group in sorted(grouped.items()):
         missing = [name for name in ("archive", "manifest", "checksum") if name not in group]
@@ -212,7 +213,7 @@ def discover_sets(objects: Iterable[Mapping[str, Any]], prefix: str) -> list[Bac
             continue
         archive = group["archive"]
         archive_size = archive.get("Size")
-        if not isinstance(archive_size, int) or archive_size <= 0:
+        if isinstance(archive_size, bool) or not isinstance(archive_size, int) or archive_size <= 0:
             raise QualificationError(f"remote archive has an invalid size: {stem}")
         complete.append(
             BackupSet(
@@ -234,26 +235,71 @@ def discover_sets(objects: Iterable[Mapping[str, Any]], prefix: str) -> list[Bac
 def parse_checksum_file(path: Path, archive_name: str, manifest_name: str) -> dict[str, str]:
     expected_names = {archive_name, manifest_name}
     parsed: dict[str, str] = {}
+    line_count = 0
     for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line:
+        if not raw:
             continue
-        parts = line.split(None, 1)
-        if len(parts) != 2:
+        line_count += 1
+        match = re.fullmatch(r"([0-9a-f]{64})  ([^/\s]+)", raw)
+        if not match:
             raise QualificationError("remote checksum file contains a malformed line")
-        digest, name = parts
-        name = name.lstrip("*")
-        if not SHA256_RE.fullmatch(digest):
-            raise QualificationError("remote checksum file contains an invalid SHA-256 digest")
+        digest, name = match.groups()
         if name not in expected_names:
             raise QualificationError(f"remote checksum file references unexpected asset: {name}")
         if name in parsed:
             raise QualificationError(f"remote checksum file contains duplicate asset: {name}")
         parsed[name] = digest
-    if set(parsed) != expected_names:
+    if line_count != 2 or set(parsed) != expected_names:
         missing = sorted(expected_names - set(parsed))
-        raise QualificationError("remote checksum file does not cover the complete backup set: " + ", ".join(missing))
+        detail = f": {', '.join(missing)}" if missing else ""
+        raise QualificationError("remote checksum file must cover archive and manifest exactly once" + detail)
     return parsed
+
+
+def _require_nonempty_string(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise QualificationError(f"remote backup manifest {label} must be a non-empty string")
+    return value
+
+
+def _require_positive_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise QualificationError(f"remote backup manifest {label} must be a positive integer")
+    return value
+
+
+def validate_database_contract(database: Mapping[str, Any]) -> None:
+    """Mirror restore-postgres.sh's v1 manifest structure/evidence checks."""
+
+    _require_nonempty_string(database.get("name"), "database.name")
+    _require_nonempty_string(database.get("serverVersion"), "database.serverVersion")
+    _require_positive_int(database.get("serverVersionNum"), "database.serverVersionNum")
+
+    fingerprint = database.get("migrationFingerprintSha256")
+    if not isinstance(fingerprint, str) or not SHA256_RE.fullmatch(fingerprint):
+        raise QualificationError("remote backup manifest has an invalid migration fingerprint")
+
+    migrations = database.get("migrations")
+    if not isinstance(migrations, list) or not migrations:
+        raise QualificationError("remote backup manifest migrations must be a non-empty array")
+    for index, migration in enumerate(migrations):
+        if not isinstance(migration, Mapping):
+            raise QualificationError(f"remote backup manifest migration[{index}] must be an object")
+        if migration.get("status") != "applied":
+            raise QualificationError(f"remote backup manifest migration[{index}] is not applied")
+        _require_nonempty_string(migration.get("filename"), f"migration[{index}].filename")
+        checksum = migration.get("checksumSha256")
+        if not isinstance(checksum, str) or not SHA256_RE.fullmatch(checksum):
+            raise QualificationError(f"remote backup manifest migration[{index}] checksum is invalid")
+
+    row_counts = database.get("rowCounts")
+    if not isinstance(row_counts, Mapping) or not row_counts:
+        raise QualificationError("remote backup manifest does not contain non-empty row-count evidence")
+    for table, count in row_counts.items():
+        if not isinstance(table, str) or not table:
+            raise QualificationError("remote backup manifest row-count table name must not be empty")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise QualificationError(f"remote backup manifest row count for {table!r} must be a non-negative integer")
 
 
 def validate_manifest(
@@ -261,8 +307,8 @@ def validate_manifest(
     *,
     backup: BackupSet,
     archive_sha: str,
-    expected_release: str | None,
-    expected_commit: str | None,
+    expected_release: str,
+    expected_commit: str,
 ) -> tuple[dt.datetime, str, str]:
     if manifest.get("schemaVersion") != BACKUP_SCHEMA:
         raise QualificationError("remote backup manifest has an unsupported schemaVersion")
@@ -283,9 +329,9 @@ def validate_manifest(
         raise QualificationError("remote backup manifest source release is not an exact v-prefixed release")
     if not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit):
         raise QualificationError("remote backup manifest source commit is not a full lowercase SHA")
-    if expected_release and release != expected_release:
+    if release != expected_release:
         raise QualificationError(f"remote backup source release mismatch: expected {expected_release}, got {release}")
-    if expected_commit and commit != expected_commit:
+    if commit != expected_commit:
         raise QualificationError(f"remote backup source commit mismatch: expected {expected_commit}, got {commit}")
 
     archive = manifest.get("archive")
@@ -294,9 +340,14 @@ def validate_manifest(
     archive_name = Path(backup.archive_key).name
     if archive.get("name") != archive_name:
         raise QualificationError("remote backup manifest archive name does not match the remote object")
+    if archive.get("format") != "postgresql-plain-sql+gzip":
+        raise QualificationError("remote backup manifest archive format is invalid")
     if archive.get("sha256") != archive_sha:
         raise QualificationError("remote backup manifest archive SHA-256 does not match downloaded bytes")
-    if archive.get("sizeBytes") != backup.archive_size:
+    manifest_size = archive.get("sizeBytes")
+    if isinstance(manifest_size, bool) or not isinstance(manifest_size, int) or manifest_size <= 0:
+        raise QualificationError("remote backup manifest archive size must be a positive integer")
+    if manifest_size != backup.archive_size:
         raise QualificationError("remote backup manifest archive size does not match remote object metadata")
     if archive.get("checksumAsset") != Path(backup.checksum_key).name:
         raise QualificationError("remote backup manifest checksum asset does not match the remote object")
@@ -304,12 +355,21 @@ def validate_manifest(
     database = manifest.get("database")
     if not isinstance(database, Mapping):
         raise QualificationError("remote backup manifest is missing database evidence")
-    fingerprint = database.get("migrationFingerprintSha256")
-    if not isinstance(fingerprint, str) or not SHA256_RE.fullmatch(fingerprint):
-        raise QualificationError("remote backup manifest has an invalid migration fingerprint")
-    row_counts = database.get("rowCounts")
-    if not isinstance(row_counts, Mapping) or not row_counts:
-        raise QualificationError("remote backup manifest does not contain non-empty row-count evidence")
+    validate_database_contract(database)
+
+    tools = manifest.get("tools")
+    if not isinstance(tools, Mapping):
+        raise QualificationError("remote backup manifest is missing tool evidence")
+    _require_nonempty_string(tools.get("pgDump"), "tools.pgDump")
+    _require_nonempty_string(tools.get("psql"), "tools.psql")
+
+    consistency = manifest.get("consistency")
+    if not isinstance(consistency, Mapping):
+        raise QualificationError("remote backup manifest is missing consistency evidence")
+    if consistency.get("snapshot") != "postgres-exported-snapshot":
+        raise QualificationError("remote backup manifest snapshot consistency is invalid")
+    if consistency.get("tableRowCounts") != "exact":
+        raise QualificationError("remote backup manifest row-count consistency is invalid")
 
     return created_at, release, commit
 
@@ -321,8 +381,8 @@ def qualify(
     prefix: str,
     max_age_seconds: int,
     min_complete_sets: int,
-    expected_release: str | None = None,
-    expected_commit: str | None = None,
+    expected_release: str,
+    expected_commit: str,
     now: dt.datetime | None = None,
 ) -> dict[str, Any]:
     if not bucket.strip():
@@ -331,9 +391,9 @@ def qualify(
         raise QualificationError("max age must be greater than zero")
     if min_complete_sets <= 0:
         raise QualificationError("minimum complete sets must be greater than zero")
-    if expected_release and not RELEASE_RE.fullmatch(expected_release):
+    if not RELEASE_RE.fullmatch(expected_release):
         raise QualificationError("expected release must be an exact v-prefixed release")
-    if expected_commit and not COMMIT_RE.fullmatch(expected_commit):
+    if not COMMIT_RE.fullmatch(expected_commit):
         raise QualificationError("expected commit must be a full lowercase SHA")
 
     current = now or utc_now()
@@ -362,11 +422,7 @@ def qualify(
             raise QualificationError("downloaded archive size does not match remote object metadata")
         archive_sha = sha256_file(archive_path)
         manifest_sha = sha256_file(manifest_path)
-        checksums = parse_checksum_file(
-            checksum_path,
-            archive_path.name,
-            manifest_path.name,
-        )
+        checksums = parse_checksum_file(checksum_path, archive_path.name, manifest_path.name)
         if checksums[archive_path.name] != archive_sha:
             raise QualificationError("remote checksum does not match downloaded backup archive")
         if checksums[manifest_path.name] != manifest_sha:
@@ -406,7 +462,7 @@ def qualify(
         "remote": {
             "provider": "s3-compatible",
             "bucket": bucket,
-            "prefix": prefix.strip("/"),
+            "prefix": prefix,
             "completeSetCount": len(complete_sets),
             "oldestSetTimestamp": oldest.timestamp.isoformat().replace("+00:00", "Z"),
             "newestSetTimestamp": newest.timestamp.isoformat().replace("+00:00", "Z"),
@@ -418,14 +474,18 @@ def qualify(
             "manifestSha256": manifest_sha,
             "createdAt": created_at.isoformat().replace("+00:00", "Z"),
             "source": {"release": release, "commit": commit},
+            "expectedSource": {"release": expected_release, "commit": expected_commit},
             "observedRpoSeconds": age_seconds,
             "checksumVerified": True,
             "manifestVerified": True,
+            "candidateIdentityVerified": True,
         },
         "claims": {
-            "scheduledRemoteFreshness": True,
+            "remoteFreshness": True,
             "completeRemoteSet": True,
             "remoteRetentionMinimum": True,
+            "candidateIdentity": True,
+            "scheduledProvenance": False,
             "localCopyRequired": False,
             "restoreProvenByThisReport": False,
             "providerDurabilitySlaProven": False,
@@ -451,13 +511,17 @@ def build_parser() -> argparse.ArgumentParser:
         description="Verify fresh, complete, retained BitRiver PostgreSQL backup sets in S3-compatible storage."
     )
     parser.add_argument("--bucket", required=True)
-    parser.add_argument("--prefix", default="bitriver-live/postgres")
+    parser.add_argument(
+        "--prefix",
+        default="bitriver-live/postgres",
+        help="Exact BITRIVER_BACKUP_UPLOAD_PREFIX value; separators are preserved exactly.",
+    )
     parser.add_argument("--region", default="us-east-1")
     parser.add_argument("--endpoint-url")
     parser.add_argument("--max-age-seconds", type=int, default=86400)
     parser.add_argument("--min-complete-sets", type=int, default=3)
-    parser.add_argument("--expected-release")
-    parser.add_argument("--expected-commit")
+    parser.add_argument("--expected-release", required=True)
+    parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--now", help="RFC3339 UTC override for deterministic qualification/testing")
     parser.add_argument("--report", type=Path, required=True)
     return parser
