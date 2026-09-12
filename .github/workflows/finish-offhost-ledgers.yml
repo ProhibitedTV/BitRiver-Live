@@ -1,0 +1,62 @@
+name: Temporary off-host ledger update
+
+on:
+  push:
+    branches:
+      - chore/1299-scheduled-offhost-backup-proof
+    paths:
+      - scripts/.offhost-ledger-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update-ledgers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: chore/1299-scheduled-offhost-backup-proof
+          fetch-depth: 0
+
+      - name: Prepend ledger sections
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -Fq '## Current scope - scheduled off-host backup freshness qualification (#1299)' PLAN.md; then
+            {
+              head -n 1 PLAN.md
+              printf '\n'
+              cat scripts/.offhost-plan-section.txt
+              printf '\n'
+              tail -n +2 PLAN.md
+            } > PLAN.md.new
+            mv PLAN.md.new PLAN.md
+          fi
+          if ! grep -Fq '## Scoped change: scheduled off-host backup freshness qualification (#1299)' TASKS.md; then
+            {
+              head -n 1 TASKS.md
+              printf '\n'
+              cat scripts/.offhost-tasks-section.txt
+              printf '\n'
+              tail -n +2 TASKS.md
+            } > TASKS.md.new
+            mv TASKS.md.new TASKS.md
+          fi
+
+      - name: Commit ledgers and remove temporary updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/finish-offhost-ledgers.yml \
+            scripts/.offhost-plan-section.txt \
+            scripts/.offhost-tasks-section.txt \
+            scripts/.offhost-ledger-trigger
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'docs: record off-host backup qualification plan'
+          git push origin HEAD:chore/1299-scheduled-offhost-backup-proof
