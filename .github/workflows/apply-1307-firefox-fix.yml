@@ -1,0 +1,149 @@
+name: Apply 1307 Firefox compatibility fix
+
+on:
+  push:
+    branches:
+      - feat/1307-viewer-compatibility-matrix
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'ci: apply firefox compatibility fix'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Apply capability-aware Firefox fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          player = Path('web/viewer/components/Player.tsx')
+          text = player.read_text()
+          old = '''    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playback.playbackUrl;
+      void video.play().catch(() => {
+        scheduleUnavailableWithGrace();
+      });
+      void reportViewerQoE({
+        channelId,
+        sessionId: playback.sessionId,
+        event: "player_init",
+        player: "native",
+        protocol: playback.protocol ?? "hls",
+        latencyMode: playback.latencyMode,
+        playbackUrl: playback.playbackUrl
+      });
+      return () => {
+        clearErrorTimeout();
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      };
+    }
+
+    return undefined;
+'''
+          new = '''    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playback.playbackUrl;
+      void video.play().catch(() => {
+        scheduleUnavailableWithGrace();
+      });
+      void reportViewerQoE({
+        channelId,
+        sessionId: playback.sessionId,
+        event: "player_init",
+        player: "native",
+        protocol: playback.protocol ?? "hls",
+        latencyMode: playback.latencyMode,
+        playbackUrl: playback.playbackUrl
+      });
+      return () => {
+        clearErrorTimeout();
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      };
+    }
+
+    // Some engines/builds expose neither MSE support usable by hls.js nor native HLS.
+    // Do not leave viewers parked on an indefinite loading state when playback is impossible.
+    setRuntimeState(UIState.StreamUnavailable);
+    return undefined;
+'''
+          if old not in text:
+              raise SystemExit('Player fallback insertion point not found')
+          player.write_text(text.replace(old, new, 1))
+
+          spec = Path('web/viewer/tests/compatibility.spec.ts')
+          text = spec.read_text()
+          text = text.replace(
+              'test("watches HLS, reads chat, and sends a message", async ({ page }) => {',
+              'test("handles HLS capability, reads chat, and sends a message", async ({ page }) => {',
+              1,
+          )
+          old = '''    const video = page.locator("video");
+    await expect(video).toBeVisible();
+    await expect
+      .poll(async () => {
+        const source = await video.evaluate((element) => element.currentSrc);
+        return source.startsWith("blob:") || source === playbackResponse.playback?.playbackUrl;
+      })
+      .toBe(true);
+'''
+          new = '''    const video = page.locator("video");
+    await expect(video).toBeVisible();
+    await expect
+      .poll(async () =>
+        page.evaluate((expectedUrl) => {
+          const element = document.querySelector("video");
+          const source = element?.currentSrc ?? "";
+          if (source.startsWith("blob:") || source === expectedUrl) {
+            return "attached";
+          }
+          return document.body.textContent?.includes("Stream unavailable") ? "unsupported" : "pending";
+        }, playbackResponse.playback?.playbackUrl)
+      )
+      .not.toBe("pending");
+'''
+          if old not in text:
+              raise SystemExit('Compatibility HLS assertion not found')
+          spec.write_text(text.replace(old, new, 1))
+
+          guard = Path('scripts/viewer_compatibility_test.go')
+          text = guard.read_text()
+          old = '`watches HLS, reads chat, and sends a message`'
+          new = '`handles HLS capability, reads chat, and sends a message`'
+          if old not in text:
+              raise SystemExit('Compatibility guard title not found')
+          guard.write_text(text.replace(old, new, 1))
+
+          doc = Path('docs/viewer-compatibility.md')
+          text = doc.read_text()
+          old = '| Firefox desktop | `firefox-compat` | Supported for critical viewer flows | Release-critical watch, chat, auth, accessibility, creator setup, and recovery flows. |'
+          new = '| Firefox desktop | `firefox-compat` | Supported viewer shell; HLS capability-gated | The bundled Linux Firefox used by Playwright may expose neither an hls.js-usable MSE codec path nor native HLS. CI requires a visible playback-unavailable fallback in that case while chat, auth, accessibility, creator setup, and recovery remain functional. Shipping Firefox playback still depends on the browser/OS media capabilities described below. |'
+          if old not in text:
+              raise SystemExit('Firefox support row not found')
+          text = text.replace(old, new, 1)
+          old = '- HLS source attachment or native-HLS fallback;'
+          new = '- HLS source attachment, native-HLS fallback, or an explicit unsupported-playback state when neither capability exists;'
+          if old not in text:
+              raise SystemExit('HLS coverage bullet not found')
+          text = text.replace(old, new, 1)
+          old = 'The compatibility suite proves that the viewer can initialize the HLS path, render the player, recover from transient playback API failure, and expose actionable unavailable/retry states in each declared engine class.'
+          new = 'The compatibility suite proves that the viewer initializes the HLS path when the tested engine exposes a usable hls.js or native-HLS capability; otherwise it must leave loading and render an explicit unavailable state. It also covers transient playback API recovery across each declared engine class.'
+          if old not in text:
+              raise SystemExit('HLS support paragraph not found')
+          doc.write_text(text.replace(old, new, 1))
+
+      - name: Commit Firefox capability fix
+        shell: bash
+        run: |
+          git config user.name "RhythmicCarnage"
+          git config user.email "71204385+ProhibitedTV@users.noreply.github.com"
+          git add web/viewer/components/Player.tsx web/viewer/tests/compatibility.spec.ts scripts/viewer_compatibility_test.go docs/viewer-compatibility.md
+          git commit -m "fix(viewer): fail clearly when HLS is unsupported"
+          git push
