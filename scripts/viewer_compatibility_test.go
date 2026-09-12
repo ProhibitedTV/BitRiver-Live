@@ -12,6 +12,7 @@ func TestViewerCompatibilityMatrixContract(t *testing.T) {
 
 	for _, required := range []string{
 		`retries: 0`,
+		`workers: process.env.CI ? 1 : undefined`,
 		`name: "chromium-regression"`,
 		`name: "chromium-compat"`,
 		`name: "firefox-compat"`,
@@ -26,10 +27,29 @@ func TestViewerCompatibilityMatrixContract(t *testing.T) {
 		`const compatibilitySpec = "**/compatibility.spec.ts"`,
 		`testIgnore: compatibilitySpec`,
 		`testMatch: compatibilitySpec`,
+		`command: "node test/start-standalone-server.mjs"`,
+		`reuseExistingServer: !process.env.CI`,
+		`gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 }`,
 	} {
 		if !strings.Contains(config, required) {
 			t.Errorf("viewer Playwright config missing compatibility invariant %q", required)
 		}
+	}
+
+	starter := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "test", "start-standalone-server.mjs"))
+	for _, required := range []string{
+		`await import("./prepare-standalone-server.mjs")`,
+		`path.join(process.cwd(), ".next", "standalone", "server.js")`,
+		`await import(pathToFileURL(serverPath).href)`,
+	} {
+		if !strings.Contains(starter, required) {
+			t.Errorf("viewer standalone test launcher missing lifecycle invariant %q", required)
+		}
+	}
+
+	packageJSON := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "package.json"))
+	if !strings.Contains(packageJSON, `"start:test": "node test/start-standalone-server.mjs"`) {
+		t.Fatal("viewer start:test must use the direct standalone server launcher")
 	}
 
 	compatibilitySpec := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "tests", "compatibility.spec.ts"))
