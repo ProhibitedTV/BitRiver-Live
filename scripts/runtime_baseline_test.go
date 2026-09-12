@@ -191,8 +191,8 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, required := range []string{
 		`"node": ">=24 <25"`,
 		`"npm": ">=11 <12"`,
-		`"hls.js": "1.7.1"`,
-		`"next": "16.3.3"`,
+		`"hls.js": "1.7.2"`,
+		`"next": "16.3.4"`,
 		`"ovenplayer": "0.10.54"`,
 		`"react": "19.2.8"`,
 		`"react-dom": "19.2.8"`,
@@ -206,7 +206,7 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 		`"jest-environment-jsdom": "30.5.1"`,
 		`"typescript": "6.0.3"`,
 		`"postcss": "8.5.28"`,
-		`"sharp": "0.35.3"`,
+		`"sharp": "0.35.4"`,
 		`"@parcel/watcher": false`,
 		`"unrs-resolver": false`,
 	} {
