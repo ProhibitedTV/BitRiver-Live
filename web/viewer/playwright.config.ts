@@ -6,6 +6,7 @@ const compatibilitySpec = "**/compatibility.spec.ts";
 export default defineConfig({
   testDir: "./tests",
   retries: 0,
+  workers: process.env.CI ? 1 : undefined,
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {
     headless: true,
@@ -60,9 +61,10 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: "npm run start:test",
+    command: "node test/start-standalone-server.mjs",
     url: baseURL,
     reuseExistingServer: !process.env.CI,
+    gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
     timeout: 120_000
   }
 });
