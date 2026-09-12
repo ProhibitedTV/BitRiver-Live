@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Match the npm bundled with Node 24 on the protected CI runner.
+          # Match the npm bundled with Node 24 on the protected CI runner; remediate both reviewed HIGH advisories.
           npm --version
           node <<'NODE'
           const fs = require('fs');
