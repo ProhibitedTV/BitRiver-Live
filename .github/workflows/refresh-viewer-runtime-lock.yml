@@ -25,7 +25,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/viewer/package-lock.json
 
-      - name: Regenerate viewer lock with patched Sharp
+      - name: Regenerate viewer lock with security fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -41,6 +41,7 @@ jobs:
           cd web/viewer
           rm -rf node_modules
           npm install --ignore-scripts
+          npm audit fix --ignore-scripts
           rm -rf node_modules
           npm ci --ignore-scripts
           npm audit --audit-level=high
@@ -73,5 +74,5 @@ jobs:
           git config user.email '71204385+ProhibitedTV@users.noreply.github.com'
           git rm .github/workflows/refresh-viewer-runtime-lock.yml
           git add web/viewer/package.json web/viewer/package-lock.json scripts/runtime_baseline_test.go
-          git commit -m 'deps(viewer): patch Sharp and align runtime invariant'
+          git commit -m 'deps(viewer): patch audited runtime dependencies'
           git push origin HEAD:dependabot/npm_and_yarn/web/viewer/viewer-runtime-523c80c1a2
