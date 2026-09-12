@@ -1,0 +1,74 @@
+name: Refresh viewer runtime lock
+
+on:
+  push:
+    branches:
+      - dependabot/npm_and_yarn/web/viewer/viewer-runtime-523c80c1a2
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dependabot/npm_and_yarn/web/viewer/viewer-runtime-523c80c1a2
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/viewer/package-lock.json
+
+      - name: Regenerate viewer lock with patched Sharp
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.6.2
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'web/viewer/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.overrides.sharp = '0.35.4';
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          cd web/viewer
+          npm install --package-lock-only --ignore-scripts
+          npm ci --ignore-scripts
+          npm audit --audit-level=high
+
+      - name: Align checked viewer runtime invariant
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/runtime_baseline_test.go')
+          text = path.read_text()
+          replacements = {
+              '`"hls.js": "1.7.1"`': '`"hls.js": "1.7.2"`',
+              '`"next": "16.3.3"`': '`"next": "16.3.4"`',
+              '`"sharp": "0.35.3"`': '`"sharp": "0.35.4"`',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected invariant: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Commit generated maintenance changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'RhythmicCarnage'
+          git config user.email '71204385+ProhibitedTV@users.noreply.github.com'
+          git rm .github/workflows/refresh-viewer-runtime-lock.yml
+          git add web/viewer/package.json web/viewer/package-lock.json scripts/runtime_baseline_test.go
+          git commit -m 'deps(viewer): patch Sharp and align runtime invariant'
+          git push origin HEAD:dependabot/npm_and_yarn/web/viewer/viewer-runtime-523c80c1a2
