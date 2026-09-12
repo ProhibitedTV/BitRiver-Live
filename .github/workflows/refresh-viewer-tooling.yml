@@ -1,0 +1,89 @@
+name: Refresh viewer tooling
+
+on:
+  push:
+    branches:
+      - dependabot/npm_and_yarn/web/viewer/viewer-tooling-f364fab780
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tooling branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dependabot/npm_and_yarn/web/viewer/viewer-tooling-f364fab780
+          fetch-depth: 0
+
+      - name: Rebase maintenance state onto current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/viewer/package-lock.json
+
+      - name: Apply tooling updates and regenerate lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'web/viewer/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          Object.assign(pkg.devDependencies, {
+            '@playwright/test': '1.63.0',
+            '@testing-library/user-event': '14.6.7',
+            '@types/node': '26.5.0',
+            '@types/react-dom': '19.2.7',
+          });
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          cd web/viewer
+          rm -rf node_modules
+          npm install --ignore-scripts
+          rm -rf node_modules
+          npm ci --ignore-scripts
+          npm audit --audit-level=high
+          npm run lint
+          npm test -- --runInBand
+          npm run build
+
+      - name: Align checked viewer tooling invariant
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/runtime_baseline_test.go')
+          text = path.read_text()
+          replacements = {
+              '`"@testing-library/user-event": "14.6.6"`': '`"@testing-library/user-event": "14.6.7"`',
+              '`"@types/node": "26.4.0"`': '`"@types/node": "26.5.0"`',
+              '`"@types/react-dom": "19.2.5"`': '`"@types/react-dom": "19.2.7"`',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected invariant: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Commit repaired tooling update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'RhythmicCarnage'
+          git config user.email '71204385+ProhibitedTV@users.noreply.github.com'
+          git add web/viewer/package.json web/viewer/package-lock.json scripts/runtime_baseline_test.go
+          git commit -m 'deps(viewer): update tooling and align runtime invariant'
+          git push --force-with-lease origin HEAD:dependabot/npm_and_yarn/web/viewer/viewer-tooling-f364fab780
