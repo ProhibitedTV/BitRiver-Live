@@ -1,0 +1,56 @@
+name: Diagnose viewer compatibility
+
+on:
+  push:
+    branches:
+      - feat/1307-viewer-compatibility-matrix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  project:
+    name: Playwright ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - project: chromium-regression
+            browser: chromium
+          - project: chromium-compat
+            browser: chromium
+          - project: firefox-compat
+            browser: firefox
+          - project: webkit-compat
+            browser: webkit
+          - project: android-chrome-compat
+            browser: chromium
+          - project: iphone-webkit-compat
+            browser: webkit
+    defaults:
+      run:
+        working-directory: web/viewer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up viewer Node toolchain
+        uses: ./.github/actions/setup-node-viewer
+
+      - name: Install ${{ matrix.browser }}
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Build standalone viewer
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Run ${{ matrix.project }}
+        run: npx playwright test --project="${{ matrix.project }}"
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
