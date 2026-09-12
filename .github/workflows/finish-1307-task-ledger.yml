@@ -16,60 +16,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Refresh scoped task status
-        shell: python
+        shell: bash
         run: |
-          from pathlib import Path
-
-          path = Path('TASKS.md')
-          text = path.read_text()
-          start = text.index('## Scoped change: viewer compatibility matrix (#1307)')
-          end = text.index('\n\n## Scoped change: scheduled off-host backup freshness qualification (#1299)', start)
-          replacement = '''## Scoped change: viewer compatibility matrix (#1307)
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Reconcile current viewer test coverage and support claims
-  - Acceptance criteria:
-    - Current Playwright config, browser installation, standalone-server boundary, mobile/layout tests, channel/chat/playback tests, accessibility tests, and #1307 acceptance are inspected before implementation.
-    - PLAN records the full-Chromium versus cross-engine critical-matrix split and honest real-media/device non-claims.
-  - Check:
-    - Current viewer CI installs Playwright browsers and runs the integration suite against the production standalone server boundary.
-    - Existing tests cover channel playback/chat recovery, creator flows, accessibility, mobile navigation, multiple narrow widths, and horizontal overflow; the matrix reuses those product contracts rather than inventing parallel paths.
-
-- [x] Task 2 - Define browser/device projects and critical suite
-  - Acceptance criteria:
-    - Chromium, Firefox, WebKit, Android/Chrome emulation, and iPhone/WebKit emulation are named projects with explicit stable configuration.
-    - Current full integration remains covered on Chromium while a focused compatibility set runs on every declared project.
-    - No blanket retry policy or test-only product bypass is introduced.
-  - Check:
-    - `playwright.config.ts` now preserves `chromium-regression` and adds focused `chromium-compat`, `firefox-compat`, `webkit-compat`, `android-chrome-compat`, and `iphone-webkit-compat` projects with `retries: 0`.
-    - The focused suite covers HLS capability/fallback state, chat read/send/auth fallback, transient playback recovery, signed-out auth/navigation + axe, creator live setup, touch navigation, and horizontal overflow.
-    - Firefox qualification exposed a real unsupported-HLS loading hang; the viewer now moves to the explicit Stream unavailable state when neither hls.js/MSE nor native HLS is usable instead of weakening the test.
-
-- [x] Task 3 - Publish support matrix and compatibility boundaries
-  - Acceptance criteria:
-    - Viewer/operator/testing docs identify supported engine/device classes, browser-version policy, protocol/media caveats, CI-emulation limits, and real-media follow-up.
-    - Unsupported/unproved combinations are explicit rather than silently presented as supported.
-  - Check:
-    - `docs/viewer-compatibility.md` publishes the release-blocking matrix and explicitly separates Playwright engine/device evidence from shipping Safari/device certification and real-media protocol qualification.
-    - Firefox HLS is capability-gated honestly; WebRTC, audible autoplay, fullscreen/PiP, quality selection, soft-keyboard behavior, and physical-device claims remain bounded to evidence actually produced.
-
-- [-] Task 4 - Qualify locally and through protected CI
-  - Acceptance criteria:
-    - Clean install/audit/lint/Jest/build, cross-engine critical projects, full Chromium suite, focused static contracts, and literal viewer verification pass.
-    - Protected viewer CI and Merge gate pass on the exact reviewed head with review findings resolved.
-  - Check:
-    - Split qualification run `34721882296` passed all six Playwright projects on the fixed code: full Chromium regression plus Chromium, Firefox, desktop WebKit, Android/Chrome, and iPhone/WebKit compatibility projects.
-    - Protected pull-request CI, the normal Viewer CI integration/build/audit gate, review, and aggregate Merge gate remain required on the cleaned exact head.
-
-- [ ] Task 5 - Record bounded #1307 evidence
-  - Acceptance criteria:
-    - Repository-side browser/device matrix evidence is attached to #1307.
-    - #1307 closes only if all issue acceptance, including required real-media engine-class evidence, is genuinely met; otherwise remaining external/device proof stays explicit.
-  - Check:
-    - Pending protected PR evidence and final issue disposition. The repository matrix deliberately does not convert mocked Playwright media routes into per-engine real-media or physical-device claims.
-'''
-          path.write_text(text[:start] + replacement + text[end:])
+          printf '%s' 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwYXRoID0gUGF0aCgiVEFTS1MubWQiKQp0ZXh0ID0gcGF0aC5yZWFkX3RleHQoKQpzdGFydCA9IHRleHQuaW5kZXgoIiMjIFNjb3BlZCBjaGFuZ2U6IHZpZXdlciBjb21wYXRpYmlsaXR5IG1hdHJpeCAoIzEzMDcpIikKZW5kID0gdGV4dC5pbmRleCgiXG5cbiMjIFNjb3BlZCBjaGFuZ2U6IHNjaGVkdWxlZCBvZmYtaG9zdCBiYWNrdXAgZnJlc2huZXNzIHF1YWxpZmljYXRpb24gKCMxMjk5KSIsIHN0YXJ0KQpyZXBsYWNlbWVudCA9ICIiIiMjIFNjb3BlZCBjaGFuZ2U6IHZpZXdlciBjb21wYXRpYmlsaXR5IG1hdHJpeCAoIzEzMDcpCgpTdGF0dXMgbGVnZW5kOiBgWyBdYCBub3Qgc3RhcnRlZCwgYFstXWAgaW4gcHJvZ3Jlc3MsIGBbeF1gIGRvbmUKCi0gW3hdIFRhc2sgMSAtIFJlY29uY2lsZSBjdXJyZW50IHZpZXdlciB0ZXN0IGNvdmVyYWdlIGFuZCBzdXBwb3J0IGNsYWltcwogIC0gQWNjZXB0YW5jZSBjcml0ZXJpYToKICAgIC0gQ3VycmVudCBQbGF5d3JpZ2h0IGNvbmZpZywgYnJvd3NlciBpbnN0YWxsYXRpb24sIHN0YW5kYWxvbmUtc2VydmVyIGJvdW5kYXJ5LCBtb2JpbGUvbGF5b3V0IHRlc3RzLCBjaGFubmVsL2NoYXQvcGxheWJhY2sgdGVzdHMsIGFjY2Vzc2liaWxpdHkgdGVzdHMsIGFuZCAjMTMwNyBhY2NlcHRhbmNlIGFyZSBpbnNwZWN0ZWQgYmVmb3JlIGltcGxlbWVudGF0aW9uLgogICAgLSBQTEFOIHJlY29yZHMgdGhlIGZ1bGwtQ2hyb21pdW0gdmVyc3VzIGNyb3NzLWVuZ2luZSBjcml0aWNhbC1tYXRyaXggc3BsaXQgYW5kIGhvbmVzdCByZWFsLW1lZGlhL2RldmljZSBub24tY2xhaW1zLgogIC0gQ2hlY2s6CiAgICAtIEN1cnJlbnQgdmlld2VyIENJIGluc3RhbGxzIFBsYXl3cmlnaHQgYnJvd3NlcnMgYW5kIHJ1bnMgdGhlIGludGVncmF0aW9uIHN1aXRlIGFnYWluc3QgdGhlIHByb2R1Y3Rpb24gc3RhbmRhbG9uZSBzZXJ2ZXIgYm91bmRhcnkuCiAgICAtIEV4aXN0aW5nIHRlc3RzIGNvdmVyIGNoYW5uZWwgcGxheWJhY2svY2hhdCByZWNvdmVyeSwgY3JlYXRvciBmbG93cywgYWNjZXNzaWJpbGl0eSwgbW9iaWxlIG5hdmlnYXRpb24sIG11bHRpcGxlIG5hcnJvdyB3aWR0aHMsIGFuZCBob3Jpem9udGFsIG92ZXJmbG93OyB0aGUgbWF0cml4IHJldXNlcyB0aG9zZSBwcm9kdWN0IGNvbnRyYWN0cyByYXRoZXIgdGhhbiBpbnZlbnRpbmcgcGFyYWxsZWwgcGF0aHMuCgotIFt4XSBUYXNrIDIgLSBEZWZpbmUgYnJvd3Nlci9kZXZpY2UgcHJvamVjdHMgYW5kIGNyaXRpY2FsIHN1aXRlCiAgLSBBY2NlcHRhbmNlIGNyaXRlcmlhOgogICAgLSBDaHJvbWl1bSwgRmlyZWZveCwgV2ViS2l0LCBBbmRyb2lkL0Nocm9tZSBlbXVsYXRpb24sIGFuZCBpUGhvbmUvV2ViS2l0IGVtdWxhdGlvbiBhcmUgbmFtZWQgcHJvamVjdHMgd2l0aCBleHBsaWNpdCBzdGFibGUgY29uZmlndXJhdGlvbi4KICAgIC0gQ3VycmVudCBmdWxsIGludGVncmF0aW9uIHJlbWFpbnMgY292ZXJlZCBvbiBDaHJvbWl1bSB3aGlsZSBhIGZvY3VzZWQgY29tcGF0aWJpbGl0eSBzZXQgcnVucyBvbiBldmVyeSBkZWNsYXJlZCBwcm9qZWN0LgogICAgLSBObyBibGFua2V0IHJldHJ5IHBvbGljeSBvciB0ZXN0LW9ubHkgcHJvZHVjdCBieXBhc3MgaXMgaW50cm9kdWNlZC4KICAtIENoZWNrOgogICAgLSBgcGxheXdyaWdodC5jb25maWcudHNgIG5vdyBwcmVzZXJ2ZXMgYGNocm9taXVtLXJlZ3Jlc3Npb25gIGFuZCBhZGRzIGZvY3VzZWQgYGNocm9taXVtLWNvbXBhdGAsIGBmaXJlZm94LWNvbXBhdGAsIGB3ZWJraXQtY29tcGF0YCwgYGFuZHJvaWQtY2hyb21lLWNvbXBhdGAsIGFuZCBgaXBob25lLXdlYmtpdC1jb21wYXRgIHByb2plY3RzIHdpdGggYHJldHJpZXM6IDBgLgogICAgLSBUaGUgZm9jdXNlZCBzdWl0ZSBjb3ZlcnMgSExTIGNhcGFiaWxpdHkvZmFsbGJhY2sgc3RhdGUsIGNoYXQgcmVhZC9zZW5kL2F1dGggZmFsbGJhY2ssIHRyYW5zaWVudCBwbGF5YmFjayByZWNvdmVyeSwgc2lnbmVkLW91dCBhdXRoL25hdmlnYXRpb24gKyBheGUsIGNyZWF0b3IgbGl2ZSBzZXR1cCwgdG91Y2ggbmF2aWdhdGlvbiwgYW5kIGhvcml6b250YWwgb3ZlcmZsb3cuCiAgICAtIEZpcmVmb3ggcXVhbGlmaWNhdGlvbiBleHBvc2VkIGEgcmVhbCB1bnN1cHBvcnRlZC1ITFMgbG9hZGluZyBoYW5nOyB0aGUgdmlld2VyIG5vdyBtb3ZlcyB0byB0aGUgZXhwbGljaXQgU3RyZWFtIHVuYXZhaWxhYmxlIHN0YXRlIHdoZW4gbmVpdGhlciBobHMuanMvTVNFIG5vciBuYXRpdmUgSExTIGlzIHVzYWJsZSBpbnN0ZWFkIG9mIHdlYWtlbmluZyB0aGUgdGVzdC4KCi0gW3hdIFRhc2sgMyAtIFB1Ymxpc2ggc3VwcG9ydCBtYXRyaXggYW5kIGNvbXBhdGliaWxpdHkgYm91bmRhcmllcwogIC0gQWNjZXB0YW5jZSBjcml0ZXJpYToKICAgIC0gVmlld2VyL29wZXJhdG9yL3Rlc3RpbmcgZG9jcyBpZGVudGlmeSBzdXBwb3J0ZWQgZW5naW5lL2RldmljZSBjbGFzc2VzLCBicm93c2VyLXZlcnNpb24gcG9saWN5LCBwcm90b2NvbC9tZWRpYSBjYXZlYXRzLCBDSS1lbXVsYXRpb24gbGltaXRzLCBhbmQgcmVhbC1tZWRpYSBmb2xsb3ctdXAuCiAgICAtIFVuc3VwcG9ydGVkL3VucHJvdmVkIGNvbWJpbmF0aW9ucyBhcmUgZXhwbGljaXQgcmF0aGVyIHRoYW4gc2lsZW50bHkgcHJlc2VudGVkIGFzIHN1cHBvcnRlZC4KICAtIENoZWNrOgogICAgLSBgZG9jcy92aWV3ZXItY29tcGF0aWJpbGl0eS5tZGAgcHVibGlzaGVzIHRoZSByZWxlYXNlLWJsb2NraW5nIG1hdHJpeCBhbmQgZXhwbGljaXRseSBzZXBhcmF0ZXMgUGxheXdyaWdodCBlbmdpbmUvZGV2aWNlIGV2aWRlbmNlIGZyb20gc2hpcHBpbmcgU2FmYXJpL2RldmljZSBjZXJ0aWZpY2F0aW9uIGFuZCByZWFsLW1lZGlhIHByb3RvY29sIHF1YWxpZmljYXRpb24uCiAgICAtIEZpcmVmb3ggSExTIGlzIGNhcGFiaWxpdHktZ2F0ZWQgaG9uZXN0bHk7IFdlYlJUQywgYXVkaWJsZSBhdXRvcGxheSwgZnVsbHNjcmVlbi9QaVAsIHF1YWxpdHkgc2VsZWN0aW9uLCBzb2Z0LWtleWJvYXJkIGJlaGF2aW9yLCBhbmQgcGh5c2ljYWwtZGV2aWNlIGNsYWltcyByZW1haW4gYm91bmRlZCB0byBldmlkZW5jZSBhY3R1YWxseSBwcm9kdWNlZC4KCi0gWy1dIFRhc2sgNCAtIFF1YWxpZnkgbG9jYWxseSBhbmQgdGhyb3VnaCBwcm90ZWN0ZWQgQ0kKICAtIEFjY2VwdGFuY2UgY3JpdGVyaWE6CiAgICAtIENsZWFuIGluc3RhbGwvYXVkaXQvbGludC9KZXN0L2J1aWxkLCBjcm9zcy1lbmdpbmUgY3JpdGljYWwgcHJvamVjdHMsIGZ1bGwgQ2hyb21pdW0gc3VpdGUsIGZvY3VzZWQgc3RhdGljIGNvbnRyYWN0cywgYW5kIGxpdGVyYWwgdmlld2VyIHZlcmlmaWNhdGlvbiBwYXNzLgogICAgLSBQcm90ZWN0ZWQgdmlld2VyIENJIGFuZCBNZXJnZSBnYXRlIHBhc3Mgb24gdGhlIGV4YWN0IHJldmlld2VkIGhlYWQgd2l0aCByZXZpZXcgZmluZGluZ3MgcmVzb2x2ZWQuCiAgLSBDaGVjazoKICAgIC0gU3BsaXQgcXVhbGlmaWNhdGlvbiBydW4gYDM0NzIxODgyMjk2YCBwYXNzZWQgYWxsIHNpeCBQbGF5d3JpZ2h0IHByb2plY3RzIG9uIHRoZSBmaXhlZCBjb2RlOiBmdWxsIENocm9taXVtIHJlZ3Jlc3Npb24gcGx1cyBDaHJvbWl1bSwgRmlyZWZveCwgZGVza3RvcCBXZWJLaXQsIEFuZHJvaWQvQ2hyb21lLCBhbmQgaVBob25lL1dlYktpdCBjb21wYXRpYmlsaXR5IHByb2plY3RzLgogICAgLSBQcm90ZWN0ZWQgcHVsbC1yZXF1ZXN0IENJLCB0aGUgbm9ybWFsIFZpZXdlciBDSSBpbnRlZ3JhdGlvbi9idWlsZC9hdWRpdCBnYXRlLCByZXZpZXcsIGFuZCBhZ2dyZWdhdGUgTWVyZ2UgZ2F0ZSByZW1haW4gcmVxdWlyZWQgb24gdGhlIGNsZWFuZWQgZXhhY3QgaGVhZC4KCi0gWyBdIFRhc2sgNSAtIFJlY29yZCBib3VuZGVkICMxMzA3IGV2aWRlbmNlCiAgLSBBY2NlcHRhbmNlIGNyaXRlcmlhOgogICAgLSBSZXBvc2l0b3J5LXNpZGUgYnJvd3Nlci9kZXZpY2UgbWF0cml4IGV2aWRlbmNlIGlzIGF0dGFjaGVkIHRvICMxMzA3LgogICAgLSAjMTMwNyBjbG9zZXMgb25seSBpZiBhbGwgaXNzdWUgYWNjZXB0YW5jZSwgaW5jbHVkaW5nIHJlcXVpcmVkIHJlYWwtbWVkaWEgZW5naW5lLWNsYXNzIGV2aWRlbmNlLCBpcyBnZW51aW5lbHkgbWV0OyBvdGhlcndpc2UgcmVtYWluaW5nIGV4dGVybmFsL2RldmljZSBwcm9vZiBzdGF5cyBleHBsaWNpdC4KICAtIENoZWNrOgogICAgLSBQZW5kaW5nIHByb3RlY3RlZCBQUiBldmlkZW5jZSBhbmQgZmluYWwgaXNzdWUgZGlzcG9zaXRpb24uIFRoZSByZXBvc2l0b3J5IG1hdHJpeCBkZWxpYmVyYXRlbHkgZG9lcyBub3QgY29udmVydCBtb2NrZWQgUGxheXdyaWdodCBtZWRpYSByb3V0ZXMgaW50byBwZXItZW5naW5lIHJlYWwtbWVkaWEgb3IgcGh5c2ljYWwtZGV2aWNlIGNsYWltcy4KIiIiCnBhdGgud3JpdGVfdGV4dCh0ZXh0WzpzdGFydF0gKyByZXBsYWNlbWVudCArIHRleHRbZW5kOl0pCg==' | base64 -d > /tmp/update-tasks.py
+          python /tmp/update-tasks.py
 
       - name: Remove temporary workflow and commit ledger
         shell: bash
