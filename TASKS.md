@@ -10,20 +10,20 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The change does not invent a parallel chat stack or conflate local `/clear` with persistent deletion.
   - Check:
     - Gateway messages publish through the chat queue; in-memory and PostgreSQL repositories persist them. Existing storage already has channel-bound `DeleteChatMessage`, while the wire protocol explicitly lacks `/me` and deletion events.
-    - The current domain/database message shape has no durable kind, so action semantics need an additive persisted `kind` field rather than a magic-text convention.
-    - Existing moderation authorization is owner/admin/moderator; ordinary viewers remain unauthorized to delete transcript messages.
+    - Action semantics can remain durable without a schema migration by persisting the canonical `/me <text>` source form and classifying that source at the realtime/API boundary.
+    - Existing persistent-delete authorization is channel owner/admin only; moderator-role users without owner/admin authority remain unauthorized for transcript deletion.
 
 - [-] Task 2 - Implement durable backend action and deletion contracts
   - Acceptance criteria:
-    - `message.kind` is additive/backwards compatible and defaults to `message`; action creation uses the same content/access/automod rules as ordinary chat.
-    - Authorized deletion validates channel/message identity, persists the delete before success is broadcast, and produces an explicit realtime delete event.
-    - JSON/in-memory and PostgreSQL storage remain aligned, with a forward migration for message kind.
+    - `message.kind` is additive/backwards compatible and defaults to `message`; action creation uses the same content/access/automod rules as ordinary chat while canonical `/me <text>` remains the stored source form.
+    - Owner/admin deletion validates channel/message identity, persists the delete before success is broadcast, and produces an explicit realtime delete event. Ordinary viewers and moderator-only users are refused.
+    - JSON/in-memory and PostgreSQL storage remain aligned without a schema migration.
   - Check:
     - Pending implementation and focused Go/storage tests.
 
 - [ ] Task 3 - Wire safe viewer behavior and protocol documentation
   - Acceptance criteria:
-    - `/me <text>` produces an action command and action rows render as plain text without raw HTML.
+    - `/me <text>` produces an action message and action rows render as plain text without raw HTML.
     - Live delete events remove the target idempotently; REST-restored action rows retain their semantic presentation.
     - Protocol docs define command/event/persistence/authorization behavior and preserve `/clear` as local-only.
   - Check:
