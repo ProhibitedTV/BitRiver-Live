@@ -80,6 +80,12 @@ type ChatGatewayEnvelope = {
       content?: string;
       createdAt?: string;
     };
+    messageDelete?: {
+      channelId?: string;
+      messageId?: string;
+      actorId?: string;
+      deletedAt?: string;
+    };
     filter?: {
       name?: string;
       action?: string;
@@ -187,7 +193,11 @@ function parseChatCommand(input: string, messages: ChatMessageEntry[]): ChatComm
     return { kind: "clear" };
   }
   if (command === "me") {
-    return { kind: "error", message: "Action messages are not supported yet." };
+    const action = args.join(" ").trim();
+    if (!action) {
+      return { kind: "error", message: "Usage: /me <action>" };
+    }
+    return { kind: "message", content: `/me ${action}` };
   }
   if (command === "timeout") {
     const [target, duration, ...reasonParts] = args;
@@ -240,7 +250,7 @@ function parseChatCommand(input: string, messages: ChatMessageEntry[]): ChatComm
   }
   return {
     kind: "error",
-    message: "Unknown chat command. Try /timeout, /ban, /unban, /remove_timeout, or /clear.",
+    message: "Unknown chat command. Try /me, /timeout, /ban, /unban, /remove_timeout, or /clear.",
   };
 }
 
@@ -300,7 +310,12 @@ function chatNoticeFromGatewayEnvelope(envelope: ChatGatewayEnvelope): ChatRoomN
   }
 
   const event = envelope.event;
-  if (envelope.type !== "event" || !event?.type || event.type === "message") {
+  if (
+    envelope.type !== "event" ||
+    !event?.type ||
+    event.type === "message" ||
+    event.type === "message_delete"
+  ) {
     return undefined;
   }
 
@@ -527,6 +542,19 @@ export function ChatPanel({
             occurredAt: new Date().toISOString(),
             occurredAtTs: Date.now(),
           }
+        );
+        return;
+      }
+      const deletedMessageId =
+        envelope.type === "event" && envelope.event?.type === "message_delete"
+          ? envelope.event.messageDelete?.messageId?.trim()
+          : undefined;
+      if (deletedMessageId) {
+        setMessageEntries((previous) =>
+          previous.filter((entry) => entry.message.id !== deletedMessageId)
+        );
+        setReportingMessageId((previous) =>
+          previous === deletedMessageId ? undefined : previous
         );
         return;
       }
