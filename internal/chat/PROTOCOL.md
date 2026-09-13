@@ -13,7 +13,7 @@ All messages are JSON encoded. The following commands are available:
 | ---------------- | -------------------------------------------- | ----------- |
 | `join`           | `channelId`                                  | Subscribe the connection to a channel room. Must be called before sending chat or moderation commands. |
 | `leave`          | `channelId`                                  | Unsubscribe this connection from the room. |
-| `message`        | `channelId`, `content`                       | Submit a chat message on behalf of the authenticated user. |
+| `message`        | `channelId`, `content`                       | Submit a chat message on behalf of the authenticated user. Canonical `/me <text>` content is stored unchanged and exposed as an action on the wire. |
 | `timeout`        | `channelId`, `targetId`, `durationMs`        | Issue a timeout in milliseconds against another user. `reason` is optional. Only channel owners, admins, and moderators are allowed to moderate. |
 | `remove_timeout` | `channelId`, `targetId`                      | Clear an active timeout. |
 | `ban`            | `channelId`, `targetId`                      | Ban a user from joining chat. `reason` is optional. |
@@ -31,6 +31,7 @@ above when the live chat socket is connected:
 
 | Command | Behavior |
 | ------- | -------- |
+| `/me <text>` | Sends an ordinary `message` command whose canonical content is `/me <text>`. The backend persists that source form and emits it with action semantics. |
 | `/timeout <user> <duration> [reason]` | Sends `timeout`. Durations accept `ms`, `s`, `m`, `h`, and `d`; bare numbers are seconds. |
 | `/ban <user> [reason]` | Sends `ban`. |
 | `/unban <user>` | Sends `unban`. |
@@ -41,9 +42,11 @@ Slash command targets should use stable user IDs when possible. The viewer may
 resolve visible display names from the current transcript, but ambiguous or
 unknown names are sent as typed and rejected by the backend if invalid.
 
-`/me` action messages and message delete/remove commands are not supported by
-the current gateway contract. They require a future event shape and persistence
-decision before clients should expose them.
+Persistent message deletion continues to use the authenticated HTTP transcript
+endpoint `DELETE /api/channels/{channelId}/chat/{messageId}`. That route retains
+its existing authorization contract: the channel owner or an admin may delete a
+message; ordinary viewers and moderator-only users may not. The system-of-record
+delete completes before the realtime `message_delete` event is broadcast.
 
 ## Server envelopes
 
@@ -62,10 +65,14 @@ new event types.
 
 ## Event shapes
 
-### Message
+### Message and `/me` actions
 
 `message` events carry the persisted transcript payload plus optional safe
-author metadata:
+author metadata. `message.kind` is additive and is always `message` or `action`.
+Plain messages use `message`; canonical stored content beginning with `/me ` is
+emitted as `action` and the wire `content` is a plain-text display form beginning
+with `*`. The persisted value itself remains `/me <text>` so existing stores and
+older readers remain valid.
 
 ```json
 {
@@ -81,15 +88,62 @@ author metadata:
       "role": "viewer",
       "badges": [{ "id": "broadcaster", "label": "Broadcaster" }]
     },
+    "kind": "message",
     "content": "hello room",
     "createdAt": "2026-07-09T17:30:00Z"
   }
 }
 ```
 
-`message.user` is additive. Older clients can continue using `message.userId`.
+An action sent and stored as `/me waves hello` is emitted as:
+
+```json
+{
+  "type": "message",
+  "occurredAt": "2026-07-09T17:30:00Z",
+  "message": {
+    "id": "msg_124",
+    "channelId": "channel_123",
+    "userId": "user_123",
+    "user": {
+      "id": "user_123",
+      "displayName": "RiverFan",
+      "role": "viewer"
+    },
+    "kind": "action",
+    "content": "* RiverFan waves hello",
+    "createdAt": "2026-07-09T17:30:00Z"
+  }
+}
+```
+
+Action text is sent as JSON text and rendered by clients as text. Clients must
+not interpret action content as HTML. `message.user` and `message.kind` are
+additive; older clients can continue using `message.userId` and `content`.
 Roles are normalized to one of `owner`, `admin`, `moderator`, `broadcaster`, or
 `viewer` with stable badge IDs for compact rendering.
+
+### Message deletion
+
+A successful persistent transcript delete broadcasts `message_delete` only
+after the system of record has accepted the deletion:
+
+```json
+{
+  "type": "message_delete",
+  "occurredAt": "2026-07-09T17:35:00Z",
+  "messageDelete": {
+    "channelId": "channel_123",
+    "messageId": "msg_123",
+    "deletedAt": "2026-07-09T17:35:00Z"
+  }
+}
+```
+
+`actorId` may be present when the initiating transport supplies it. Clients
+remove the matching row idempotently; receiving the same deletion more than
+once is harmless. A missing message, wrong-channel message, or failed storage
+delete does not emit this event.
 
 ### Presence
 
