@@ -10,6 +10,9 @@ const (
 	// EventTypeMessage represents a chat message authored by a viewer or
 	// moderator.
 	EventTypeMessage EventType = "message"
+	// EventTypeMessageDelete represents a persisted transcript deletion. It is
+	// emitted only after the system of record accepts the delete.
+	EventTypeMessageDelete EventType = "message_delete"
 	// EventTypeModeration represents a moderation action such as a timeout
 	// or ban.
 	EventTypeModeration EventType = "moderation"
@@ -28,6 +31,16 @@ const (
 	EventTypePresenceLeave EventType = "presence_leave"
 	// EventTypeSystem represents a room-scoped system notice.
 	EventTypeSystem EventType = "system"
+)
+
+// MessageKind describes the semantic presentation of a persisted chat message.
+type MessageKind string
+
+const (
+	// MessageKindMessage is the default plain chat message.
+	MessageKindMessage MessageKind = "message"
+	// MessageKindAction is a /me-style action message.
+	MessageKindAction MessageKind = "action"
 )
 
 // ModerationAction captures the different moderation operations available to
@@ -49,14 +62,15 @@ const (
 // Event is the wire representation used for chat gateway fan-out and, for
 // persistent event types, the queue.
 type Event struct {
-	Type       EventType        `json:"type"`
-	Message    *MessageEvent    `json:"message,omitempty"`
-	Moderation *ModerationEvent `json:"moderation,omitempty"`
-	Report     *ReportEvent     `json:"report,omitempty"`
-	AutoMod    *AutoModEvent    `json:"automod,omitempty"`
-	Presence   *PresenceEvent   `json:"presence,omitempty"`
-	System     *SystemEvent     `json:"system,omitempty"`
-	OccurredAt time.Time        `json:"occurredAt"`
+	Type          EventType           `json:"type"`
+	Message       *MessageEvent       `json:"message,omitempty"`
+	MessageDelete *MessageDeleteEvent `json:"messageDelete,omitempty"`
+	Moderation    *ModerationEvent    `json:"moderation,omitempty"`
+	Report        *ReportEvent        `json:"report,omitempty"`
+	AutoMod       *AutoModEvent       `json:"automod,omitempty"`
+	Presence      *PresenceEvent      `json:"presence,omitempty"`
+	System        *SystemEvent        `json:"system,omitempty"`
+	OccurredAt    time.Time           `json:"occurredAt"`
 }
 
 // channelID returns the room identifier used to route a live event.
@@ -64,6 +78,8 @@ func (e Event) channelID() string {
 	switch {
 	case e.Message != nil:
 		return e.Message.ChannelID
+	case e.MessageDelete != nil:
+		return e.MessageDelete.ChannelID
 	case e.Moderation != nil:
 		return e.Moderation.ChannelID
 	case e.Report != nil:
@@ -101,6 +117,16 @@ type MessageEvent struct {
 	User      *UserMetadata `json:"user,omitempty"`
 	Content   string        `json:"content"`
 	CreatedAt time.Time     `json:"createdAt"`
+}
+
+// MessageDeleteEvent announces removal of one persisted transcript row. ActorID
+// is optional because legacy HTTP deletion already authorizes at the transport
+// boundary before the persistence call reaches the realtime adapter.
+type MessageDeleteEvent struct {
+	ChannelID string    `json:"channelId"`
+	MessageID string    `json:"messageId"`
+	ActorID   string    `json:"actorId,omitempty"`
+	DeletedAt time.Time `json:"deletedAt"`
 }
 
 // PresenceEvent carries live room roster state. It is intentionally ephemeral
