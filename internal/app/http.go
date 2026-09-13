@@ -45,7 +45,8 @@ type HandlerConfig struct {
 
 // NewHandler composes API transport with services and infrastructure adapters.
 func NewHandler(cfg HandlerConfig) *api.Handler {
-	handler := api.NewHandler(api.Dependencies{Sessions: cfg.Sessions, MFAChallenges: cfg.MFAChallenges, AuthUsersService: cfg.AuthUsersService, ChannelsService: cfg.ChannelsService, UploadsService: cfg.UploadsService, RecordingsService: cfg.RecordingsService, ChatModerationService: cfg.ChatModerationService, LegalService: cfg.LegalService, StreamsService: cfg.StreamsService, ProfilesService: cfg.ProfilesService, AnalyticsService: cfg.AnalyticsService, SystemService: cfg.SystemService, MonetizationService: cfg.MonetizationService, PaymentService: cfg.PaymentService})
+	chatModerationService := newChatMessageActionAdapter(cfg.ChatModerationService, cfg.ChatGateway)
+	handler := api.NewHandler(api.Dependencies{Sessions: cfg.Sessions, MFAChallenges: cfg.MFAChallenges, AuthUsersService: cfg.AuthUsersService, ChannelsService: cfg.ChannelsService, UploadsService: cfg.UploadsService, RecordingsService: cfg.RecordingsService, ChatModerationService: chatModerationService, LegalService: cfg.LegalService, StreamsService: cfg.StreamsService, ProfilesService: cfg.ProfilesService, AnalyticsService: cfg.AnalyticsService, SystemService: cfg.SystemService, MonetizationService: cfg.MonetizationService, PaymentService: cfg.PaymentService})
 	handler.AllowSelfSignup = cfg.AllowSelfSignup
 	handler.ChatGateway = cfg.ChatGateway
 	handler.Setup = cfg.Setup
