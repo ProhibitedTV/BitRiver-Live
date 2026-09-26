@@ -1,5 +1,108 @@
 # TASKS
 
+## Scoped change: finish browser compatibility PR #1420 (2026-09-25)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose the protected CI and review findings
+  - Acceptance criteria:
+    - Identify the failed test contract and both open review threads before edits.
+    - Update PLAN with scope, risks, and proof sequence first.
+  - Check:
+    - Viewer CI run `34722796293` failed two Player tests because the default
+      jsdom HLS mock advertises no support after the new impossible-playback
+      fallback correctly removes the video element. Its remaining 216 Jest
+      tests and four snapshots passed; Ubuntu, cross-platform Go/quickstart,
+      arm64, and image-scan checks passed.
+    - Review also found the compatibility spec accepted `unsupported` for every
+      project, so a supported engine could lose source attachment unnoticed.
+      PLAN records the bounded correction and full qualification requirements.
+
+- [x] Task 2 - Repair Player unit coverage for capability states
+  - Acceptance criteria:
+    - Recovered-source and delayed-error tests model an HLS-capable browser.
+    - Unsupported HLS plus absent native HLS visibly reaches unavailable.
+  - Check:
+    - The recovery and delayed-error tests now advertise hls.js support while
+      the new unsupported-capability test requires a visible unavailable state
+      with no native HLS path. Focused Jest passed all 10 Player tests.
+
+- [x] Task 3 - Enforce playback attachment in supported projects
+  - Acceptance criteria:
+    - Chromium/Android require attached HLS; WebKit/iPhone require attachment
+      except on the Windows Playwright build that lacks native HLS and MSE.
+    - Firefox and that Windows WebKit build may report explicit unsupported
+      only under their documented capability boundaries; no project accepts
+      indefinite loading.
+  - Check:
+    - The five-project Windows matrix passed: 27 tests passed, three
+      non-mobile touch checks skipped. Windows WebKit's fallback is checked
+      against absent native HLS and MediaSource; supported Chromium/Android
+      still require source attachment. WebKit recovery passed three repeated
+      runs after removing a fixture race with auth refresh.
+
+- [-] Task 4 - Run release gates and merge
+  - Acceptance criteria:
+    - Literal verifier, protected viewer CI and aggregate merge gate pass on
+      the final head; review conversations are resolved before squash merge.
+    - #1307 retains the remaining real-media and physical-device evidence.
+  - Check:
+    - Clean `npm ci` and the five-project Playwright matrix passed locally
+      (27 passed, three intentional skips); the targeted WebKit recovery
+      check also passed three repeated runs.
+    - `./scripts/verify.sh` passed Go, repository/doc/contract checks,
+      Postgres migration lifecycle, Docker Compose config, full quickstart
+      smoke, viewer lint, and all 219 Jest tests/four snapshots. The primary
+      `.env` and generated OME hashes were unchanged and the temporary
+      worktree env fixture was removed.
+    - Protected CI, review resolution, and squash merge remain pending.
+
+## Scoped change: viewer compatibility matrix (#1307)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Reconcile current viewer test coverage and support claims
+  - Acceptance criteria:
+    - Current Playwright config, browser installation, standalone-server boundary, mobile/layout tests, channel/chat/playback tests, accessibility tests, and #1307 acceptance are inspected before implementation.
+    - PLAN records the full-Chromium versus cross-engine critical-matrix split and honest real-media/device non-claims.
+  - Check:
+    - Current viewer CI installs Playwright browsers and runs the integration suite against the production standalone server boundary.
+    - Existing tests cover channel playback/chat recovery, creator flows, accessibility, mobile navigation, multiple narrow widths, and horizontal overflow; the matrix reuses those product contracts rather than inventing parallel paths.
+
+- [x] Task 2 - Define browser/device projects and critical suite
+  - Acceptance criteria:
+    - Chromium, Firefox, WebKit, Android/Chrome emulation, and iPhone/WebKit emulation are named projects with explicit stable configuration.
+    - Current full integration remains covered on Chromium while a focused compatibility set runs on every declared project.
+    - No blanket retry policy or test-only product bypass is introduced.
+  - Check:
+    - `playwright.config.ts` now preserves `chromium-regression` and adds focused `chromium-compat`, `firefox-compat`, `webkit-compat`, `android-chrome-compat`, and `iphone-webkit-compat` projects with `retries: 0`.
+    - The focused suite covers HLS capability/fallback state, chat read/send/auth fallback, transient playback recovery, signed-out auth/navigation + axe, creator live setup, touch navigation, and horizontal overflow.
+    - Firefox qualification exposed a real unsupported-HLS loading hang; the viewer now moves to the explicit Stream unavailable state when neither hls.js/MSE nor native HLS is usable instead of weakening the test.
+
+- [x] Task 3 - Publish support matrix and compatibility boundaries
+  - Acceptance criteria:
+    - Viewer/operator/testing docs identify supported engine/device classes, browser-version policy, protocol/media caveats, CI-emulation limits, and real-media follow-up.
+    - Unsupported/unproved combinations are explicit rather than silently presented as supported.
+  - Check:
+    - `docs/viewer-compatibility.md` publishes the release-blocking matrix and explicitly separates Playwright engine/device evidence from shipping Safari/device certification and real-media protocol qualification.
+    - Firefox HLS is capability-gated honestly; WebRTC, audible autoplay, fullscreen/PiP, quality selection, soft-keyboard behavior, and physical-device claims remain bounded to evidence actually produced.
+
+- [-] Task 4 - Qualify locally and through protected CI
+  - Acceptance criteria:
+    - Clean install/audit/lint/Jest/build, cross-engine critical projects, full Chromium suite, focused static contracts, and literal viewer verification pass.
+    - Protected viewer CI and Merge gate pass on the exact reviewed head with review findings resolved.
+  - Check:
+    - Split qualification run `34721882296` passed all six Playwright projects on the fixed code: full Chromium regression plus Chromium, Firefox, desktop WebKit, Android/Chrome, and iPhone/WebKit compatibility projects.
+    - Protected pull-request CI, the normal Viewer CI integration/build/audit gate, review, and aggregate Merge gate remain required on the cleaned exact head.
+
+- [ ] Task 5 - Record bounded #1307 evidence
+  - Acceptance criteria:
+    - Repository-side browser/device matrix evidence is attached to #1307.
+    - #1307 closes only if all issue acceptance, including required real-media engine-class evidence, is genuinely met; otherwise remaining external/device proof stays explicit.
+  - Check:
+    - Pending protected PR evidence and final issue disposition. The repository matrix deliberately does not convert mocked Playwright media routes into per-engine real-media or physical-device claims.
+
+
 ## Scoped change: scheduled off-host backup freshness qualification (#1299)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
