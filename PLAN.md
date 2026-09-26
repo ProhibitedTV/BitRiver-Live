@@ -1,5 +1,20 @@
 # PLAN
 
+## Current scope - finish browser matrix review and CI (#1420) (2026-09-25)
+
+- Resolve the two open review findings on the existing #1307 browser matrix PR.
+  Keep supported Chromium/WebKit/mobile projects accountable for HLS source
+  attachment; allow Firefox's documented capability-gated unavailable result.
+- Update the existing Player unit tests to model an HLS-capable browser for
+  source recovery and delayed media errors. Add a separate unsupported-capability
+  assertion so the Firefox fallback remains covered rather than hidden by the
+  mock change.
+- Preserve the declared support and deployment boundaries. Qualify focused
+  Jest and browser behavior first, then run strict lint, production build,
+  the six Playwright projects, literal `./scripts/verify.sh`, protected CI,
+  review-thread resolution, and squash merge. Keep #1307 open for its remaining
+  real-media engine and physical-device acceptance evidence.
+
 ## Current scope - viewer compatibility matrix (#1307) (2026-09-12)
 
 - Turn the existing single-project Playwright suite into an explicit browser/device qualification contract for the supported viewer without changing product behavior merely to make tests pass.

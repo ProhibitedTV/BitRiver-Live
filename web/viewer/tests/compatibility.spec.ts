@@ -58,7 +58,7 @@ async function mockChannelApis(page: Page) {
 }
 
 test.describe("release-critical viewer compatibility", () => {
-  test("handles HLS capability, reads chat, and sends a message", async ({ page }) => {
+  test("handles HLS capability, reads chat, and sends a message", async ({ page }, testInfo) => {
     const sentMessages: string[] = [];
     await mockChannelApis(page);
 
@@ -85,18 +85,33 @@ test.describe("release-critical viewer compatibility", () => {
 
     const video = page.locator("video");
     await expect(video).toBeVisible();
-    await expect
-      .poll(async () =>
-        page.evaluate((expectedUrl) => {
-          const element = document.querySelector("video");
-          const source = element?.currentSrc ?? "";
-          if (source.startsWith("blob:") || source === expectedUrl) {
-            return "attached";
-          }
-          return document.body.textContent?.includes("Stream unavailable") ? "unsupported" : "pending";
-        }, playbackResponse.playback?.playbackUrl)
-      )
-      .not.toBe("pending");
+    const readAttachment = async () =>
+      page.evaluate((expectedUrl) => {
+        const element = document.querySelector("video");
+        const source = element?.currentSrc ?? "";
+        if (source.startsWith("blob:") || source === expectedUrl) {
+          return "attached";
+        }
+        return document.body.textContent?.includes("Stream unavailable") ? "unsupported" : "pending";
+      }, playbackResponse.playback?.playbackUrl);
+    const attachment = expect.poll(readAttachment);
+    const windowsWebKit = process.platform === "win32" && testInfo.project.name.includes("webkit");
+    if (testInfo.project.name === "firefox-compat" || windowsWebKit) {
+      await attachment.toMatch(/^(attached|unsupported)$/);
+      if ((await readAttachment()) === "unsupported") {
+        const capabilities = await page.evaluate(() => ({
+          nativeHls: Boolean(document.createElement("video").canPlayType("application/vnd.apple.mpegurl")),
+          mediaSource: Boolean(window.MediaSource)
+        }));
+        expect(capabilities.nativeHls).toBe(false);
+        if (windowsWebKit) {
+          // Playwright's Windows WebKit build has no MediaSource or native HLS codec path.
+          expect(capabilities.mediaSource).toBe(false);
+        }
+      }
+    } else {
+      await attachment.toBe("attached");
+    }
 
     const chatLog = page.getByRole("log");
     await expect(chatLog).toContainText("Welcome aboard the orbital maintenance stream!");
@@ -157,11 +172,14 @@ test.describe("release-critical viewer compatibility", () => {
 
     const alert = page.getByTestId("channel-load-error");
     await expect(alert).toBeVisible();
+    await alert.getByRole("button", { name: "Try again" }).click();
+    await expect.poll(() => playbackAttempts).toBeGreaterThan(1);
+    await expect(alert).toBeVisible();
     recover = true;
     await alert.getByRole("button", { name: "Try again" }).click();
 
     await expect(page.locator("video")).toBeVisible();
-    await expect.poll(() => playbackAttempts).toBeGreaterThan(1);
+    await expect.poll(() => playbackAttempts).toBeGreaterThan(2);
   });
 
   test("keeps signed-out navigation, auth, and accessibility functional", async ({ page }) => {

@@ -135,6 +135,7 @@ describe("Player", () => {
   });
 
   test("renders playback when a recovered source replaces an unavailable one", async () => {
+    mockHlsConstructor.supported = true;
     const { container, rerender } = render(
       <Player
         channelId="chan-1"
@@ -168,6 +169,30 @@ describe("Player", () => {
     expect(screen.queryByRole("heading", { name: "Stream unavailable" })).not.toBeInTheDocument();
   });
 
+  test("shows unavailable when neither hls.js nor native HLS can play the source", async () => {
+    const nativeCapability = jest.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("");
+
+    try {
+      render(
+        <Player
+          channelId="chan-1"
+          playback={{
+            sessionId: "session-1",
+            startedAt: new Date().toISOString(),
+            protocol: "hls",
+            playbackUrl: "https://example.test/live.m3u8"
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: "Stream unavailable" })).toBeInTheDocument();
+      });
+    } finally {
+      nativeCapability.mockRestore();
+    }
+  });
+
   test("prefers hls.js over an unreliable native HLS capability signal", async () => {
     mockHlsConstructor.supported = true;
     const nativeCapability = jest.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
@@ -197,6 +222,7 @@ describe("Player", () => {
   });
 
   test("delays stream unavailable to allow reconnect attempts", async () => {
+    mockHlsConstructor.supported = true;
     jest.useFakeTimers();
     const { container } = render(
       <Player

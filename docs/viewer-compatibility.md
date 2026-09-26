@@ -10,9 +10,9 @@ The viewer CI runs the complete existing regression suite on desktop Chromium an
 | --- | --- | --- | --- |
 | Chromium desktop | `chromium-regression` + `chromium-compat` | Supported | Full viewer regression plus the release-critical compatibility flow. |
 | Firefox desktop | `firefox-compat` | Supported viewer shell; HLS capability-gated | The bundled Linux Firefox used by Playwright may expose neither an hls.js-usable MSE codec path nor native HLS. CI requires a visible playback-unavailable fallback in that case while chat, auth, accessibility, creator setup, and recovery remain functional. Shipping Firefox playback still depends on the browser/OS media capabilities described below. |
-| WebKit desktop | `webkit-compat` | Supported WebKit engine class | Playwright WebKit is a Safari-equivalent engine check, **not evidence of testing a particular shipping Safari build on Apple hardware**. |
+| WebKit desktop | `webkit-compat` | Supported WebKit engine class; Windows playback capability-gated | Playwright's Windows WebKit build exposes neither MediaSource nor native HLS and must show the unavailable fallback. Other CI hosts require attachment. Playwright WebKit is a Safari-equivalent engine check, **not evidence of testing a particular shipping Safari build** on Apple hardware. |
 | Android/Chrome mobile | `android-chrome-compat` | Supported emulated mobile class | Playwright Pixel 7 profile with touch/mobile behavior. This is browser/device emulation, not a physical Android-device certification. |
-| iPhone/WebKit mobile | `iphone-webkit-compat` | Supported emulated mobile class | Playwright iPhone 15/WebKit profile with touch/mobile behavior. This is not physical iPhone/Safari certification. |
+| iPhone/WebKit mobile | `iphone-webkit-compat` | Supported emulated mobile class; Windows playback capability-gated | Playwright iPhone 15/WebKit profile with touch/mobile behavior. The Windows WebKit media limitation also applies here; this is not physical iPhone/Safari certification. |
 
 The release-critical suite covers:
 
@@ -31,7 +31,7 @@ The release-critical suite covers:
 
 HLS is the broad compatibility path. The viewer uses `hls.js` when Media Source Extensions are available. When `hls.js` is unavailable but the browser advertises native `application/vnd.apple.mpegurl` playback, the viewer assigns the manifest directly to the `<video>` element. The API may label the same broader-compatibility path as `ll-hls` with low-latency hints.
 
-The compatibility suite proves that the viewer initializes the HLS path when the tested engine exposes a usable hls.js or native-HLS capability; otherwise it must leave loading and render an explicit unavailable state. It also covers transient playback API recovery across each declared engine class. It does **not** replace the release candidate's real-media golden path, which is responsible for proving playlist advancement and decoded media through the actual SRS/transcoder/OvenMediaEngine stack.
+The compatibility suite requires source attachment on Chromium and Android Chrome, and on WebKit outside the Windows Playwright media limitation. Firefox and Windows WebKit may use the explicit unavailable state only when the browser lacks the required media capability. The suite also covers transient playback API recovery across each declared engine class. It does **not** replace the release candidate's real-media golden path, which is responsible for proving playlist advancement and decoded media through the actual SRS/transcoder/OvenMediaEngine stack.
 
 ### WebRTC
 
