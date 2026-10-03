@@ -75,12 +75,22 @@ Dependabot checks GitHub Actions, Go modules, and viewer npm dependencies weekly
 
 Go exceptions live in `scripts/govulncheck-baseline.json`; the scanner rejects incomplete or expired entries. npm remains fail-closed and has no exception file. If an npm high finding must be accepted, maintainers must first add an equivalently validated, package-and-advisory-specific policy mechanism in the same reviewed security PR. Never use `continue-on-error`, lower the audit threshold, or run `npm audit fix --force` to bypass the gate.
 
-## Current below-threshold disposition
+## Current security mitigations
 
-As of 2026-09-04, the viewer uses Next.js 16.3.3. Browserslist 4.28.9,
-PostCSS 8.5.28, and Sharp 0.35.3 are explicit fixed overrides. A clean npm audit
-reports zero findings, including at the high/critical blocking threshold. They
-remain release inputs and must be reevaluated whenever Next.js or the viewer
-toolchain updates its transitive pins; do not remove them without a clean install,
-audit, test, and production build. Maintainers own this temporary override set
-and will review it by 2026-09-18 even if no aligned upstream release is available.
+The October 2026 viewer qualification adopts Next.js/ESLint config 16.3.8 and
+brace-expansion 5.0.12 to address newly reported critical/high findings. The
+existing CommonJS adapter remains necessary for legacy minimatch consumers.
+Browserslist 4.28.9, PostCSS 8.5.28, and Sharp 0.35.4 overrides remain release
+inputs; reevaluate their resolved pins whenever the viewer toolchain changes.
+
+The unpatched `braces@3.0.3` nesting advisory GHSA-vfj7-8cjw-p6xm affects the
+ESLint-only `fast-glob -> micromatch` dependency chain. A private MIT-licensed
+fork in `web/viewer/vendor/braces` bounds syntax nesting and validates external
+ASTs before recursive walkers. This is a real code mitigation, not an audit
+exception. Package-name substitution means a clean audit is not independent
+proof of safety: review the source and attack/compatibility tests too.
+
+BitRiver Live maintainers own the fork and will review removal by 2026-10-16.
+See its `UPSTREAM.md` for source provenance, limits, and removal procedure.
+Do not remove dependency overrides without a clean install, audit, tests,
+production build, and Docker qualification. No vulnerability gate is weakened.

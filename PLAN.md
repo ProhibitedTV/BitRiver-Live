@@ -1,5 +1,43 @@
 # PLAN
 
+## Current scope - qualify viewer tooling PR #1429 (2026-10-02)
+
+- Qualification found new blocking advisories in Next.js, brace-expansion,
+  and the ESLint-only braces dependency. Extend this viewer dependency PR to
+  fix these before publication: Next/ESLint 16.3.8, brace-expansion 5.0.12,
+  and a small MIT-licensed local braces 3.0.3 fork with explicit nesting/AST
+  guards. Upstream braces has no patched release; do not waive its advisory
+  or disguise an unpatched npm version.
+- Preserve upstream source/license and provenance in the fork, cap syntax
+  nesting before parser-internal recursion and validate external ASTs before
+  recursive walkers. Test attacks and normal glob behavior, install the fork
+  through a local npm override, and require a clean audit. Review removal when
+  upstream ships a fix. This adds no CI exception or workflow change.
+- Finish the current Dependabot tooling update; #1422 was closed and replaced
+  by #1429. Preserve the unpublished #1422 branch for recovery.
+- CI originally fails four exact package-version assertions, before viewer
+  CI runs. Align Node types, ESLint config, Jest, and jsdom environment pins
+  with tooling updates, plus Next's security patch pin. Keep all other runtime
+  and deployment assertions intact.
+- Risks: changed Jest/ts-jest behavior, TypeScript definitions, ESLint rules,
+  and transitive dependencies can expose real regressions. A passing version
+  guard alone is insufficient evidence.
+- Run the focused Go baseline test, clean npm install/audit, full viewer
+  integration, and required verifier including Docker smoke. Monitor free disk
+  space because the prior build filled C:. Then publish to the existing PR,
+  require protected CI and review resolution, and squash merge.
+- Qualification also exposed stale documentation assertions in the dependency
+  policy test. Refresh its version/review-date expectations with the documented
+  current overrides and fork; preserve all fail-closed exception-policy checks.
+- Windows npm reconciliation pruned optional WASM lock entries required by
+  Alpine npm. Regenerate using the existing Node 24 Alpine builder with a clean
+  dependency directory, then prove clean Windows and Docker installs. Do not
+  hand-invent lock integrity or weaken `npm ci`.
+- #1420 is merged as `5e4d3b8f`. Keep #1307 open for actual media/device proof;
+  the roadmap remains focused on the first stable operator release (#1293).
+  Reconcile the stale #1420 completion ledger with verified GitHub state and
+  post bounded browser/security evidence to the relevant open roadmap issues.
+
 ## Current scope - finish browser matrix review and CI (#1420) (2026-09-25)
 
 - Resolve the two open review findings on the existing #1307 browser matrix PR.

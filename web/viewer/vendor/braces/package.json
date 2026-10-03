@@ -1,0 +1,11 @@
+{
+  "name": "@bitriver/braces",
+  "version": "3.0.3-bitriver.1",
+  "private": true,
+  "description": "Temporary depth-guarded fork of MIT-licensed braces 3.0.3",
+  "license": "MIT",
+  "main": "index.js",
+  "files": ["index.js", "lib", "LICENSE", "UPSTREAM.md"],
+  "engines": { "node": ">=24" },
+  "dependencies": { "fill-range": "^7.1.1" }
+}
