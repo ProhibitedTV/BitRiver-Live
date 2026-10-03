@@ -1,5 +1,56 @@
 # TASKS
 
+## Scoped change: qualify viewer tooling PR #1429 (2026-10-02)
+
+- [x] Task 1 - Refresh the PR and diagnose its gate
+  - #1422 is closed; #1429 replaces it with six tooling bumps. The Ubuntu log
+    identifies four stale version pins in the baseline test. The isolated
+    worktree is clean and the primary checkout's unrelated work is preserved.
+- [x] Task 2 - Align the baseline guard
+  - Acceptance: update only the four stale package pins; focused baseline test
+    passes with the rest of the runtime assertions intact.
+  - Result: `go test ./scripts -run TestViewerRuntimeBaselineIsAligned -count=1`
+    passed with only the four relevant package pins changed.
+- [x] Task 3 - Fix the security blockers found during qualification
+  - Acceptance: adopt patched Next/brace-expansion, retain legacy CommonJS
+    behavior, and guard the unpatched ESLint-only braces dependency with a
+    documented local fork. Attack/compatibility tests and npm audit pass.
+  - Result: the tooling suite passed 219 unit tests and 63 browser tests, but
+    audit found Next critical, brace-expansion high, and unpatched braces high.
+    Upstream registry/advisories and the installed dependency graph were
+    inspected before expanding PLAN. No audit bypass is permitted.
+    Patched Next/ESLint 16.3.8 and brace-expansion 5.0.12; local MIT braces fork
+    rejects deep syntax/ASTs and cycles. Clean `npm ci` and audit passed with
+    zero findings; `npm ls braces` confirms ESLint uses the fork. Focused Jest
+    passed 14 attack/compatibility tests, strict lint and Go baseline passed.
+    npm's first lock-only update left optional entries inconsistent; normal
+    install reconciled them and the subsequent clean install passed.
+- [x] Task 4 - Qualify dependencies and runtime
+  - Acceptance: clean install/audit, full viewer integration, and literal
+    `./scripts/verify.sh` pass, including Compose and Docker smoke.
+  - Result: full integration passed strict lint, 231 Jest tests/four snapshots,
+    Next 16.3.8 build, and 63 Playwright tests (three desktop touch skips).
+    First verifier run stopped on stale dependency-policy doc assertions, not
+    runtime tests. Refresh current pins/review target without weakening policy
+    and rerun. Primary env/OME hashes unchanged; fixture removed. C: had about
+    7.7 GiB free before verification.
+    Second verifier passed Go, policy checks, Postgres migrations, and Compose
+    validation; Alpine viewer `npm ci` rejected missing optional WASM entries.
+    Regenerate the lock in Alpine without Windows node_modules and requalify
+    both platforms. Primary env/OME again unchanged; temporary fixture removed.
+    Final lock clean-installs on Windows and Alpine; both audits zero. Focused
+    attack/compatibility tests passed again. Literal `./scripts/verify.sh`
+    passed all requested gates: Go, docs/contract, Postgres migrations, Compose,
+    built images, healthy services, API/viewer endpoints, lint, 231 Jest tests.
+    Linux installer lifecycle and production digest enforcement are explicitly
+    not local proof (Windows/build mode). Primary env/OME unchanged; fixture gone.
+- [-] Task 5 - Publish and squash merge
+  - Acceptance: release scorecard is current, protected checks pass on the
+    published head, review threads are clear, and GitHub confirms the merge.
+  - Result: local qualification complete; publish reviewed paths to #1429,
+    require exact-head protected CI/review, and record bounded #1306/#1307
+    evidence. #1295 is already closed; this is ongoing dependency maintenance.
+
 ## Scoped change: finish browser compatibility PR #1420 (2026-09-25)
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -41,7 +92,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       still require source attachment. WebKit recovery passed three repeated
       runs after removing a fixture race with auth refresh.
 
-- [-] Task 4 - Run release gates and merge
+- [x] Task 4 - Run release gates and merge
   - Acceptance criteria:
     - Literal verifier, protected viewer CI and aggregate merge gate pass on
       the final head; review conversations are resolved before squash merge.
@@ -55,7 +106,9 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
       smoke, viewer lint, and all 219 Jest tests/four snapshots. The primary
       `.env` and generated OME hashes were unchanged and the temporary
       worktree env fixture was removed.
-    - Protected CI, review resolution, and squash merge remain pending.
+    - Protected CI and review resolution completed; GitHub confirms squash
+      merge on 2026-09-26 as `5e4d3b8f073e9b62b405ea5620b4b18709a034c3`.
+      #1307 remains open for real-media and physical-device proof.
 
 ## Scoped change: viewer compatibility matrix (#1307)
 

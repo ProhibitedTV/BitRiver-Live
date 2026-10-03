@@ -95,8 +95,11 @@ func TestDependencyExceptionPolicyIsTimeBounded(t *testing.T) {
 		"Never use `continue-on-error`",
 		"Browserslist 4.28.9",
 		"PostCSS 8.5.28",
-		"Sharp 0.35.3",
-		"review it by 2026-09-18",
+		"Sharp 0.35.4",
+		"review removal by 2026-10-16",
+		"GHSA-vfj7-8cjw-p6xm",
+		"not independent",
+		"No vulnerability gate is weakened",
 	} {
 		if !strings.Contains(policy, required) {
 			t.Errorf("dependency policy missing %q", required)
