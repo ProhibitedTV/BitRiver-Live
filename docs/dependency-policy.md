@@ -58,10 +58,18 @@ Use this read-only check locally or in CI to ensure `go.sum` was not cleared:
 
 - Go: minimum 1.26.0; CI and builder images pin 1.26.5 through `.go-version`. Patch releases are adopted promptly, and a new Go major is evaluated before the current line leaves the official two-release support window.
 - Node.js: 24 LTS only for the viewer. `.nvmrc`, CI, release jobs, and the viewer image must agree on major 24.
-- Next.js: 16.x Active LTS with React 19.2.x. Security and patch updates are reviewed within seven days; major upgrades require the full viewer build and Playwright gates.
+- Next.js: 16.x Active LTS with React 19.3.x. Security and patch updates are reviewed within seven days; major upgrades require the full viewer build and Playwright gates.
 - Lockfiles and checksums are release inputs. Dependency PRs must include the resolved diff, audit result, and applicable runtime tests.
 
 Dependabot checks GitHub Actions, Go modules, and viewer npm dependencies weekly. Minor and patch updates are grouped by runtime area; major updates remain isolated for explicit migration review.
+
+Viewer lock updates must retain optional WebAssembly dependency entries used by
+Sharp and the native resolver fallback, even when they are not installed on the
+maintainer's host. Windows npm can accept a graph that Alpine's newer npm rejects
+as incomplete. If that happens, regenerate the lock with the existing Node 24
+Alpine builder and an empty dependency directory, then prove clean installs on
+both Windows and Alpine. The structural WASM lock test catches missing entries;
+it does not replace `npm ci`, version resolution, audit, or image qualification.
 
 ## Vulnerability gates and exceptions
 

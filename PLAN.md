@@ -1,5 +1,30 @@
 # PLAN
 
+## Current scope - qualify viewer runtime PR #1430 (2026-10-03)
+
+- #1429 merged as `4aa9980d`; #1423 is superseded/closed. Dependabot replaced
+  #1424 with #1430 after the merge. Use this fresh branch, not the deleted one.
+- The new update retains Next/ESLint 16.3.8, brace-expansion 5.0.12, and the
+  guarded braces fork. It changes HLS 1.7.2 to 1.7.3 and React/React DOM plus
+  their types to 19.3.0. Align baseline assertions and supported-line docs only.
+- Upstream HLS patch notes include live playlist reload recursion and selection
+  fixes: https://github.com/video-dev/hls.js/releases/tag/v1.7.3. React 19.3
+  includes renderer changes: https://github.com/react/react/releases/tag/v19.3.0.
+  Do not adopt new APIs or redesign the viewer as part of qualification.
+- Risks: media loader regressions, React rendering/hydration/async changes,
+  updated types, and cross-platform optional lock entries. Existing mocked
+  media routes cannot establish real decoder/device compatibility.
+- Run focused Go baseline, clean install/audit, complete viewer integration,
+  Alpine image build and literal verifier. Monitor disk; do not prune shared
+  Docker data. Publish to #1430 only after local gates pass; require protected
+  exact-head CI, clear review threads, and squash merge. Record bounded roadmap
+  evidence and completed #1429 ledger without closing broader release issues.
+- The refreshed bot lock again omits optional WASM dependencies required by
+  Alpine/npm 11.16 while Windows/npm 11.6.2 accepts it. Add a structural lock
+  regression test for the current Sharp/NAPI WASM consumers, demonstrate the
+  missing entries, then regenerate in clean Alpine. Document cross-platform
+  qualification; `npm ci` remains the version/platform validity authority.
+
 ## Current scope - qualify viewer tooling PR #1429 (2026-10-02)
 
 - Qualification found new blocking advisories in Next.js, brace-expansion,
