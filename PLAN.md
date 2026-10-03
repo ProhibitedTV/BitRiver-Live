@@ -1,5 +1,27 @@
 # PLAN
 
+## Current scope - qualify Docker action updates #1425-#1427 (2026-10-03)
+
+- User explicitly approved qualification and merge of these CI updates. Combine
+  the three pin-only changes into #1426, based on current main after #1430.
+  Close #1425/#1427 as superseded only after the combined change merges.
+- Official upstream tags resolve to QEMU 4.4.0 `99012661954931238ded8c8b007157a8430204e1`,
+  Buildx 4.4.1 `f87e5991a6d7451dcb8d9637bfbc97413f497069`, and build-push
+  7.4.0 `c3c9e263c25d99ce0380d002d59b67737d91b0dc`. Upstream action.yml
+  comparison shows no input/output interface changes. Build-push includes
+  workflow-command injection protection in metadata logging.
+- Preserve workflow triggers, permissions, inputs, signing, and immutable
+  promotion. No deployment contract, gate weakening, registry publication,
+  release/tag creation, or production promotion belongs in this change.
+- Risks: Buildx cloud/pre-pull behavior and shared toolkit changes. Add a
+  cross-workflow immutable pin guard; run existing release/promotion/CI contract
+  tests and literal verifier, then exact-head protected CI and review checks.
+- PR image jobs exercise Buildx directly. QEMU/build-push remain release-only:
+  source/pin/interface review and contract tests do not prove a new candidate
+  publication. Keep that acceptance boundary explicit in docs and roadmap.
+- #1430 merged as `e0cda8d9`, protected run `37104440225` passed. Preserve
+  unrelated primary-checkout edits and use the existing isolated worktree.
+
 ## Current scope - qualify viewer runtime PR #1430 (2026-10-03)
 
 - #1429 merged as `4aa9980d`; #1423 is superseded/closed. Dependabot replaced

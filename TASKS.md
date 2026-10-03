@@ -1,5 +1,30 @@
 # TASKS
 
+## Scoped change: qualify Docker action updates #1425-#1427 (2026-10-03)
+
+- [x] Task 1 - Assess upstream changes and authorization
+  - Result: explicit user approval received; official commit tags and unchanged
+    action input/output interfaces verified. All 11 uses identified across
+    release, image-scan, and stable-promotion. No deployment or publication.
+- [x] Task 2 - Update pins, regression guard, and qualification docs
+  - Acceptance: all uses match reviewed immutable commits, focused CI/release/
+    promotion tests pass, and docs distinguish PR from release execution.
+  - Result: all 11 uses updated; workflow diff contains only action commits and
+    version comments. New guard scans workflows for mutable/inconsistent pins
+    and required action locations. Focused Go CI/release/promotion/pin tests
+    passed. Testing docs explicitly retain release execution boundaries.
+- [x] Task 3 - Run required local verification
+  - Acceptance: literal `./scripts/verify.sh` passes, including Docker smoke;
+    primary env/generated OME remain unchanged and fixture is removed.
+  - Result: literal verifier passed Go, CI/release/doc/contract checks, real
+    Postgres migrations, Compose rendering/builds, healthy dependencies and
+    API/viewer smoke. Viewer lint/tests correctly skipped for unchanged viewer;
+    #1430 separately qualified them. Windows Linux-installer and build-mode
+    digest skips explicit. Primary env/OME unchanged; fixture removed.
+- [-] Task 4 - Publish, qualify, squash merge, and reconcile roadmap
+  - Acceptance: exact-head protected CI and clear review threads; confirmed
+    #1426 merge before closing superseded #1425/#1427; bounded evidence posted.
+
 ## Scoped change: qualify viewer runtime PR #1430 (2026-10-03)
 
 - [x] Task 1 - Assess refreshed runtime update
@@ -28,10 +53,12 @@
     migrations, Compose, Alpine image builds, healthy stack/API/viewer, lint,
     and 231 Jest tests. Primary env/OME unchanged; fixture removed. Linux host
     installer and production digest enforcement are not claimed by local smoke.
-- [-] Task 4 - Publish, review, and squash merge
+- [x] Task 4 - Publish, review, and squash merge
   - Acceptance: current scorecard, exact-head protected CI, clear reviews,
     confirmed merge, and bounded roadmap checkpoint.
-  - Result: pending.
+  - Result: protected run `37104440225` passed on `653049ce`, no review threads,
+    clean merge state, and required Merge gate passed. Squash merged as
+    `e0cda8d9`; real-media/device acceptance remains open on #1307.
 
 ## Scoped change: qualify viewer tooling PR #1429 (2026-10-02)
 
