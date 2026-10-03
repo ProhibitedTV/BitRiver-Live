@@ -57,6 +57,20 @@ stable rebuild, draft publication, and conflicting-state refusal. These are
 contract fixtures; a new candidate run, live environment readback, and a
 negative manual dispatch remain required rollout evidence.
 
+For Docker action updates, compare the official commit tags, release notes,
+and action input/output interfaces before changing immutable pins. Run:
+
+```bash
+go test ./scripts -run 'TestDockerActionPins|TestReleaseWorkflow|TestStablePromotionWorkflow|TestCI' -count=1
+```
+
+The pin guard checks immutability and consistency across candidate, scan, and
+promotion workflows; it does not authenticate upstream commits or execute the
+actions. PR image jobs exercise Buildx, while QEMU and build-push execute only
+in the candidate release workflow. Passing PR checks must not be described as
+successful candidate publication or stable promotion. Do not create a release
+tag merely to qualify a dependency update without release authorization.
+
 ## Test taxonomy and single entrypoints
 
 Use these category entrypoints from the repository root:
