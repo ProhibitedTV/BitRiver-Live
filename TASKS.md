@@ -1,5 +1,38 @@
 # TASKS
 
+## Scoped change: qualify viewer runtime PR #1430 (2026-10-03)
+
+- [x] Task 1 - Assess refreshed runtime update
+  - #1424 was replaced by #1430 after #1429 merged. The new diff retains all
+    security fixes and changes HLS/React/types only. Upstream notes reviewed;
+    exact-version guard and supported React docs need alignment. Primary dirty
+    checkout remains untouched; isolated worktree reused.
+- [x] Task 2 - Align runtime guard and supported-line docs
+  - Acceptance: HLS/React/type assertions match resolved packages, documentation
+    names the qualified React line, and focused Go baseline passes. No product
+    API, deployment contract, CI gate, or feature change.
+  - Result: HLS 1.7.3, React/DOM 19.3.0 and both React types aligned; supported
+    React line documented. Focused Go baseline passed; all other assertions
+    retained. New React types assertion strengthens runtime/type alignment.
+- [x] Task 3 - Qualify updated runtime
+  - Acceptance: clean install/audit, complete viewer integration, Alpine build,
+    and literal `./scripts/verify.sh` pass; preserve media/device proof limits.
+  - Result: original CI `37103616467` failed baseline pins and Alpine/arm64
+    clean install due to missing optional WASM entries. Windows accepted the
+    incomplete graph. New structural lock regression failed on those exact
+    omissions before regeneration and passes after clean Alpine resolution;
+    focused runtime baseline also passes. Full qualification remains.
+    Final Windows/Alpine installs and audits passed with zero findings. Full
+    integration passed lint, 231 tests/four snapshots, build, 63 browser tests
+    (three desktop touch skips). Literal verifier passed Go, docs/contract,
+    migrations, Compose, Alpine image builds, healthy stack/API/viewer, lint,
+    and 231 Jest tests. Primary env/OME unchanged; fixture removed. Linux host
+    installer and production digest enforcement are not claimed by local smoke.
+- [-] Task 4 - Publish, review, and squash merge
+  - Acceptance: current scorecard, exact-head protected CI, clear reviews,
+    confirmed merge, and bounded roadmap checkpoint.
+  - Result: pending.
+
 ## Scoped change: qualify viewer tooling PR #1429 (2026-10-02)
 
 - [x] Task 1 - Refresh the PR and diagnose its gate
@@ -44,12 +77,15 @@
     built images, healthy services, API/viewer endpoints, lint, 231 Jest tests.
     Linux installer lifecycle and production digest enforcement are explicitly
     not local proof (Windows/build mode). Primary env/OME unchanged; fixture gone.
-- [-] Task 5 - Publish and squash merge
+- [x] Task 5 - Publish and squash merge
   - Acceptance: release scorecard is current, protected checks pass on the
     published head, review threads are clear, and GitHub confirms the merge.
-  - Result: local qualification complete; publish reviewed paths to #1429,
-    require exact-head protected CI/review, and record bounded #1306/#1307
-    evidence. #1295 is already closed; this is ongoing dependency maintenance.
+  - Result: protected run `37102892185` passed on `e4d67d10`, including all
+    platform/viewer/image gates. No unresolved reviews; #1429 squash-merged as
+    `4aa9980da62b5f3262297ac54e54b917e758cb46`. #1423 closed as superseded.
+    Bounded evidence posted to #1306 and #1307; both remain open. #1295 was
+    already closed. Removed only this run's regeneratable 206 MB Go cache;
+    shared Docker data untouched. Transient C: pressure recovered to ~6.9 GiB.
 
 ## Scoped change: finish browser compatibility PR #1420 (2026-09-25)
 

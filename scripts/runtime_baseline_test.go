@@ -1,11 +1,46 @@
 package scripts_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestViewerLockRetainsOptionalWASMDependencies(t *testing.T) {
+	repoRoot := filepath.Dir(mustGetwd(t))
+	var lock struct {
+		Packages map[string]struct {
+			Dependencies     map[string]string `json:"dependencies"`
+			PeerDependencies map[string]string `json:"peerDependencies"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal([]byte(readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "package-lock.json"))), &lock); err != nil {
+		t.Fatalf("decode viewer lock: %v", err)
+	}
+	// Windows lock updates can prune these transitive entries even though Alpine
+	// npm ci needs them. This is a structural guard, not a semver/install oracle.
+	for _, source := range []string{
+		"node_modules/@img/sharp-wasm32",
+		"node_modules/@napi-rs/wasm-runtime",
+	} {
+		pkg, exists := lock.Packages[source]
+		if !exists {
+			t.Errorf("viewer lock missing optional WASM consumer %s", source)
+			continue
+		}
+		for _, dependencies := range []map[string]string{pkg.Dependencies, pkg.PeerDependencies} {
+			for name, version := range dependencies {
+				_, nested := lock.Packages[source+"/node_modules/"+name]
+				_, hoisted := lock.Packages["node_modules/"+name]
+				if !nested && !hoisted {
+					t.Errorf("viewer lock missing %s (%s), required by %s; regenerate with a clean Alpine dependency directory and verify npm ci on both platforms", name, version, source)
+				}
+			}
+		}
+	}
+}
 
 const (
 	goToolchainVersion = "1.26.5"
@@ -191,15 +226,16 @@ func TestViewerRuntimeBaselineIsAligned(t *testing.T) {
 	for _, required := range []string{
 		`"node": ">=24 <25"`,
 		`"npm": ">=11 <12"`,
-		`"hls.js": "1.7.2"`,
+		`"hls.js": "1.7.3"`,
 		`"next": "16.3.8"`,
 		`"ovenplayer": "0.10.54"`,
-		`"react": "19.2.8"`,
-		`"react-dom": "19.2.8"`,
+		`"react": "19.3.0"`,
+		`"react-dom": "19.3.0"`,
 		`"@testing-library/react": "16.3.3"`,
 		`"@testing-library/user-event": "14.6.7"`,
 		`"@types/node": "26.6.2"`,
-		`"@types/react-dom": "19.2.5"`,
+		`"@types/react": "19.3.0"`,
+		`"@types/react-dom": "19.3.0"`,
 		`"eslint": "9.39.5"`,
 		`"eslint-config-next": "16.3.8"`,
 		`"jest": "30.5.2"`,
