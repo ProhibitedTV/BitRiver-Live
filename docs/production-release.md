@@ -8,9 +8,14 @@ For the promotion ladder that explains which checks are blocking or advisory at
 each stage, read [`docs/release-gates.md`](release-gates.md) before changing CI,
 release workflows, or operator-facing deployment behavior.
 
-Current reference: [`v1.2.3-rc.13`](releases/v1.2.3-rc.13.md) completed the
-signed publication and pull-only product gates. Its clean target-host promotion
-checks remain open and must not be inferred from CI or hosted VM qualification.
+Latest published candidate:
+[`v1.2.3-rc.22`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.22)
+is historical evidence, **not eligible for stable promotion** because its
+production dependency graph contains critical CVE-2026-56854. Patched source
+and successor preparation are tracked in the [stable-line draft](releases/v1.2.3-draft.md).
+A successor must pass publication and pull-only product gates, then bind every
+external gate to its own signed root. Do not infer target-host approval from
+source, CI, hosted VM, or an earlier candidate's evidence.
 
 **Canonical deployment path:** Production rollouts must flow through the
 repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails

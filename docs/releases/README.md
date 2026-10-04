@@ -16,12 +16,15 @@ Naming convention:
 - `vX.Y.Z-rc.N.md` for a published release candidate
 - `vX.Y.Z.md` once the stable release is published and the note is final
 
-Current published candidate:
+Latest published candidate (historical; rejected for stable promotion):
+
+- [`v1.2.3-rc.22`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.22)
+  contains critical CVE-2026-56854. Do not use its previous qualification as
+  approval for the patched successor being prepared in the stable-line draft.
+
+Earlier published snapshots:
 
 - [`v1.2.3-rc.13.md`](v1.2.3-rc.13.md)
-
-Previous candidate:
-
 - [`v1.2.3-rc.12.md`](v1.2.3-rc.12.md)
 
 Stable-line draft:
