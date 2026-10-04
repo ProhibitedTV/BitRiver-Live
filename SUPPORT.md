@@ -5,8 +5,10 @@ BitRiver Live is maintained in the open, but it does not offer managed hosting o
 The best-supported path in this repository is the documented single-host Docker Compose deployment built around `deploy/docker-compose.yml` and the repository-root `.env`.
 
 The current public candidate is
-[`v1.2.3-rc.12`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.12).
+[`v1.2.3-rc.23`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.23).
 Include that exact tag (or your commit SHA) in package and runtime reports.
+It remains a prerelease, not stable or target-host approval; see the
+[published support limits](docs/releases/v1.2.3-rc.23.md).
 
 ## Start here first
 

@@ -8,14 +8,6 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 
 ### Changed
 
-- Qualified React/React DOM 19.3.0 and HLS 1.7.3 with a portable Windows/Alpine
-  viewer lockfile. Controlled metadata-only HLS transport fixtures and explicit
-  playlist-failure/retry coverage remove proven browser-test races without
-  changing the real player, capability assertions or zero-retry CI policy.
-- Qualified immutable QEMU 4.4.0, Buildx 4.4.1 and build-push 7.4.0 action pins
-  with a cross-workflow guard; release-only execution remains a candidate gate.
-- Corrected release references to identify RC22 as historical/rejected and
-  distinguish patched successor preparation from publication or stable approval.
 - Added a manual no-checkout Ubuntu 24.04 host-qualification workflow for
   signed public candidates, including package/systemd/Docker lifecycle,
   authenticated OME and restart recovery, retained-data uninstall, and
@@ -34,6 +26,8 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 - Fixed a stale quickstart link in `web/viewer/README.md`.
 - Replaced dated internal release-check reports with a cleaner release-notes layout under `docs/releases/`.
 
+## [v1.2.3-rc.23] - 2026-10-04
+
 ### Fixed
 
 - Production Go dependency `golang.org/x/crypto` now requires patched v0.55.0
@@ -42,7 +36,29 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
   brace-expansion 5.0.12. A provenance-preserving local braces fork bounds
   nesting and validates ASTs for the unpatched tooling-only advisory; its
   attack/compatibility tests and removal review are documented in dependency
-  policy. The successor must still pass blocking release scans.
+  policy; no vulnerability gate was weakened.
+
+### Changed
+
+- Qualified React/React DOM 19.3.0 and HLS 1.7.3 with a portable Windows/Alpine
+  lockfile. Controlled metadata-only HLS fixtures and explicit playlist-failure/
+  retry tests remove proven test races without changing the player, capability
+  assertions or zero-retry CI policy.
+- Qualified immutable QEMU 4.4.0, Buildx 4.4.1 and build-push 7.4.0 action pins
+  with a cross-workflow regression guard.
+- Corrected current public release/download references and signed-root/viewer
+  digest examples; RC22 remains historical/rejected for stable promotion.
+
+### Verified
+
+- Release run `37222962594` passed, including release-only actions, package
+  acceptance, blocking scans and the eight-stage tagged pull-only product gate.
+- All 46 public assets match server digests and complete checksum coverage.
+  The signed root and five exact anonymous image signatures verify against the
+  RC23 workflow identity. No stable/latest promotion or deployment change.
+
+See [published notes](docs/releases/v1.2.3-rc.23.md) for the exact root and
+remaining candidate-bound external gates.
 
 ## [v1.2.3-rc.13] - 2026-08-03
 

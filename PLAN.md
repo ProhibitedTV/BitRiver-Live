@@ -29,6 +29,25 @@
 - Preserve primary dirty checkout, env and generated OME. Own test credentials,
   diagnostics and disposable stack stay under ignored artifacts; only scanner-
   approved evidence is shared. Stable/channel promotion is out of scope.
+- After actual publication verification, refresh public onboarding references,
+  the published note snapshot and source-gate invocation guidance in a separate
+  documentation-only PR. Do not advertise unavailable downloads or substitute
+  a new tag into an old digest example. Historical snapshots stay unchanged.
+- Publication verified: rc.23 from `98d36dd3`, release run `37222962594`, root
+  `1bc19e64a77e49924852d722e9672b5b43da3c1acea6b99614d26bfea68c7bdd`.
+  All 46 server digests/checksum coverage, root/five image signatures, anonymous
+  tags and eight published product stages passed. Human notes and bounded
+  checkpoints posted; external/stable acceptance remains separate.
+- Onboarding scope: README/SUPPORT, quickstart, Ubuntu install, viewer bundle,
+  production status/runbook and release index/draft/snapshot/changelog only.
+  Replace the exact current candidate root and viewer digest from verified
+  bytes, not historical values. Document source-build inline/network settings
+  and private raw diagnostics; leave all executable scripts/contracts intact.
+- Add a read-only documentation consistency regression in the existing Go test
+  suite: derive the current tag/root/viewer digest from the published snapshot
+  and require current onboarding references/download commands to agree. This
+  catches drift, not cryptographic authenticity; public bytes remain separately
+  verified. No workflow, required-check configuration or script behavior edit.
 
 ## Current scope - qualify Docker action updates #1425-#1427 (2026-10-03)
 
