@@ -1,5 +1,64 @@
 # TASKS
 
+## Scoped change: qualify Docker action updates #1425-#1427 (2026-10-03)
+
+- [x] Task 1 - Assess upstream changes and authorization
+  - Result: explicit user approval received; official commit tags and unchanged
+    action input/output interfaces verified. All 11 uses identified across
+    release, image-scan, and stable-promotion. No deployment or publication.
+- [x] Task 2 - Update pins, regression guard, and qualification docs
+  - Acceptance: all uses match reviewed immutable commits, focused CI/release/
+    promotion tests pass, and docs distinguish PR from release execution.
+  - Result: all 11 uses updated; workflow diff contains only action commits and
+    version comments. New guard scans workflows for mutable/inconsistent pins
+    and required action locations. Focused Go CI/release/promotion/pin tests
+    passed. Testing docs explicitly retain release execution boundaries.
+- [x] Task 3 - Run required local verification
+  - Acceptance: literal `./scripts/verify.sh` passes, including Docker smoke;
+    primary env/generated OME remain unchanged and fixture is removed.
+  - Result: literal verifier passed Go, CI/release/doc/contract checks, real
+    Postgres migrations, Compose rendering/builds, healthy dependencies and
+    API/viewer smoke. Viewer lint/tests correctly skipped for unchanged viewer;
+    #1430 separately qualified them. Windows Linux-installer and build-mode
+    digest skips explicit. Primary env/OME unchanged; fixture removed.
+- [-] Task 4 - Publish, qualify, squash merge, and reconcile roadmap
+  - Acceptance: exact-head protected CI and clear review threads; confirmed
+    #1426 merge before closing superseded #1425/#1427; bounded evidence posted.
+  - Result: run `37105457105` passed Ubuntu, docs, workflow consistency and
+    image/arm64 jobs, but failed the risk scorecard security classification.
+    Its original PR base predates already merged viewer security work. Added
+    explicit security/viewer classifications, retaining all gate requirements;
+    requalify the fresh head before merge. No review threads were present.
+  - Supplemental acceptance for the authorized successor prerelease: run the
+    existing source production golden path with disposable state and retain
+    its secret-scanned JSON report. Publication remains a separate next scope.
+  - Result: source production golden path passed all eight stages and evidence
+    scanning; primary env/OME unchanged and disposable fixture removed. Fresh
+    CI `37218822030` passed scorecard/image/arm64/platform gates but failed
+    iPhone/WebKit HLS attachment. Diagnose in matching Linux browser runtime,
+    repair only proven fixture nondeterminism, and requalify before merge.
+  - Diagnosis: matching Linux WebKit exposes MSE/ManagedMediaSource and AVC.
+    Controlled fast 404 loses attachment; a held manifest remains attached for
+    five seconds. The real player correctly surfaces transport failure; the
+    metadata-only test incorrectly depends on example CDN timing. Add shared
+    held-transport fixture to attachment specs, explicit 404/chat fallback
+    coverage, and documentation/contract guards; rerun full local/CI gates.
+  - Focused result: pin/CI/release/promotion/viewer contract tests and strict
+    lint passed. Linux iPhone/WebKit attachment plus explicit 404 cases passed
+    all ten runs (five repeats each); this is diagnostic repetition, not CI
+    retry policy. Product Player unchanged. Full suites/verifier remain.
+  - Full suites exposed a second fixture race in missing-source recovery:
+    auth refresh consumed the mock's first-request-only unavailable response.
+    Keep that response unavailable until explicit retry and require a new
+    request after the click. This strengthens the recovery assertion; no
+    production refresh, media capability, timeout/retry policy change.
+  - Final local result: literal verifier passed Go/docs/contracts, real
+    migrations, Compose/image builds, healthy smoke, strict viewer lint and
+    231 Jest tests/four snapshots. Full browser matrices passed on Windows
+    and matching Linux (68 passed, three desktop touch skips each). Linux
+    production build and npm audit passed with zero vulnerabilities. Primary
+    env/OME unchanged; temporary verifier env removed. Protected CI remains.
+
 ## Scoped change: qualify viewer runtime PR #1430 (2026-10-03)
 
 - [x] Task 1 - Assess refreshed runtime update
@@ -28,10 +87,12 @@
     migrations, Compose, Alpine image builds, healthy stack/API/viewer, lint,
     and 231 Jest tests. Primary env/OME unchanged; fixture removed. Linux host
     installer and production digest enforcement are not claimed by local smoke.
-- [-] Task 4 - Publish, review, and squash merge
+- [x] Task 4 - Publish, review, and squash merge
   - Acceptance: current scorecard, exact-head protected CI, clear reviews,
     confirmed merge, and bounded roadmap checkpoint.
-  - Result: pending.
+  - Result: protected run `37104440225` passed on `653049ce`, no review threads,
+    clean merge state, and required Merge gate passed. Squash merged as
+    `e0cda8d9`; real-media/device acceptance remains open on #1307.
 
 ## Scoped change: qualify viewer tooling PR #1429 (2026-10-02)
 

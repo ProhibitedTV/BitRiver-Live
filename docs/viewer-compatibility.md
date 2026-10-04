@@ -33,6 +33,13 @@ HLS is the broad compatibility path. The viewer uses `hls.js` when Media Source 
 
 The compatibility suite requires source attachment on Chromium and Android Chrome, and on WebKit outside the Windows Playwright media limitation. Firefox and Windows WebKit may use the explicit unavailable state only when the browser lacks the required media capability. The suite also covers transient playback API recovery across each declared engine class. It does **not** replace the release candidate's real-media golden path, which is responsible for proving playlist advancement and decoded media through the actual SRS/transcoder/OvenMediaEngine stack.
 
+Attachment tests hold their metadata-only example CDN manifest request pending
+until fixture teardown. They still execute the real player's capability and
+source attachment paths; uncontrolled DNS/HTTP failure must not race those
+assertions. A separate explicit 404 case requires the unavailable state after
+the player's bounded error lifecycle and keeps chat usable. Neither test
+pretends that a pending request or a mocked playlist proves media decoding.
+
 ### WebRTC
 
 The viewer has an OvenPlayer-backed WebRTC path when the API returns `protocol: "webrtc"`. WebRTC is **not promoted to a browser-wide support claim by the Playwright compatibility matrix alone**. NAT/ICE/TURN behavior, hardware/browser media behavior, and the real OME path require production-like media qualification. Operators must not infer physical-device WebRTC support from the mocked compatibility tests.
