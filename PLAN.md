@@ -1,5 +1,35 @@
 # PLAN
 
+## Current scope - prepare and publish successor prerelease (2026-10-04)
+
+- User approved a prerelease from qualified main, not stable promotion,
+  latest aliases or deployed-stack mutation. #1426 merged as `95d309fd` after
+  protected exact-head run `37221518727`; duplicate #1425/#1427 are closed.
+- Observed latest tag is rc.22; rc.23 is unused. Recheck immediately before
+  pushing a new immutable tag. Never move or reuse a failed candidate tag.
+- Refresh stable draft/changelog and stale release index/reference wording to
+  describe RC22 as historical/rejected, current patched source, and successor
+  preparation honestly. Follow existing note naming: published snapshots only
+  after publication. No runtime, workflow or deployment-contract edits.
+- Require named full source smoke gate plus already passed eight-stage source
+  product gate, focused docs/release checks and literal verifier; publish a
+  small documentation PR and squash only with protected exact-head CI.
+- The source gate fixture uses saved production env and an inline development
+  override. Its first two setup attempts failed mode normalization, then Docker
+  dependency download with inherited offline settings. Use the existing
+  network-enabled production build proxy/checksum settings for this explicit
+  gate invocation only; verifier defaults and validation remain unchanged.
+- Publish rc.23 only from qualified main, watch the real release workflow,
+  then verify public checksums, signed manifest, exact images and sanitized
+  pull-only product evidence. Prepare human notes without creating an early
+  placeholder release. Publication failure blocks completion; no exceptions.
+- Risks: current vulnerability findings, release-only action changes, packaging
+  and registry access. Eight external candidate-bound gates remain open until
+  actual target evidence passes; source/mock/CI evidence cannot close them.
+- Preserve primary dirty checkout, env and generated OME. Own test credentials,
+  diagnostics and disposable stack stay under ignored artifacts; only scanner-
+  approved evidence is shared. Stable/channel promotion is out of scope.
+
 ## Current scope - qualify Docker action updates #1425-#1427 (2026-10-03)
 
 - User explicitly approved qualification and merge of these CI updates. Combine
@@ -39,6 +69,13 @@
   mock returns healthy metadata on every request after the first. Keep it
   unavailable until the test explicitly clicks retry; require a new request
   after that click. Change test state only, not the production auth refresh.
+- Supplemental candidate preflight while protected CI runs: execute the named
+  full release smoke gate against this source using generated disposable
+  development/build credentials. Back up/restore the isolated generated OME
+  file, tear down only this owned Compose project, remove the test env, and
+  confirm primary env/OME hashes unchanged. Retain scanner-approved report
+  JSON only; raw diagnostics and synthetic credentials stay local. This does
+  not publish a candidate or alter the deployment contract.
 
 ## Current scope - qualify viewer runtime PR #1430 (2026-10-03)
 

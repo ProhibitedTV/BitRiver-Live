@@ -1,5 +1,40 @@
 # TASKS
 
+## Scoped change: prepare and publish successor prerelease (2026-10-04)
+
+- [x] Task 1 - Qualify source preflight and assess candidate scope
+  - Acceptance: unused successor tag, fresh qualified main, source product
+    report and named full smoke gate pass; owned-stack cleanup/secret scan and
+    primary env/OME preservation verified.
+  - Result: main `95d309fd` has protected CI; rc.23 observed unused. Eight-stage
+    source product gate passed. Named-gate attempts exposed disposable setup
+    errors (mode normalization, inherited offline Docker downloads), not a
+    waived validation. Retry with documented inline development and existing
+    network-enabled build settings. Raw artifacts remain private/local.
+  - Final result: named full source gate passed all nine phases, including
+    quickstart/smoke and diagnostics. Retained report passed sentinel scan;
+    owned project removed, test env removed, isolated OME restored and primary
+    env/OME hashes unchanged. Only source evidence is claimed.
+- [x] Task 2 - Refresh human release preparation docs
+  - Acceptance: draft/changelog/current reference accurately distinguish RC22,
+    patched source and unpublished successor; focused docs/release tests pass.
+  - Result: draft/current references/changelog refreshed without claiming
+    publication, stable or target approval. Focused release/promotion/action/
+    dependency policy tests passed; local links passed for 92 public files.
+- [-] Task 3 - Verify and merge release documentation
+  - Acceptance: literal verifier, strict PR scorecard, exact-head protected CI
+    and clear review state; squash merge with confirmed commit.
+  - Local result: literal verifier passed Go, release/docs/contracts, real
+    Postgres migrations, Compose and healthy Docker/API/viewer smoke. Viewer
+    checks correctly skipped for documentation-only changes; preceding source
+    qualification remains recorded. Linux installer/digest enforcement skips
+    explicit. Primary env/OME unchanged; temporary fixture removed. Strict
+    PR scorecard passed. Publish and protected CI remain.
+- [ ] Task 4 - Publish and verify immutable prerelease
+  - Acceptance: recheck tag, tag qualified main, release workflow passes,
+    public asset checksums/root/signature/images/product evidence verify;
+    bounded roadmap checkpoint. Never promote stable/latest or change deploy.
+
 ## Scoped change: qualify Docker action updates #1425-#1427 (2026-10-03)
 
 - [x] Task 1 - Assess upstream changes and authorization
@@ -21,7 +56,7 @@
     API/viewer smoke. Viewer lint/tests correctly skipped for unchanged viewer;
     #1430 separately qualified them. Windows Linux-installer and build-mode
     digest skips explicit. Primary env/OME unchanged; fixture removed.
-- [-] Task 4 - Publish, qualify, squash merge, and reconcile roadmap
+- [x] Task 4 - Publish, qualify, squash merge, and reconcile roadmap
   - Acceptance: exact-head protected CI and clear review threads; confirmed
     #1426 merge before closing superseded #1425/#1427; bounded evidence posted.
   - Result: run `37105457105` passed Ubuntu, docs, workflow consistency and
@@ -58,6 +93,19 @@
     and matching Linux (68 passed, three desktop touch skips each). Linux
     production build and npm audit passed with zero vulnerabilities. Primary
     env/OME unchanged; temporary verifier env removed. Protected CI remains.
+  - Supplemental candidate preflight: run the named full source release smoke
+    gate with disposable generated credentials and owned-stack teardown;
+    scan its report and verify primary env/OME preservation before tagging.
+  - First named-gate preflight rejected the test setup: env init intentionally
+    normalizes the saved mode to production, so source build requires the
+    documented inline development override, not a saved development value.
+    Report scan and cleanup passed. Rerun with that override; do not weaken
+    production validation or change the canonical template.
+  - Completion: protected run `37221518727` passed on exact head `d9125261`,
+    including hosted browser matrix and Merge gate; no review threads, clean
+    merge state. #1426 squash merged `95d309fd`; #1425/#1427 closed as
+    superseded and bounded checkpoints posted to #1301/#1307. Named source
+    release-gate preflight now continues in the separate candidate scope.
 
 ## Scoped change: qualify viewer runtime PR #1430 (2026-10-03)
 

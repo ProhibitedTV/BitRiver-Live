@@ -8,6 +8,14 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 
 ### Changed
 
+- Qualified React/React DOM 19.3.0 and HLS 1.7.3 with a portable Windows/Alpine
+  viewer lockfile. Controlled metadata-only HLS transport fixtures and explicit
+  playlist-failure/retry coverage remove proven browser-test races without
+  changing the real player, capability assertions or zero-retry CI policy.
+- Qualified immutable QEMU 4.4.0, Buildx 4.4.1 and build-push 7.4.0 action pins
+  with a cross-workflow guard; release-only execution remains a candidate gate.
+- Corrected release references to identify RC22 as historical/rejected and
+  distinguish patched successor preparation from publication or stable approval.
 - Added a manual no-checkout Ubuntu 24.04 host-qualification workflow for
   signed public candidates, including package/systemd/Docker lifecycle,
   authenticated OME and restart recovery, retained-data uninstall, and
@@ -25,6 +33,16 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 - Corrected public GitHub repository URLs in packaging/docs metadata and clarified release-stage wording so the public release surface reads consistently.
 - Fixed a stale quickstart link in `web/viewer/README.md`.
 - Replaced dated internal release-check reports with a cleaner release-notes layout under `docs/releases/`.
+
+### Fixed
+
+- Production Go dependency `golang.org/x/crypto` now requires patched v0.55.0
+  after critical CVE-2026-56854 invalidated RC22 for stable promotion.
+- Viewer dependencies now require Next.js/ESLint config 16.3.8 and
+  brace-expansion 5.0.12. A provenance-preserving local braces fork bounds
+  nesting and validates ASTs for the unpatched tooling-only advisory; its
+  attack/compatibility tests and removal review are documented in dependency
+  policy. The successor must still pass blocking release scans.
 
 ## [v1.2.3-rc.13] - 2026-08-03
 
