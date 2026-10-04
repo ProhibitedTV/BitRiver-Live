@@ -29,6 +29,35 @@
     Its original PR base predates already merged viewer security work. Added
     explicit security/viewer classifications, retaining all gate requirements;
     requalify the fresh head before merge. No review threads were present.
+  - Supplemental acceptance for the authorized successor prerelease: run the
+    existing source production golden path with disposable state and retain
+    its secret-scanned JSON report. Publication remains a separate next scope.
+  - Result: source production golden path passed all eight stages and evidence
+    scanning; primary env/OME unchanged and disposable fixture removed. Fresh
+    CI `37218822030` passed scorecard/image/arm64/platform gates but failed
+    iPhone/WebKit HLS attachment. Diagnose in matching Linux browser runtime,
+    repair only proven fixture nondeterminism, and requalify before merge.
+  - Diagnosis: matching Linux WebKit exposes MSE/ManagedMediaSource and AVC.
+    Controlled fast 404 loses attachment; a held manifest remains attached for
+    five seconds. The real player correctly surfaces transport failure; the
+    metadata-only test incorrectly depends on example CDN timing. Add shared
+    held-transport fixture to attachment specs, explicit 404/chat fallback
+    coverage, and documentation/contract guards; rerun full local/CI gates.
+  - Focused result: pin/CI/release/promotion/viewer contract tests and strict
+    lint passed. Linux iPhone/WebKit attachment plus explicit 404 cases passed
+    all ten runs (five repeats each); this is diagnostic repetition, not CI
+    retry policy. Product Player unchanged. Full suites/verifier remain.
+  - Full suites exposed a second fixture race in missing-source recovery:
+    auth refresh consumed the mock's first-request-only unavailable response.
+    Keep that response unavailable until explicit retry and require a new
+    request after the click. This strengthens the recovery assertion; no
+    production refresh, media capability, timeout/retry policy change.
+  - Final local result: literal verifier passed Go/docs/contracts, real
+    migrations, Compose/image builds, healthy smoke, strict viewer lint and
+    231 Jest tests/four snapshots. Full browser matrices passed on Windows
+    and matching Linux (68 passed, three desktop touch skips each). Linux
+    production build and npm audit passed with zero vulnerabilities. Primary
+    env/OME unchanged; temporary verifier env removed. Protected CI remains.
 
 ## Scoped change: qualify viewer runtime PR #1430 (2026-10-03)
 

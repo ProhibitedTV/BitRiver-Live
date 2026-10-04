@@ -21,6 +21,24 @@
   publication. Keep that acceptance boundary explicit in docs and roadmap.
 - #1430 merged as `e0cda8d9`, protected run `37104440225` passed. Preserve
   unrelated primary-checkout edits and use the existing isolated worktree.
+- Follow-up authorization (2026-10-04): user approved a new prerelease from
+  qualified main, not stable promotion or a deployed-stack change. Before
+  finishing qualification, run the existing source production golden path
+  using its disposable env/state and scanner-approved report. Do not treat
+  source media success as candidate or clean-host evidence. The next unused
+  observed candidate is rc.23; recheck tag availability before publication.
+- Fresh run `37218822030` passes the scorecard but fails iPhone/WebKit source
+  attachment. The test mocks playback metadata but leaves its example.com HLS
+  URL uncontrolled; distinguish missing engine capability from fatal transport
+  teardown using a matching Linux Playwright container before changing tests.
+  If the fixture races attachment with network failure, control that transport
+  in attachment tests and add explicit failure coverage. Keep real HLS code,
+  supported-engine assertions, zero retries, and product decode gates intact.
+- Controlled transport also exposes the missing-source recovery fixture's
+  request-count race: auth resolution legitimately refreshes playback, and the
+  mock returns healthy metadata on every request after the first. Keep it
+  unavailable until the test explicitly clicks retry; require a new request
+  after that click. Change test state only, not the production auth refresh.
 
 ## Current scope - qualify viewer runtime PR #1430 (2026-10-03)
 

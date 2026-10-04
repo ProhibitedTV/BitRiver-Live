@@ -55,6 +55,7 @@ func TestViewerCompatibilityMatrixContract(t *testing.T) {
 	compatibilitySpec := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "tests", "compatibility.spec.ts"))
 	for _, required := range []string{
 		`handles HLS capability, reads chat, and sends a message`,
+		`shows unavailable for a failed playlist while chat stays usable`,
 		`recovers when the playback API returns a transient failure`,
 		`signed-out navigation, auth, and accessibility`,
 		`loads the creator live setup`,
@@ -66,6 +67,19 @@ func TestViewerCompatibilityMatrixContract(t *testing.T) {
 	} {
 		if !strings.Contains(compatibilitySpec, required) {
 			t.Errorf("viewer compatibility spec missing critical-flow invariant %q", required)
+		}
+	}
+
+	for _, name := range []string{"compatibility.spec.ts", "channel-chat-playback.spec.ts", "stream-playback.spec.ts"} {
+		spec := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "tests", name))
+		if !strings.Contains(spec, `import { test } from "./fixtures/hls-attachment"`) {
+			t.Errorf("%s must control transport during metadata-only source attachment tests", name)
+		}
+	}
+	attachmentFixture := readRepoFile(t, repoRoot, filepath.Join("web", "viewer", "tests", "fixtures", "hls-attachment.ts"))
+	for _, required := range []string{`await manifestPending`, `releaseManifest()`, `page.unrouteAll({ behavior: "wait" })`} {
+		if !strings.Contains(attachmentFixture, required) {
+			t.Errorf("HLS attachment fixture missing bounded-lifecycle invariant %q", required)
 		}
 	}
 

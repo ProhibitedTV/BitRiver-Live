@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "./fixtures/hls-attachment";
 
 import {
   authenticatedViewer,
@@ -125,6 +126,33 @@ test.describe("release-critical viewer compatibility", () => {
 
     await expect.poll(() => sentMessages[0]).toBe("Compatibility matrix check.");
     await expect(chatLog).toContainText("Compatibility matrix check.");
+  });
+
+  test("shows unavailable for a failed playlist while chat stays usable", async ({ page }, testInfo) => {
+    let manifestRequests = 0;
+    await mockChannelApis(page);
+    await page.route("https://cdn.example.com/**/*.m3u8", async (route) => {
+      manifestRequests += 1;
+      await route.fulfill({ status: 404, headers: { "access-control-allow-origin": "*" }, body: "Missing fixture playlist" });
+    });
+    await page.route(`**/api/channels/${channelId}/chat**`, async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatHistory) });
+    });
+    await page.goto(`/channels/${channelId}`);
+
+    const capabilityGated = testInfo.project.name === "firefox-compat" ||
+      (process.platform === "win32" && testInfo.project.name.includes("webkit"));
+    if (!capabilityGated) {
+      await expect.poll(() => manifestRequests).toBeGreaterThan(0);
+    }
+    // hls.js retries the failed manifest, then the player's grace period runs.
+    // This deadline tests that failure lifecycle, not a retry of the test.
+    await expect(page.getByText("Stream unavailable", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("log")).toContainText("Welcome aboard the orbital maintenance stream!");
+    const composer = page.getByRole("textbox", { name: "Chat message" });
+    await composer.fill("Chat still works while media is unavailable.");
+    await expect(composer).toHaveValue("Chat still works while media is unavailable.");
+    await expect(page.getByRole("form", { name: "Send a chat message" }).getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   });
 
   test("recovers when the playback API returns a transient failure", async ({ page }) => {

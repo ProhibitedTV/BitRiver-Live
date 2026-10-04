@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures/hls-attachment";
 
 import {
   authenticatedViewer,
@@ -131,6 +132,7 @@ test.describe("channel playback and chat integration", () => {
 
   test("offers player recovery when channel loads without a playable source", async ({ page }) => {
     let playbackAttempts = 0;
+    let allowPlaybackRecovery = false;
     const unavailablePlayback = {
       ...playbackResponse,
       playback: playbackResponse.playback
@@ -152,7 +154,7 @@ test.describe("channel playback and chat integration", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(playbackAttempts === 1 ? unavailablePlayback : playbackResponse)
+        body: JSON.stringify(allowPlaybackRecovery ? playbackResponse : unavailablePlayback)
       });
     });
 
@@ -168,9 +170,11 @@ test.describe("channel playback and chat integration", () => {
 
     await expect(page.getByRole("heading", { name: "Stream unavailable" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Browse live channels" })).toHaveAttribute("href", "/browse");
+    const attemptsBeforeRetry = playbackAttempts;
+    allowPlaybackRecovery = true;
     await page.getByRole("button", { name: "Retry playback" }).click();
 
-    await expect.poll(() => playbackAttempts).toBeGreaterThan(1);
+    await expect.poll(() => playbackAttempts).toBeGreaterThan(attemptsBeforeRetry);
     await expect(page.getByRole("heading", { name: "Available renditions" })).toBeVisible();
   });
 });
