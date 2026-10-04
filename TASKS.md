@@ -24,6 +24,11 @@
 - [-] Task 4 - Publish, qualify, squash merge, and reconcile roadmap
   - Acceptance: exact-head protected CI and clear review threads; confirmed
     #1426 merge before closing superseded #1425/#1427; bounded evidence posted.
+  - Result: run `37105457105` passed Ubuntu, docs, workflow consistency and
+    image/arm64 jobs, but failed the risk scorecard security classification.
+    Its original PR base predates already merged viewer security work. Added
+    explicit security/viewer classifications, retaining all gate requirements;
+    requalify the fresh head before merge. No review threads were present.
 
 ## Scoped change: qualify viewer runtime PR #1430 (2026-10-03)
 
