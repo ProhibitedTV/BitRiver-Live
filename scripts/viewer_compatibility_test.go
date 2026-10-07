@@ -64,10 +64,17 @@ func TestViewerCompatibilityMatrixContract(t *testing.T) {
 		`new AxeBuilder`,
 		`.tap()`,
 		`toBeLessThanOrEqual(1)`,
+		`expect(capabilities.avcMse).toBe(false)`,
+		`expect(capabilities.managedMediaSource).toBe(false)`,
+		`toBeGreaterThan(beforeRetry)`,
+		`await expect(alert).not.toBeVisible()`,
 	} {
 		if !strings.Contains(compatibilitySpec, required) {
 			t.Errorf("viewer compatibility spec missing critical-flow invariant %q", required)
 		}
+	}
+	if strings.Count(compatibilitySpec, "await expectPlaybackCapabilityOutcome(page, testInfo)") != 2 {
+		t.Fatal("initial attachment and metadata retry must share the strict media-capability assertion")
 	}
 
 	for _, name := range []string{"compatibility.spec.ts", "channel-chat-playback.spec.ts", "stream-playback.spec.ts"} {

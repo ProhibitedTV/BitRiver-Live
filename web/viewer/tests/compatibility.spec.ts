@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type TestInfo } from "@playwright/test";
 import { test } from "./fixtures/hls-attachment";
 
 import {
@@ -13,6 +13,40 @@ import {
 } from "./fixtures/channel";
 
 const generatedAt = new Date("2026-01-01T00:00:00Z").toISOString();
+
+async function expectPlaybackCapabilityOutcome(page: Page, testInfo: TestInfo) {
+  const readAttachment = async () =>
+    page.evaluate((expectedUrl) => {
+      const source = document.querySelector("video")?.currentSrc ?? "";
+      if (source.startsWith("blob:") || source === expectedUrl) {
+        return "attached";
+      }
+      return document.body.textContent?.includes("Stream unavailable") ? "unsupported" : "pending";
+    }, playbackResponse.playback?.playbackUrl);
+  const attachment = expect.poll(readAttachment);
+  const windowsWebKit = process.platform === "win32" && testInfo.project.name.includes("webkit");
+  if (testInfo.project.name === "firefox-compat" || windowsWebKit) {
+    await attachment.toMatch(/^(attached|unsupported)$/);
+    if ((await readAttachment()) === "unsupported") {
+      await expect(page.getByText("Stream unavailable", { exact: true })).toBeVisible();
+      const capabilities = await page.evaluate(() => ({
+        nativeHls: Boolean(document.createElement("video").canPlayType("application/vnd.apple.mpegurl")),
+        mediaSource: Boolean(window.MediaSource),
+        managedMediaSource: Boolean((window as Window & { ManagedMediaSource?: unknown }).ManagedMediaSource),
+        avcMse: Boolean(window.MediaSource?.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'))
+      }));
+      expect(capabilities.nativeHls).toBe(false);
+      expect(capabilities.avcMse).toBe(false);
+      if (windowsWebKit) {
+        expect(capabilities.mediaSource).toBe(false);
+        expect(capabilities.managedMediaSource).toBe(false);
+      }
+    }
+    return;
+  }
+  await expect(page.locator("video")).toBeVisible();
+  await attachment.toBe("attached");
+}
 
 async function mockSignedOutDirectory(page: Page) {
   await page.route("**/api/viewer/me", async (route) => {
@@ -84,35 +118,7 @@ test.describe("release-critical viewer compatibility", () => {
 
     await page.goto(`/channels/${channelId}`);
 
-    const video = page.locator("video");
-    await expect(video).toBeVisible();
-    const readAttachment = async () =>
-      page.evaluate((expectedUrl) => {
-        const element = document.querySelector("video");
-        const source = element?.currentSrc ?? "";
-        if (source.startsWith("blob:") || source === expectedUrl) {
-          return "attached";
-        }
-        return document.body.textContent?.includes("Stream unavailable") ? "unsupported" : "pending";
-      }, playbackResponse.playback?.playbackUrl);
-    const attachment = expect.poll(readAttachment);
-    const windowsWebKit = process.platform === "win32" && testInfo.project.name.includes("webkit");
-    if (testInfo.project.name === "firefox-compat" || windowsWebKit) {
-      await attachment.toMatch(/^(attached|unsupported)$/);
-      if ((await readAttachment()) === "unsupported") {
-        const capabilities = await page.evaluate(() => ({
-          nativeHls: Boolean(document.createElement("video").canPlayType("application/vnd.apple.mpegurl")),
-          mediaSource: Boolean(window.MediaSource)
-        }));
-        expect(capabilities.nativeHls).toBe(false);
-        if (windowsWebKit) {
-          // Playwright's Windows WebKit build has no MediaSource or native HLS codec path.
-          expect(capabilities.mediaSource).toBe(false);
-        }
-      }
-    } else {
-      await attachment.toBe("attached");
-    }
+    await expectPlaybackCapabilityOutcome(page, testInfo);
 
     const chatLog = page.getByRole("log");
     await expect(chatLog).toContainText("Welcome aboard the orbital maintenance stream!");
@@ -155,7 +161,7 @@ test.describe("release-critical viewer compatibility", () => {
     await expect(page.getByRole("form", { name: "Send a chat message" }).getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   });
 
-  test("recovers when the playback API returns a transient failure", async ({ page }) => {
+  test("recovers when the playback API returns a transient failure", async ({ page }, testInfo) => {
     let playbackAttempts = 0;
     let recover = false;
 
@@ -203,11 +209,13 @@ test.describe("release-critical viewer compatibility", () => {
     await alert.getByRole("button", { name: "Try again" }).click();
     await expect.poll(() => playbackAttempts).toBeGreaterThan(1);
     await expect(alert).toBeVisible();
+    const beforeRetry = playbackAttempts;
     recover = true;
     await alert.getByRole("button", { name: "Try again" }).click();
 
-    await expect(page.locator("video")).toBeVisible();
-    await expect.poll(() => playbackAttempts).toBeGreaterThan(2);
+    await expect.poll(() => playbackAttempts).toBeGreaterThan(beforeRetry);
+    await expect(alert).not.toBeVisible();
+    await expectPlaybackCapabilityOutcome(page, testInfo);
   });
 
   test("keeps signed-out navigation, auth, and accessibility functional", async ({ page }) => {

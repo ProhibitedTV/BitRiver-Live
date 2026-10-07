@@ -25,6 +25,12 @@ The release-critical suite covers:
 - creator live-setup rendering and server-authored ingest/stream-key state;
 - mobile touch navigation and horizontal-overflow protection.
 
+Initial attachment and API retry use the same capability assertion. Recovery
+must make a fresh playback request and clear the API error; supported engines
+must attach a real source, while the already capability-gated builds must show
+unavailable and prove the missing native/MSE path. Brief video visibility before
+the unsupported state is not recovery evidence. No retry or timeout is added.
+
 ## Playback support boundary
 
 ### HLS and LL-HLS

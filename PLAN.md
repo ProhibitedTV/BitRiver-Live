@@ -1,5 +1,40 @@
 # PLAN
 
+## Current scope - qualify viewer tooling PR #1433 (2026-10-07)
+
+- Independently qualify @types/node 26.6.4 and ts-jest 29.4.14 while #1432
+  awaits separate CI-guard approval. Preserve that branch and primary edits.
+- Exact bot head `7e939fed` fails the Node-types baseline and optional WASM
+  lock guard; both Alpine image jobs independently reject the incomplete lock.
+  Keep those checks intact and regenerate through clean Node 24 Alpine.
+- Upstream ts-jest patch reverts compiler utility changes. Risks: transformed
+  test behavior, type regressions, cross-platform optional dependencies and
+  newly reported vulnerabilities. No runtime feature or CI policy changes.
+- Audit now blocks Sharp <0.35.5 (GHSA-wq5f-xc86-pv6w) and source-map-js <1.2.2
+  (GHSA-68fv-2mgg-jv7q). Extend this viewer dependency slice to their published
+  patches and lock/version regressions before qualification. Retain high/
+  critical gate; report remaining moderate tooling findings, not zero audit.
+  RC23 still contains old pins; source fixes cannot qualify its immutable root.
+- Update the reviewed baseline, explicitly guard the ts-jest pin, document
+  tooling qualification, then clean Windows/Alpine install and audit, focused
+  Go tests, full viewer integration/matrix, Docker build and literal verifier.
+- Publish qualification to the existing PR with a strict, accurate scorecard;
+  require exact-head protected CI, clear reviews and squash merge. No tag,
+  stable promotion, contract change or operator deployment in this scope.
+- Windows eight-worker matrix had one page crash; serial run passes that test
+  but times out Firefox failed-playlist state (67 passes/three skips each).
+  Linux full matrix passes 68/three. Inspect isolated page/network/console and
+  focused reproduction before claiming qualification or changing fixtures.
+  Preserve failures, zero retries, engine coverage and current deadline.
+- Final Windows run exposes a proven retry assertion race: iPhone/WebKit
+  correctly renders unavailable after metadata recovery, but the test requires
+  transient video visibility. Direct probe confirms no MSE, ManagedMediaSource
+  or native HLS. Reuse one capability-aware source-outcome assertion for initial
+  attachment and retry; require fresh retry request/error clearance. Keep all
+  supported engines' attachment assertions, strict fallback capability checks,
+  projects, deadlines and zero retries. Update compatibility docs/guard, then
+  rerun focused affected tests, both full matrices and literal verifier.
+
 ## Current scope - prepare and publish successor prerelease (2026-10-04)
 
 - User approved a prerelease from qualified main, not stable promotion,
