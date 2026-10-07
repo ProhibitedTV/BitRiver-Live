@@ -95,7 +95,7 @@ func TestDependencyExceptionPolicyIsTimeBounded(t *testing.T) {
 		"Never use `continue-on-error`",
 		"Browserslist 4.28.9",
 		"PostCSS 8.5.28",
-		"Sharp 0.35.4",
+		"Sharp 0.35.5",
 		"review removal by 2026-10-16",
 		"GHSA-vfj7-8cjw-p6xm",
 		"not independent",

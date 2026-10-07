@@ -1,5 +1,73 @@
 # TASKS
 
+## Scoped change: qualify viewer tooling PR #1433 (2026-10-07)
+
+- [x] Task 1 - Reproduce and assess the dependency update
+  - Acceptance: inspect exact diff/upstream notes/reviews, reproduce focused
+    baseline/lock failures and preserve other worktrees.
+  - Analysis: only @types/node 26.6.4 and ts-jest 29.4.14 are intended changes;
+    bot lock drops @emnapi/core/runtime. Protected run `37256007225` confirms
+    baseline/structural failures and both Alpine npm ci failures. No reviews.
+  - Result: focused Go baseline and optional WASM tests reproduce those exact
+    failures locally. Upstream changelog confirms compiler-utility revert;
+    primary and blocked onboarding worktrees are untouched.
+- [x] Task 2 - Repair portable lock and reviewed tooling guards
+  - Acceptance: regenerate lock in clean Node 24 Alpine; Node-types and ts-jest
+    assertions match reviewed pins; policy docs updated; focused tests pass.
+  - Interim: focused baseline/WASM guards pass after clean regeneration, but
+    clean Alpine audit blocks Sharp/source-map-js high findings. Add verified
+    patches 0.35.5/1.2.2 and regressions; do not proceed with a waived audit.
+  - Result: clean Alpine npm 11.19 install/audit passes the unchanged high/
+    critical gate (20 moderate tooling findings remain); focused viewer and
+    dependency Go tests pass. Version guards include nested lock copies,
+    ts-jest and the security patches; policy docs distinguish source from RC23.
+- [x] Task 3 - Run complete local qualification
+  - Acceptance: clean Windows/Alpine installs and audits, lint/Jest/build,
+    six-project zero-retry Playwright matrix, Docker image and literal verifier
+    pass; disposable fixtures removed, primary env/OME unchanged.
+  - Interim: Windows/Linux lint and Jest pass (231 tests, four snapshots each),
+    production builds pass. First Windows browser run used eight workers while
+    Linux/browser and Docker gates ran concurrently: 67 passed, three skipped,
+    one Chromium page crash. Same test passes on Linux. Requalify the complete
+    Windows matrix with existing CI single-worker setting and zero retries;
+    retain the failed attempt and do not change tests or exclusions.
+  - Serial Windows result: 67 passed/three skipped, prior crash test passes,
+    Firefox failed-playlist unavailable assertion times out. Linux full matrix
+    passes 68/three. Literal verifier fully passes, including Docker/viewer;
+    built image reports Sharp 0.35.5/librsvg 2.63.2, cleanup/hashes unchanged.
+    Investigate Firefox before publishing or claiming complete qualification.
+  - Diagnosis: isolated API/manifest/error probe reaches unavailable with chat
+    correctly; temporary request observers also pass. Removed observers and
+    verified no test diff. Original Firefox failure test passes three separate
+    consecutive zero-retry executions on the idle host. Cause is not proven;
+    final full unchanged Windows matrix remains required, not replaced by the
+    focused passes. No timeout, retry, engine or fixture changes are retained.
+  - Supplemental production-only audit reports zero findings; full-graph audit
+    still reports 20 moderate development-tooling findings and remains the gate.
+  - Final unchanged Windows run: Firefox passes, but iPhone/WebKit retry requires
+    video while the page correctly shows unavailable. Direct probe confirms all
+    MSE/native HLS paths absent. Fix the proven capability assertion race, not
+    the player; retain strict supported-engine attachment and fresh retry proof.
+    Requalify full matrices/verifier after this small test/doc correction.
+  - Focused correction result: viewer Go guards/strict lint pass. WebKit desktop
+    and iPhone retry each pass three independent Windows runs (six passes,
+    zero retries). Shared helper retains supported attachment and strengthens
+    fallback codec/MSE proof; retry requires fresh request and cleared error.
+  - Final corrected Linux qualification passes: clean install/high audit gate,
+    strict lint, 231 Jest tests/four snapshots, build and 68 browser passes with
+    three intentional touch skips, zero retries. Final literal verifier passes
+    all phases, including migrations, Alpine builds and healthy Compose smoke.
+    Owned project is removed; worktree env fixture absent; primary env/OME
+    hashes unchanged. Final Windows complete single-worker matrix also passes
+    68/three intentional touch skips with zero retries. All local gates pass.
+- [-] Task 4 - Publish, qualify and squash merge
+  - Acceptance: reviewed paths only, accurate strict release scorecard,
+    exact-head protected CI and clear reviews; confirmed squash commit.
+    Keep RC23 immutable and external acceptance issues open.
+  - Local qualification complete; reviewed eleven-path diff and strict PR
+    scorecard pass. Publish to the unchanged bot branch, then require protected
+    checks at the new exact head before merging; no bypass or tag operation.
+
 ## Scoped change: prepare and publish successor prerelease (2026-10-04)
 
 - [x] Task 1 - Qualify source preflight and assess candidate scope
