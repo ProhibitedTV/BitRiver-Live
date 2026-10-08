@@ -1,7 +1,39 @@
 # PLAN
 
+## Current scope - channel authorization and real product proof (#1306) (2026-10-07)
+
+- Start from protected main `99763c41` in the reusable isolated worktree. Keep
+  completed #1433 ledger updates and all primary storage/env/OME edits intact.
+- Add a table-driven sensitive-channel action matrix over the existing handler,
+  real test repository and shared helpers: guest, viewer, unrelated creator,
+  moderator, owning creator and admin. Cover private owner listing, detail/key
+  disclosure, public playback, metadata mutation, delete, start/stop and rotate.
+- Denials must preserve channel/session state and never disclose the private
+  stream key. Positive owner/admin cases must prove the action works, and an
+  unrelated channel must remain unchanged. No role-policy change is intended.
+- Document exactly this handler-level matrix and its limitations; existing
+  session tests and a real-stack eight-stage product exercise remain separate.
+  Do not claim complete DAST, CSRF/MFA, upload/flood or physical-device proof.
+- Run focused API tests, the actual RTMP/1080p decode/chat/moderation/VOD golden
+  path through a disposable canonical Compose stack, and literal verifier.
+  Preserve failed attempts, secret-scan retained reports, verify teardown and
+  primary hashes, then publish a small PR with protected exact-head qualification.
+- Risks: privilege escalation/IDOR, accidental credential exposure, destructive
+  test actions, fixture isolation and media deadlines. All mutations target
+  private per-test storage or our owned disposable stack, never an operator.
+- No CI/workflow, required-check, deployment-contract, stable or publication
+  changes. #1432/#1434 and fresh candidate publication remain approval-gated;
+  RC23 is unchanged and not approved by source-only security evidence.
+- Roadmap audit found #1299 closed two seconds after #1419 merged, although
+  the later completion comment explicitly says OPEN and lists missing scheduled
+  remote provenance/failure/RPO evidence. No later acceptance exists. After
+  this qualification slice, restore the tracker to open with the exact evidence
+  links; do not treat a verifier implementation as external scheduler proof.
+
 ## Current scope - qualify viewer tooling PR #1433 (2026-10-07)
 
+- Complete: all local gates and protected exact-head run `37631816758` pass.
+  PR #1433 squash merged as `99763c41`; no candidate/stable/deployment mutation.
 - Independently qualify @types/node 26.6.4 and ts-jest 29.4.14 while #1432
   awaits separate CI-guard approval. Preserve that branch and primary edits.
 - Exact bot head `7e939fed` fails the Node-types baseline and optional WASM
