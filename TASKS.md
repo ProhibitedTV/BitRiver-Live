@@ -89,7 +89,7 @@
   - Result: draft/current references/changelog refreshed without claiming
     publication, stable or target approval. Focused release/promotion/action/
     dependency policy tests passed; local links passed for 92 public files.
-- [-] Task 3 - Verify and merge release documentation
+- [x] Task 3 - Verify and merge release documentation
   - Acceptance: literal verifier, strict PR scorecard, exact-head protected CI
     and clear review state; squash merge with confirmed commit.
   - Local result: literal verifier passed Go, release/docs/contracts, real
@@ -98,10 +98,45 @@
     qualification remains recorded. Linux installer/digest enforcement skips
     explicit. Primary env/OME unchanged; temporary fixture removed. Strict
     PR scorecard passed. Publish and protected CI remain.
-- [ ] Task 4 - Publish and verify immutable prerelease
+  - Completion: documentation-only protected run `37222767976` passed on
+    exact head `a8edb0de`, including Merge gate. Clean merge state and no review
+    threads; #1431 squash merged `98d36dd3`. Product code unchanged from the
+    source/CI-qualified `95d309fd`.
+- [x] Task 4 - Publish and verify immutable prerelease
   - Acceptance: recheck tag, tag qualified main, release workflow passes,
     public asset checksums/root/signature/images/product evidence verify;
     bounded roadmap checkpoint. Never promote stable/latest or change deploy.
+  - Pretag: refreshed main `98d36dd3`; rc.23 still absent remotely and latest
+    published candidate remains rc.22. Push a new tag at that exact main commit
+    and require release workflow success before calling it published.
+  - Completion: rc.23 published 2026-10-04; release run `37222962594` passed.
+    All 46 public downloads match server digests; full checksum coverage/root
+    validation, root/five exact image signatures and anonymous tag/root digest
+    equality passed. Public payload scan and all eight published product stages
+    passed. Root `1bc19e64a77e49924852d722e9672b5b43da3c1acea6b99614d26bfea68c7bdd`.
+    Human release notes and #1293/#1301/#1306/#1307 checkpoints posted. No stable,
+    latest or operator deployment changes.
+- [-] Task 5 - Reconcile published notes and onboarding
+  - Acceptance: only after verified publication, snapshot actual signed root/
+    source/run/support limits, update current download references and real
+    viewer digest, clarify disposable source gate settings, then run focused
+    docs checks/literal verifier and exact-head protected documentation PR.
+    Keep historical notes and all external/stable gates unchanged.
+  - Additional acceptance: current-release consistency guard derives the tag,
+    root and five well-formed digests from the published snapshot, checks
+    onboarding/download references, and passes focused Go/doc checks. It does
+    not substitute for public cryptographic verification.
+  - Focused result: new guard caught a malformed OME digest in the prepared
+    snapshot; corrected it from verified public bytes. Guard plus existing
+    release/promotion/pin tests passed, all five snapshot digests match the
+    public root, and all 93 public-document links passed. Current tag/root/
+    viewer references aligned; historical snapshots unchanged. Full verifier
+    and protected documentation PR remain.
+  - Full local result: literal verifier passed Go (including the new guard),
+    docs/release/contracts, real Postgres migrations, Compose/image builds and
+    healthy API/viewer smoke. Unchanged viewer correctly skipped; Linux
+    ownership and non-production digest skips explicit. Primary env/OME hashes
+    unchanged; disposable fixture removed. Protected PR qualification remains.
 
 ## Scoped change: qualify Docker action updates #1425-#1427 (2026-10-03)
 

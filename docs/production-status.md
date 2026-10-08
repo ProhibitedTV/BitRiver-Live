@@ -6,20 +6,20 @@ BitRiver Live can be promoted as **production-capable for operator-managed, sing
 
 ## Current public candidate
 
-[`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13)
+[`v1.2.3-rc.23`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.23)
 is the current prerelease. Its 46 public assets, package acceptance, five
 signed anonymous image digests, pull-only eight-stage media/API product gate,
-and signed release-set root passed at commit `d416968e` in release run
-`30795492882`. The signed-root SHA-256 is
-`795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+and signed release-set root passed at commit `98d36dd3` in release run
+`37222962594`. The signed-root SHA-256 is
+`1bc19e64a77e49924852d722e9672b5b43da3c1acea6b99614d26bfea68c7bdd`.
 
 That is release-candidate evidence, not stable promotion. Clean installation on
 the target Ubuntu/XOA VM, browser/media access through its real Nginx Proxy
 Manager and firewall path, reboot recovery, and repeated OME recovery still
 need operator evidence.
 
-RC13 is the first candidate eligible for the protected stable-promotion
-workflow. Eligibility is not approval: the tracked clean-host, backup/restore,
+RC23 carries patched dependencies after RC22 was rejected for critical
+CVE-2026-56854. Publication is not stable approval: the tracked clean-host, backup/restore,
 upgrade/rollback, capacity, resilience, SLO, security, and browser gates must
 all bind durable evidence to this exact signed-root hash before stable bytes or
 aliases may be created.
