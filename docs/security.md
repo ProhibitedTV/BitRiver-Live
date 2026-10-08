@@ -10,6 +10,35 @@ Use this quick checklist before merging security-sensitive changes:
 
 This document summarizes security-sensitive operator workflows for BitRiver Live.
 
+## Channel authorization regression matrix
+
+`TestChannelAuthorizationMatrix` in `internal/api` exercises eight actions for
+guest, viewer, unrelated creator, moderator, owning creator and admin principals:
+
+| Action | Guest | Viewer / unrelated creator / moderator | Owning creator / admin |
+|---|---|---|---|
+| Channel detail | Public, no stream key | Public, no stream key | Private stream key included |
+| Playback metadata | Public, no stream key | Public, no stream key | Public, no stream key |
+| Private list with another owner's ID | 401 | 403 | Own / admin list allowed |
+| Metadata update, delete, start, stop, key rotation | 401 | 403 | Allowed |
+
+Denied and read-only requests must leave channel/session state unchanged. Every
+case checks that an unrelated channel is untouched and its key is not exposed;
+authorized mutation cases also prove the requested action actually persists.
+A moderation role alone does not confer channel or ingest administration.
+
+Run the focused handler regression from the repository root:
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestChannelAuthorizationMatrix -count=1 -timeout=120s
+```
+
+This uses private test storage and the shared authenticated-user context helper.
+It is not a middleware/session, physical-media, full DAST or signed-candidate
+security certificate. Session lifecycle tests and the real Compose production
+golden path remain separate gates; #1306 also requires the broader documented
+CSRF/MFA, exposure, upload/media, flooding and candidate-bound review evidence.
+
 ## Secret handling with `_FILE`
 
 `bitriver env validate` supports `<KEY>_FILE` for required secret-like keys so operators can mount secrets as files instead of inlining plaintext values in `.env`.

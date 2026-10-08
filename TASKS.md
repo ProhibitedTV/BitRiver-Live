@@ -1,5 +1,52 @@
 # TASKS
 
+## Scoped change: channel authorization and real product proof (#1306)
+
+- [x] Task 1 - Define the endpoint/role and evidence boundary
+  - Acceptance: inspect shipped permissions, shared fixtures, product harness
+    and isolation; PLAN first; no change to current owner/admin role policy.
+  - Analysis: public detail hides keys except owner/admin; playback always uses
+    public channel shape; private owner listing rejects cross-owner queries;
+    mutations/start/stop/rotate use authenticated creator-owner/admin checks.
+    Existing tests lack one complete cross-role/action no-mutation matrix.
+  - Check: focused existing permission/rotation tests pass with Go 1.26.0;
+    Docker 29.8.1 is available, owned worktree has no root env fixture, and
+    only our completed ledger updates carried onto current main.
+- [x] Task 2 - Add the matrix and operator/security documentation
+  - Acceptance: all six principals/eight actions, denial state/key invariants,
+    useful positive actions and unrelated-channel preservation; focused API
+    checks pass; document handler versus live/candidate security boundaries.
+  - Result: all 48 principal/action cases pass, including actual owner keys,
+    cross-owner creator IDOR, unchanged denied session/channel state and useful
+    authorized update/delete/start/stop/rotate actions. Full API suite passes;
+    92-file Markdown local-link check and diff whitespace check pass. No
+    permission-policy or runtime implementation change was necessary.
+- [x] Task 3 - Exercise real product and full repository gates
+  - Acceptance: eight actual golden-path stages and literal verifier pass;
+    report is scanned, owned fixture/stack removed, primary env/OME unchanged.
+  - Product result: existing quickstart Docker-client gate passes all eight
+    actual stages in 30.377s on patched source. OME and transcoder playlists
+    advance; both decode H.264 1920x1080 for three seconds. Accounts/channel,
+    RTMP live/offline, authenticated chat/owner moderation, VOD upload/publish/
+    public listing/decoding and final readiness pass. Evidence sentinel scan
+    passes; owned project containers/volumes and root env fixture removed.
+    This is source build/development smoke, not TLS/physical-host/candidate proof.
+  - Final check: literal `./scripts/verify.sh --viewer` passes Go, release/docs/
+    contract guards, real migrations, Compose rendering/healthy smoke and forced
+    strict viewer lint plus 231 Jest tests/four snapshots. Linux ownership test
+    is an explicit Windows skip, to be covered by protected Ubuntu CI. Product
+    report SHA-256 `c152c00d...bb9301a`; primary env/OME hashes unchanged.
+- [-] Task 4 - Publish, qualify, merge and record bounded roadmap evidence
+  - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
+    no unresolved reviews and squash merge; #1306/physical gates stay open.
+- [ ] Task 5 - Reconcile the accidental backup-roadmap closure
+  - Acceptance: #1299 state reflects its missing external scheduled evidence;
+    traceable closure timeline/#1419 completion links, no reopened completed
+    implementation work and no new production claim.
+  - Analysis: #1419 merged 2026-09-12 20:03:18 UTC; issue closed 20:03:20;
+    completion comment 5648349569 at 20:03:27 explicitly says OPEN. Its report
+    deliberately has scheduledProvenance false. No later acceptance comment.
+
 ## Scoped change: qualify viewer tooling PR #1433 (2026-10-07)
 
 - [x] Task 1 - Reproduce and assess the dependency update
@@ -60,13 +107,18 @@
     Owned project is removed; worktree env fixture absent; primary env/OME
     hashes unchanged. Final Windows complete single-worker matrix also passes
     68/three intentional touch skips with zero retries. All local gates pass.
-- [-] Task 4 - Publish, qualify and squash merge
+- [x] Task 4 - Publish, qualify and squash merge
   - Acceptance: reviewed paths only, accurate strict release scorecard,
     exact-head protected CI and clear reviews; confirmed squash commit.
     Keep RC23 immutable and external acceptance issues open.
   - Local qualification complete; reviewed eleven-path diff and strict PR
     scorecard pass. Publish to the unchanged bot branch, then require protected
     checks at the new exact head before merging; no bypass or tag operation.
+  - Result: exact head `23bc0482` passes protected run `37631816758`, including
+    native ARM64 runtime, scans, Ubuntu/Windows/macOS Go/launcher and viewer
+    gates. Base unchanged, no reviews/unresolved threads, merge gate success,
+    CLEAN/MERGEABLE. Squash merge confirmed `99763c41` on main. RC23 unchanged;
+    #1306/#1293/#1307 acceptance stays open. Other CI PRs await approval.
 
 ## Scoped change: prepare and publish successor prerelease (2026-10-04)
 
