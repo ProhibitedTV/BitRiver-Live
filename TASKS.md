@@ -46,6 +46,12 @@
   - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
     no unresolved reviews and squash merge; broader #1306 remains open. No
     new candidate/stable/deployed-stack or CI/contract change.
+  - Blocked: PR #1436 (`7ae0ff4e`) passes Ubuntu, Windows/macOS Go, image scans,
+    ARM64, docs, viewer integration and build in run `37930944368`. Audit finds
+    one critical Handlebars 4.7.9 dependency (plus existing 20 moderates), so
+    Merge gate correctly fails. Official advisories identify 4.7.10 as patched.
+    Resolve this in a separate tooling-security PR before rebasing and merging;
+    no audit exception, threshold change or failed-check bypass is permitted.
 
 ## Scoped change: channel authorization and real product proof (#1306)
 

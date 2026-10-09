@@ -2,6 +2,10 @@
 
 ## Current scope - reject forged upload storage references (#1306) (2026-10-08)
 
+- PR #1436 head `7ae0ff4e` is locally qualified but blocked by protected run
+  `37930944368`: viewer integration/build pass; npm audit fails on newly
+  published critical Handlebars advisories. Keep the gate intact and qualify
+  the 4.7.10 tooling patch in a separate prerequisite PR, then rebase/requalify.
 - Start from qualified main `65872686` in the reusable isolated worktree;
   preserve primary operator changes and completed #1435 ledger notes.
 - Read-only finding: authenticated owners can put `mediaPath`, `mediaToken`,
