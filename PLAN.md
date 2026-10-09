@@ -1,7 +1,43 @@
 # PLAN
 
+## Current scope - reject forged upload storage references (#1306) (2026-10-08)
+
+- Start from qualified main `65872686` in the reusable isolated worktree;
+  preserve primary operator changes and completed #1435 ledger notes.
+- Read-only finding: authenticated owners can put `mediaPath`, `mediaToken`,
+  `sourceObjectKey` and `sourceObjectURL` in JSON upload metadata. Media GET and
+  source deletion then trust those fields, permitting cross-upload access if
+  an attacker knows a stored key. Multipart also accepts client metadata.
+- Reproduce reading/deleting another creator's local source only in private
+  test fixtures. Reject those four server-owned fields on both input formats,
+  including case/whitespace variants; preserve custom metadata, external URL
+  uploads, normal server-generated source capabilities and idempotent retries.
+- Rejected multipart requests must remove their temporary file immediately;
+  no upload row, processor enqueue, durable object write or victim mutation.
+  Existing stored rows are not silently migrated; document operator review.
+- Scope is the API upload boundary plus tests/security documentation, not a
+  cross-product refactor. No CI, deployment contract, publication or deployed
+  data changes; other #1306 and physical/candidate gates remain open.
+- Tests: fail-before/fix-after attack regression, JSON/multipart reserved-key
+  and cleanup matrix, ordinary upload/media/delete/idempotency tests, full API
+  and literal forced-viewer verifier. Runtime change also requires the actual
+  disposable Compose eight-stage product path, report scan and teardown.
+- Risks: forged file/object ownership, orphaned pending files, rejected legacy
+  integrations, accidental secret disclosure and test-stack collisions. Keep
+  all exploit fixtures local; disclose bounded evidence after the fix lands.
+- Reproduction confirms both legacy `mediaPath` and `sourceObjectKey` inputs:
+  forged JSON accepted (201), raw GET returns victim bytes (200), attacker
+  DELETE removes victim file (204). Both regressions fail on qualified main;
+  existing upload baseline passes. All data was private temporary test data.
+- Publish a small reviewed PR only after local gates pass, then require exact
+  head protected CI, clear review threads and squash merge before roadmap notes.
+
 ## Current scope - channel authorization and real product proof (#1306) (2026-10-07)
 
+- Complete: 48 API cases, eight real product stages, forced-viewer verifier and
+  protected run `37716919903` pass; #1435 squash merged as `65872686`. #1299
+  reopened with its missing remote scheduler proof documented; no release gate
+  was closed by inference. No CI/contract/publication/deployment changes.
 - Start from protected main `99763c41` in the reusable isolated worktree. Keep
   completed #1433 ledger updates and all primary storage/env/OME edits intact.
 - Add a table-driven sensitive-channel action matrix over the existing handler,

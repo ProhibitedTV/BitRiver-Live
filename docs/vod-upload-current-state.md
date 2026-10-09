@@ -29,7 +29,14 @@ This document describes the **current implementation** for creator VOD uploads.
 
 3. **Metadata + upload record creation**
    - Multipart source files are persisted to configured object storage when `BITRIVER_LIVE_OBJECT_ENDPOINT` + bucket settings are present; otherwise the local upload media directory fallback is used. Upload metadata stores `sourceObjectKey` (and `sourceObjectURL` when available).
-   - `createUploadEntry` validates channel/ownership and calls `uploadsService().CreateUpload(...)`.
+   - `createUploadEntry` validates channel/ownership and rejects client-supplied
+     `mediaPath`, `mediaToken`, `sourceObjectKey` and `sourceObjectURL` before
+     calling `uploadsService().CreateUpload(...)`. These storage references and
+     capabilities are server-managed in both JSON and multipart; case/whitespace
+     variants also return 400. Custom metadata and external `sourceUrl` remain
+     supported. Invalid multipart requests immediately remove their pending file.
+   - Existing source-reference provenance on upgraded instances requires operator
+     review; this does not rewrite old rows. See [the security boundary](security.md#upload-source-ownership-boundary).
    - Backing persistence:
      - in-memory/file store: `internal/storage/vod.go` (`CreateUpload`)
      - postgres: `internal/storage/postgres_channels.go` (`CreateUpload`), table from `deploy/migrations/0001_initial.sql` (`uploads`)

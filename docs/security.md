@@ -39,6 +39,37 @@ security certificate. Session lifecycle tests and the real Compose production
 golden path remain separate gates; #1306 also requires the broader documented
 CSRF/MFA, exposure, upload/media, flooding and candidate-bound review evidence.
 
+## Upload source ownership boundary
+
+`POST /api/uploads` accepts custom metadata and external `sourceUrl` values,
+but clients must not supply `mediaPath`, `mediaToken`, `sourceObjectKey` or
+`sourceObjectURL`. These are server-managed source references/capabilities.
+JSON and multipart requests containing these keys (case-insensitive, with
+surrounding whitespace ignored) return 400 before creating an upload row,
+writing a durable object or enqueueing transcoding. Failed multipart requests
+remove their pending file immediately, including when the file precedes the
+invalid field. Ordinary file uploads still generate their own source/token.
+
+`TestUploadRejectsCrossOwnerSourceReference` reproduces the former cross-owner
+raw-file read/delete issue only in private temporary storage. The reserved-field
+matrix also verifies no durable-storage requests, persisted rows, worker enqueue
+or pending files; positive cases preserve custom metadata and usable media.
+Existing durable storage, upload-size/type and idempotency tests remain separate.
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'Test(UploadRejects|UploadCustom|CreateUpload|DeleteUpload|ServeUploadMedia)' -count=1 -timeout=120s
+```
+
+This prevents newly forged client metadata; it does not migrate or certify
+pre-existing upload rows. Before public exposure, operators upgrading an
+instance that accepted untrusted creators should review existing source-reference
+provenance and investigate unexpected cross-upload references. Do not blindly
+delete a suspicious upload through the API: source deletion uses its persisted
+reference. Back up first and arrange an operator-controlled repair. Previously
+exposed source bytes/tokens are not made private again by this input fix.
+This is not a complete SSRF/media-parser/DAST or candidate-bound security review;
+those remaining #1306 requirements stay open.
+
 ## Secret handling with `_FILE`
 
 `bitriver env validate` supports `<KEY>_FILE` for required secret-like keys so operators can mount secrets as files instead of inlining plaintext values in `.env`.

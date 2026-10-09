@@ -1,5 +1,52 @@
 # TASKS
 
+## Scoped change: reject forged upload storage references (#1306)
+
+- [x] Task 1 - Reproduce the upload ownership finding in private fixtures
+  - Acceptance: PLAN first; a creator-owned JSON upload cannot refer to another
+    creator's local source for reading or deletion. Record fail-before proof,
+    existing upload baseline and exact scope; no live/operator mutations.
+  - Result: existing upload baseline passes (1.313s). Both new attack cases
+    fail before the fix: forged creation 201, raw read 200 with victim bytes,
+    attacker delete 204 removes victim source. Only t.TempDir fixtures touched;
+    no real token, endpoint, operator file or deployed data used.
+- [x] Task 2 - Reject server-owned fields and prove cleanup/compatibility
+  - Acceptance: JSON/multipart reject four reserved fields and case/whitespace
+    variants with 400 before persistence/enqueue; multipart pending file removed.
+    Victim records/source unchanged; ordinary uploads, custom metadata, external
+    URLs, server-generated media tokens and idempotency still work. Document
+    input contract and pre-existing-row limitations; focused/full API tests pass.
+  - Result: both attack regressions now pass; 48 reserved-field/format/order
+    cases reject with 400, leave no pending file/row/enqueue and make zero
+    durable-store requests. Two positive cases preserve custom metadata,
+    external URL input and server-generated media read/delete. Existing durable
+    upload/delete, size/type and idempotency checks pass (focused 2.134s);
+    full API suite passes (4.947s). 92-file Markdown links/diff checks pass.
+    Security/upload docs explain reserved keys and required old-row review;
+    no automatic migration or complete security certification is claimed.
+- [x] Task 3 - Qualify real product and repository gates
+  - Acceptance: record the security input change in Unreleased, then actual
+    eight-stage disposable product path and literal
+    `./scripts/verify.sh --viewer` pass; retained report is secret-scanned;
+    owned containers/volumes/env removed and primary env/OME unchanged.
+  - Product result: all eight actual stages pass in 30.351s; OME/transcoder
+    playlists advance and decode H.264 1920x1080 for three seconds, including
+    published VOD playback. Chat timeout/history and live/offline pass. Per-run
+    secret scan passes; report SHA-256 `4c2c126e...0d731e8`. Owned product stack,
+    volumes and root env removed; generated OME restored. This remains source
+    build/development proof, not signed-candidate/TLS/physical-host acceptance.
+  - Final result: literal `./scripts/verify.sh --viewer` passes all requested
+    checks, including Go, real PostgreSQL migrations, Compose render/healthy
+    quickstart, strict lint and 231 Jest tests/four snapshots. Linux ownership
+    semantics are an explicit Windows skip; production digest enforcement is
+    skipped in this development fixture. Both owned stacks/volumes/env removed,
+    generated OME restored, primary env/OME hashes unchanged. Unreleased note
+    documents the new input restriction and existing-row review requirement.
+- [ ] Task 4 - Publish, protect, merge and update bounded roadmap evidence
+  - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
+    no unresolved reviews and squash merge; broader #1306 remains open. No
+    new candidate/stable/deployed-stack or CI/contract change.
+
 ## Scoped change: channel authorization and real product proof (#1306)
 
 - [x] Task 1 - Define the endpoint/role and evidence boundary
@@ -36,16 +83,25 @@
     strict viewer lint plus 231 Jest tests/four snapshots. Linux ownership test
     is an explicit Windows skip, to be covered by protected Ubuntu CI. Product
     report SHA-256 `c152c00d...bb9301a`; primary env/OME hashes unchanged.
-- [-] Task 4 - Publish, qualify, merge and record bounded roadmap evidence
+- [x] Task 4 - Publish, qualify, merge and record bounded roadmap evidence
   - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
     no unresolved reviews and squash merge; #1306/physical gates stay open.
-- [ ] Task 5 - Reconcile the accidental backup-roadmap closure
+  - Result: PR #1435 exact head `290a4d78` passes protected run `37716919903`;
+    actual selected Go/Ubuntu/viewer/image/docs/ARM64 gates pass, unrelated
+    selectors are accepted skips. No unresolved reviews, unchanged base and
+    CLEAN/MERGEABLE; squash commit `65872686` confirmed on main. Source-only
+    product/security evidence linked in #1306/#1293; broader gates remain open.
+- [x] Task 5 - Reconcile the accidental backup-roadmap closure
   - Acceptance: #1299 state reflects its missing external scheduled evidence;
     traceable closure timeline/#1419 completion links, no reopened completed
     implementation work and no new production claim.
   - Analysis: #1419 merged 2026-09-12 20:03:18 UTC; issue closed 20:03:20;
     completion comment 5648349569 at 20:03:27 explicitly says OPEN. Its report
     deliberately has scheduledProvenance false. No later acceptance comment.
+  - Result: immediately rechecked closed state/latest completion-comment ID,
+    restored OPEN/REOPENED and posted traceable correction 6050891059. Existing
+    recovery/verifier implementation remains complete; real authorized remote
+    scheduling/failure/retention/RPO proof remains a #1293 release blocker.
 
 ## Scoped change: qualify viewer tooling PR #1433 (2026-10-07)
 
