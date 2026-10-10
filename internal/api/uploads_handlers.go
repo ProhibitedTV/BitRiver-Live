@@ -328,6 +328,13 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 	req := createUploadRequest{}
 	metadata := make(map[string]string)
 	var media *uploadedMedia
+	defer func() {
+		// Parsing and validation can fail after a file part has been saved.
+		// Successful persistence clears tempPath; otherwise remove it now.
+		if media != nil && media.tempPath != "" {
+			_ = os.Remove(media.tempPath)
+		}
+	}()
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -400,6 +407,9 @@ func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req crea
 	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 		return domain.Upload{}, http.StatusForbidden, fmt.Errorf("forbidden")
 	}
+	if err := validateUploadMetadata(req.Metadata); err != nil {
+		return domain.Upload{}, http.StatusBadRequest, err
+	}
 	metadata := cloneStringMap(req.Metadata)
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey != "" {
@@ -452,6 +462,18 @@ func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req crea
 		h.UploadProcessor.Enqueue(upload.ID)
 	}
 	return upload, http.StatusCreated, nil
+}
+
+// Storage references and capabilities must come from persistUploadMedia, never
+// from an upload creator who could otherwise read/delete another upload's source.
+func validateUploadMetadata(metadata map[string]string) error {
+	for key := range metadata {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "mediapath", "mediatoken", "sourceobjectkey", "sourceobjecturl":
+			return fmt.Errorf("upload metadata field %q is server-managed", strings.TrimSpace(key))
+		}
+	}
+	return nil
 }
 
 func (h *Handler) findUploadByIdempotencyKey(channelID, key string) (*domain.Upload, error) {

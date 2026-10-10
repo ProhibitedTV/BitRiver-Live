@@ -36,6 +36,14 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 
 ### Fixed
 
+- Corrected the VOD upload implementation guide to describe shipped validation,
+  recording publication, retries and cleanup, with actual operator limitations.
+- Upload creation now rejects client-supplied storage references and media
+  capabilities, preventing newly forged cross-owner raw-source reads/deletes.
+  Invalid multipart requests clean up their pending file immediately. Both JSON
+  and multipart integrations must omit the four server-managed fields listed in
+  [the upload security boundary](docs/security.md#upload-source-ownership-boundary);
+  upgraded instances need a provenance review of existing upload references.
 - Pinned the viewer's transitive Handlebars tooling dependency to 4.7.10 for
   critical JavaScript-injection advisories. Nested lock copies are checked;
   existing audit thresholds remain unchanged and published candidates need

@@ -1,5 +1,81 @@
 # TASKS
 
+## Scoped change: reject forged upload storage references (#1306)
+
+- [x] Task 1 - Reproduce the upload ownership finding in private fixtures
+  - Acceptance: PLAN first; a creator-owned JSON upload cannot refer to another
+    creator's local source for reading or deletion. Record fail-before proof,
+    existing upload baseline and exact scope; no live/operator mutations.
+  - Result: existing upload baseline passes (1.313s). Both new attack cases
+    fail before the fix: forged creation 201, raw read 200 with victim bytes,
+    attacker delete 204 removes victim source. Only t.TempDir fixtures touched;
+    no real token, endpoint, operator file or deployed data used.
+- [x] Task 2 - Reject server-owned fields and prove cleanup/compatibility
+  - Acceptance: JSON/multipart reject four reserved fields and case/whitespace
+    variants with 400 before persistence/enqueue; multipart pending file removed.
+    Victim records/source unchanged; ordinary uploads, custom metadata, external
+    URLs, server-generated media tokens and idempotency still work. Document
+    input contract and pre-existing-row limitations; focused/full API tests pass.
+  - Result: both attack regressions now pass; 48 reserved-field/format/order
+    cases reject with 400, leave no pending file/row/enqueue and make zero
+    durable-store requests. Two positive cases preserve custom metadata,
+    external URL input and server-generated media read/delete. Existing durable
+    upload/delete, size/type and idempotency checks pass (focused 2.134s);
+    full API suite passes (4.947s). 92-file Markdown links/diff checks pass.
+    Security/upload docs explain reserved keys and required old-row review;
+    no automatic migration or complete security certification is claimed.
+- [x] Task 2b - Correct the existing VOD implementation document
+  - Acceptance: describe inspected limits/types/storage/retries, unpublished
+    recordings, manual status/publish UI and cleanup; retain ownership/old-row
+    warnings and distinguish media access from listing visibility. Markdown
+    links and focused/full API checks pass; no new runtime/contract behavior.
+  - Result: rewritten against handlers, processor, server wiring, storage and
+    UI code. Full API suite passes (5.943s), including ownership, validation,
+    cleanup and compatibility regressions; Markdown links and whitespace pass.
+- [x] Task 3 - Qualify real product and repository gates
+  - Acceptance: record the security input change in Unreleased, then actual
+    eight-stage disposable product path and literal
+    `./scripts/verify.sh --viewer` pass; retained report is secret-scanned;
+    owned containers/volumes/env removed and primary env/OME unchanged.
+  - Product result: all eight actual stages pass in 30.351s; OME/transcoder
+    playlists advance and decode H.264 1920x1080 for three seconds, including
+    published VOD playback. Chat timeout/history and live/offline pass. Per-run
+    secret scan passes; report SHA-256 `4c2c126e...0d731e8`. Owned product stack,
+    volumes and root env removed; generated OME restored. This remains source
+    build/development proof, not signed-candidate/TLS/physical-host acceptance.
+  - Final result: literal `./scripts/verify.sh --viewer` passes all requested
+    checks, including Go, real PostgreSQL migrations, Compose render/healthy
+    quickstart, strict lint and 231 Jest tests/four snapshots. Linux ownership
+    semantics are an explicit Windows skip; production digest enforcement is
+    skipped in this development fixture. Both owned stacks/volumes/env removed,
+    generated OME restored, primary env/OME hashes unchanged. Unreleased note
+    documents the new input restriction and existing-row review requirement.
+  - October 10 integrated-source requalification: main `46a6a42f` merged
+    without rewriting published history. All eight product stages pass in
+    25.765s, including advancing/decoded 1080p live and VOD, chat/moderation,
+    live/offline and final readiness. Per-run secret scan passes; new report
+    SHA-256 `34acaec5a55fc94bff3ea117ffea7a72ed77c832c8c447b7fd00096040924014`.
+    Literal `./scripts/verify.sh --viewer` passes Go, real Postgres migrations,
+    docs/contracts, rendered/healthy Compose smoke, strict lint and 231 Jest
+    tests/four snapshots. Windows ownership and unset-mode digest skips remain
+    explicit. Both owned stacks/volumes/env removed, generated OME restored,
+    primary env/OME hashes unchanged. New product report/log and verifier log
+    retained under primary .artifacts/upload-source-integrated-*.
+- [-] Task 4 - Publish, protect, merge and update bounded roadmap evidence
+  - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
+    no unresolved reviews and squash merge; broader #1306 remains open. No
+    new candidate/stable/deployed-stack or CI/contract change.
+  - Historical blocker: PR #1436 (`7ae0ff4e`) passes Ubuntu, Windows/macOS Go, image scans,
+    ARM64, docs, viewer integration and build in run `37930944368`. Audit finds
+    one critical Handlebars 4.7.9 dependency (plus existing 20 moderates), so
+    Merge gate correctly fails. Official advisories identify 4.7.10 as patched.
+    Resolved by #1437 (`46a6a42f`) with protected CI `38091283536`. Requalify
+    the integrated API branch before updating and merging #1436; no audit
+    exception, threshold change or failed-check bypass is permitted.
+  - Local integrated-source gates now pass; publish the reviewed seven-path
+    branch update and refreshed evidence. Exact-head protected CI and squash
+    merge remain pending; broader #1306 stays open.
+
 ## Scoped change: Handlebars tooling security prerequisite
 
 - [x] Task 1 - Reproduce and verify the new dependency blocker
@@ -57,10 +133,13 @@
     production digest enforcement are explicit local skips. Owned containers,
     volumes and root env fixture removed; primary env/OME hashes unchanged.
     Retained log: .artifacts/handlebars-verifier-20261010.log in primary checkout.
-- [-] Task 4 - Publish and merge the prerequisite, then resume #1436
+- [x] Task 4 - Publish and merge the prerequisite, then hand off #1436
   - Acceptance: strict scorecard, protected CI, clear review state and squash
-    merge; update/requalify #1436 against new main before its merge. No gate
-    weakening, candidate publication or deployment changes.
+    merge; resume #1436 under its own API qualification tasks before its merge.
+    No gate weakening, candidate publication or deployment changes.
+  - Result: PR #1437 (`50553c97`) passes all selected protected checks and
+    Merge gate in `38091283536`, with clear review state; squash merged as
+    `46a6a42f`. Preserved API branch now integrates that main commit above.
 
 ## Scoped change: channel authorization and real product proof (#1306)
 
@@ -98,16 +177,25 @@
     strict viewer lint plus 231 Jest tests/four snapshots. Linux ownership test
     is an explicit Windows skip, to be covered by protected Ubuntu CI. Product
     report SHA-256 `c152c00d...bb9301a`; primary env/OME hashes unchanged.
-- [-] Task 4 - Publish, qualify, merge and record bounded roadmap evidence
+- [x] Task 4 - Publish, qualify, merge and record bounded roadmap evidence
   - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
     no unresolved reviews and squash merge; #1306/physical gates stay open.
-- [ ] Task 5 - Reconcile the accidental backup-roadmap closure
+  - Result: PR #1435 exact head `290a4d78` passes protected run `37716919903`;
+    actual selected Go/Ubuntu/viewer/image/docs/ARM64 gates pass, unrelated
+    selectors are accepted skips. No unresolved reviews, unchanged base and
+    CLEAN/MERGEABLE; squash commit `65872686` confirmed on main. Source-only
+    product/security evidence linked in #1306/#1293; broader gates remain open.
+- [x] Task 5 - Reconcile the accidental backup-roadmap closure
   - Acceptance: #1299 state reflects its missing external scheduled evidence;
     traceable closure timeline/#1419 completion links, no reopened completed
     implementation work and no new production claim.
   - Analysis: #1419 merged 2026-09-12 20:03:18 UTC; issue closed 20:03:20;
     completion comment 5648349569 at 20:03:27 explicitly says OPEN. Its report
     deliberately has scheduledProvenance false. No later acceptance comment.
+  - Result: immediately rechecked closed state/latest completion-comment ID,
+    restored OPEN/REOPENED and posted traceable correction 6050891059. Existing
+    recovery/verifier implementation remains complete; real authorized remote
+    scheduling/failure/retention/RPO proof remains a #1293 release blocker.
 
 ## Scoped change: qualify viewer tooling PR #1433 (2026-10-07)
 

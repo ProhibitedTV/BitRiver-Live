@@ -1,6 +1,59 @@
 # PLAN
 
-## Current scope - Handlebars tooling security prerequisite (2026-10-09)
+## Current scope - reject forged upload storage references (#1306) (2026-10-10)
+
+- PR #1437 fixed the critical Handlebars blocker: protected run `38091283536`
+  passes, squash merged as `46a6a42f`. Merge qualified main into the preserved
+  #1436 branch without rewriting its published history; resolve only the plan,
+  task and changelog conflicts, retaining both scopes and qualification evidence.
+- Start from qualified main `65872686` in the reusable isolated worktree;
+  preserve primary operator changes and completed #1435 ledger notes.
+- Read-only finding: authenticated owners can put `mediaPath`, `mediaToken`,
+  `sourceObjectKey` and `sourceObjectURL` in JSON upload metadata. Media GET and
+  source deletion then trust those fields, permitting cross-upload access if
+  an attacker knows a stored key. Multipart also accepts client metadata.
+- Reproduce reading/deleting another creator's local source only in private
+  test fixtures. Reject those four server-owned fields on both input formats,
+  including case/whitespace variants; preserve custom metadata, external URL
+  uploads, normal server-generated source capabilities and idempotent retries.
+- Rejected multipart requests must remove their temporary file immediately;
+  no upload row, processor enqueue, durable object write or victim mutation.
+  Existing stored rows are not silently migrated; document operator review.
+- Scope is the API upload boundary plus tests/security documentation, not a
+  cross-product refactor. No CI, deployment contract, publication or deployed
+  data changes; other #1306 and physical/candidate gates remain open.
+- Tests: fail-before/fix-after attack regression, JSON/multipart reserved-key
+  and cleanup matrix, ordinary upload/media/delete/idempotency tests, full API
+  and literal forced-viewer verifier. Runtime change also requires the actual
+  disposable Compose eight-stage product path, report scan and teardown.
+- Risks: forged file/object ownership, orphaned pending files, rejected legacy
+  integrations, accidental secret disclosure and test-stack collisions. Keep
+  all exploit fixtures local; disclose bounded evidence after the fix lands.
+- Reproduction confirms both legacy `mediaPath` and `sourceObjectKey` inputs:
+  forged JSON accepted (201), raw GET returns victim bytes (200), attacker
+  DELETE removes victim file (204). Both regressions fail on qualified main;
+  existing upload baseline passes. All data was private temporary test data.
+- Publish a small reviewed PR only after local gates pass, then require exact
+  head protected CI, clear review threads and squash merge before roadmap notes.
+- Correct the existing VOD current-state document against inspected code:
+  multipart size/type validation, optional object storage, bounded transient
+  retries, unpublished recording linkage, manual UI refresh/publish and source
+  cleanup. Distinguish listing visibility from media/object access, and explain
+  in-process cleanup timers and existing-row review. No runtime expansion.
+- Requalify focused/full API tests and Markdown links, then the actual eight-stage
+  product path and literal verifier on the integrated source. Preserve earlier
+  reports, scan the new report, remove owned fixtures and require refreshed CI.
+- Integrated-source qualification passes: all eight product stages in 25.765s,
+  secret-scanned report `34acaec5...0924014`, plus literal forced-viewer verifier.
+  Both owned projects/volumes/env removed; primary env/OME hashes unchanged.
+  Publish the reviewed seven-path update and require fresh protected exact-head
+  CI before squash merge; candidate and wider release acceptance remain separate.
+
+## Completed scope - Handlebars tooling security prerequisite (2026-10-09)
+
+- PR #1437 merged as `46a6a42f` after local verification and protected CI
+  `38091283536`; final Windows/Linux matrices pass 68 cases/three skips with
+  zero retries. #1436 resumes under its own API qualification tasks above.
 
 - PR #1436 is preserved at remote `7ae0ff4e`, with local checkpoint `1b2bd00d`.
   Its protected run `37930944368` passes product/build checks but fails npm audit.
@@ -36,6 +89,10 @@
 
 ## Current scope - channel authorization and real product proof (#1306) (2026-10-07)
 
+- Complete: 48 API cases, eight real product stages, forced-viewer verifier and
+  protected run `37716919903` pass; #1435 squash merged as `65872686`. #1299
+  reopened with its missing remote scheduler proof documented; no release gate
+  was closed by inference. No CI/contract/publication/deployment changes.
 - Start from protected main `99763c41` in the reusable isolated worktree. Keep
   completed #1433 ledger updates and all primary storage/env/OME edits intact.
 - Add a table-driven sensitive-channel action matrix over the existing handler,
