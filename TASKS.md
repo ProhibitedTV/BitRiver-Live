@@ -32,7 +32,7 @@
   - Result: rewritten against handlers, processor, server wiring, storage and
     UI code. Full API suite passes (5.943s), including ownership, validation,
     cleanup and compatibility regressions; Markdown links and whitespace pass.
-- [-] Task 3 - Qualify real product and repository gates
+- [x] Task 3 - Qualify real product and repository gates
   - Acceptance: record the security input change in Unreleased, then actual
     eight-stage disposable product path and literal
     `./scripts/verify.sh --viewer` pass; retained report is secret-scanned;
@@ -50,10 +50,18 @@
     skipped in this development fixture. Both owned stacks/volumes/env removed,
     generated OME restored, primary env/OME hashes unchanged. Unreleased note
     documents the new input restriction and existing-row review requirement.
-  - October 10 requalification: qualified main `46a6a42f` integrated after
-    #1437 merged. New product report and literal verifier are pending on this
-    combined source; earlier results above remain historical evidence.
-- [ ] Task 4 - Publish, protect, merge and update bounded roadmap evidence
+  - October 10 integrated-source requalification: main `46a6a42f` merged
+    without rewriting published history. All eight product stages pass in
+    25.765s, including advancing/decoded 1080p live and VOD, chat/moderation,
+    live/offline and final readiness. Per-run secret scan passes; new report
+    SHA-256 `34acaec5a55fc94bff3ea117ffea7a72ed77c832c8c447b7fd00096040924014`.
+    Literal `./scripts/verify.sh --viewer` passes Go, real Postgres migrations,
+    docs/contracts, rendered/healthy Compose smoke, strict lint and 231 Jest
+    tests/four snapshots. Windows ownership and unset-mode digest skips remain
+    explicit. Both owned stacks/volumes/env removed, generated OME restored,
+    primary env/OME hashes unchanged. New product report/log and verifier log
+    retained under primary .artifacts/upload-source-integrated-*.
+- [-] Task 4 - Publish, protect, merge and update bounded roadmap evidence
   - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
     no unresolved reviews and squash merge; broader #1306 remains open. No
     new candidate/stable/deployed-stack or CI/contract change.
@@ -64,6 +72,9 @@
     Resolved by #1437 (`46a6a42f`) with protected CI `38091283536`. Requalify
     the integrated API branch before updating and merging #1436; no audit
     exception, threshold change or failed-check bypass is permitted.
+  - Local integrated-source gates now pass; publish the reviewed seven-path
+    branch update and refreshed evidence. Exact-head protected CI and squash
+    merge remain pending; broader #1306 stays open.
 
 ## Scoped change: Handlebars tooling security prerequisite
 

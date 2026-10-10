@@ -43,6 +43,11 @@
 - Requalify focused/full API tests and Markdown links, then the actual eight-stage
   product path and literal verifier on the integrated source. Preserve earlier
   reports, scan the new report, remove owned fixtures and require refreshed CI.
+- Integrated-source qualification passes: all eight product stages in 25.765s,
+  secret-scanned report `34acaec5...0924014`, plus literal forced-viewer verifier.
+  Both owned projects/volumes/env removed; primary env/OME hashes unchanged.
+  Publish the reviewed seven-path update and require fresh protected exact-head
+  CI before squash merge; candidate and wider release acceptance remain separate.
 
 ## Completed scope - Handlebars tooling security prerequisite (2026-10-09)
 
