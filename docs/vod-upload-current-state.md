@@ -1,104 +1,92 @@
-# VOD upload current state (repo reality)
+# VOD upload current state
 
-This document describes the **current implementation** for creator VOD uploads.
+This describes the shipped upload path and its remaining limitations. The
+[stream lifecycle](stream-lifecycle.md#upload-to-vod-publish-policy) defines
+the upload-to-recording publish policy.
 
 ## Entry points
 
-### API endpoints
-- `POST /api/uploads` (JSON or multipart): `internal/api/uploads_handlers.go` (`Handler.Uploads`, `createUploadFromJSON`, `createUploadFromMultipart`)
-- `GET /api/uploads?channelId=...`: list uploads for channel owner/admin (`Handler.Uploads`)
-- `GET /api/uploads/{id}` and `DELETE /api/uploads/{id}`: upload detail/delete (`Handler.UploadByID`)
-- `GET /api/uploads/{id}/media?token=...`: serves stored source file (`serveUploadMedia`), now reading object storage by `sourceObjectKey` when durable storage is enabled while preserving local-path fallback compatibility
+- `POST /api/uploads`: JSON registration or multipart file upload.
+- `GET /api/uploads?channelId=...`: channel owner/admin upload list.
+- `GET /api/uploads/{id}` and `DELETE /api/uploads/{id}`: owner/admin detail
+  and deletion, including original-source cleanup on deletion.
+- `GET /api/uploads/{id}/media?token=...`: token-authorized original source
+  retrieval for transcoding. Treat the URL/token as a capability, not a public
+  viewer link; the source may be removed after processing.
 
-### Viewer/admin UI that initiates uploads
-- Creator page: `web/viewer/app/creator/uploads/[channelId]/page.tsx`
-- Upload UI: `web/viewer/components/UploadManager.tsx`
-- API client calls:
-  - `createUpload(...)` uses multipart + `XMLHttpRequest` if a file is selected: `web/viewer/lib/viewer-api.ts`
-  - `fetchChannelUploads(...)` for status list: `web/viewer/lib/viewer-api.ts`
+The creator route is `web/viewer/app/creator/uploads/[channelId]/page.tsx`.
+`UploadManager` handles transport/status/publishing; the client helpers live in
+`web/viewer/lib/viewer-api-upload.ts` and are exported by `viewer-api.ts`.
+The server handlers are in `internal/api/uploads_handlers.go`.
 
-## Actual upload flow
+## File validation and ownership
 
-1. **User submits from creator UI**
-   - `UploadManager` builds payload and calls `createUpload`.
-   - If file exists, frontend sends `multipart/form-data` with `file`, `channelId`, optional fields, and `metadata[...]`.
+Multipart requests and file copying are bounded by the API upload limit, which
+defaults to 512 MiB. The whole request includes multipart headers and fields,
+so a file exactly at the limit can exceed the request budget. Oversized input
+returns 413. Allowed extensions are `.mp4`, `.m4v`, `.mov` and `.webm`; declared
+content type and inspected media headers must match the supported formats.
+These checks are not a complete media-parser, malware or resource-abuse review.
 
-2. **API receives file**
-   - `createUploadFromMultipart` streams parts via `MultipartReader`.
-   - `saveMultipartFile` writes the file part to a temp file in `UploadMediaDir` (fallback `os.TempDir()/bitriver-uploads`).
+Both JSON and multipart reject client-supplied `mediaPath`, `mediaToken`,
+`sourceObjectKey` and `sourceObjectURL` with 400, including case/whitespace
+variants. The server creates those references and capabilities for file uploads.
+Other custom metadata and external `sourceUrl` registration remain supported.
+Channel ownership is checked before persistence/enqueueing. Rejected multipart
+requests remove their pending file, including when a later field is invalid.
 
-3. **Metadata + upload record creation**
-   - Multipart source files are persisted to configured object storage when `BITRIVER_LIVE_OBJECT_ENDPOINT` + bucket settings are present; otherwise the local upload media directory fallback is used. Upload metadata stores `sourceObjectKey` (and `sourceObjectURL` when available).
-   - `createUploadEntry` validates channel/ownership and rejects client-supplied
-     `mediaPath`, `mediaToken`, `sourceObjectKey` and `sourceObjectURL` before
-     calling `uploadsService().CreateUpload(...)`. These storage references and
-     capabilities are server-managed in both JSON and multipart; case/whitespace
-     variants also return 400. Custom metadata and external `sourceUrl` remain
-     supported. Invalid multipart requests immediately remove their pending file.
-   - Existing source-reference provenance on upgraded instances requires operator
-     review; this does not rewrite old rows. See [the security boundary](security.md#upload-source-ownership-boundary).
-   - Backing persistence:
-     - in-memory/file store: `internal/storage/vod.go` (`CreateUpload`)
-     - postgres: `internal/storage/postgres_channels.go` (`CreateUpload`), table from `deploy/migrations/0001_initial.sql` (`uploads`)
+This restriction prevents new forged references; it does not repair old rows.
+Review existing source-reference provenance before public exposure, and do not
+blindly delete suspicious rows through the API. Follow the
+[upload security boundary](security.md#upload-source-ownership-boundary).
 
-4. **File storage location**
-   - `persistUploadMedia` uploads source bytes to the configured object-storage backend and stores the durable key; when object storage is not configured, it falls back to local `uploadMediaDir()` storage.
+## Processing and publication
 
-5. **Source URL and tokenization**
-   - `attachMediaToUpload` stores metadata keys:
-     - `mediaPath`
-     - `mediaToken`
-     - `uploadedFilename`
-     - `contentType`
-     - `sourceUrl` = `/api/uploads/{id}/media?token=...` absolute URL built from request host/forwarded headers.
+1. A selected file uses multipart plus XHR upload progress; registration without
+   a file uses JSON. The API parses/validates fields and saves a pending file.
+2. After ownership/input validation, the API creates the upload row. File bytes
+   go to configured object storage when endpoint and bucket settings are present;
+   otherwise they move into `UploadMediaDir` (default
+   `os.TempDir()/bitriver-uploads`). See `internal/api/upload_source_storage.go`.
+3. The server stores the source key and a generated media token. A configured
+   object public endpoint can supply the source URL; otherwise the tokenized API
+   media URL uses `BITRIVER_LIVE_UPLOAD_MEDIA_BASE_URL` when set, or the request
+   origin with the configured trusted-forwarded-header policy.
+4. `internal/service/uploads/processor.go` enqueues pending uploads, marks them
+   `processing`, and calls the ingest controller/transcoder adapter. Defaults
+   are two workers, a queue of 64 and a 30-minute attempt timeout.
+5. Transient failures (network/context errors, HTTP 429 and 5xx) have a bounded
+   three-attempt budget with exponential backoff. Permanent errors or exhausted
+   retries mark the upload `failed`; persistence operations also have bounded
+   retries. Retry state is stored with the upload.
+6. Success calls `EnsureUploadRecording`, links `RecordingID`, and marks the
+   upload `ready` with progress 100 and its playback URL. The JSON and Postgres
+   stores create the recording **unpublished by default**.
+7. The creator refreshes the upload list and explicitly publishes the linked
+   recording. `/api/channels/{id}/vods` lists only published recordings.
+   Upload readiness alone does not publish a VOD.
 
-6. **Transcoding trigger**
-   - `createUploadEntry` enqueues background worker (`UploadProcessor.Enqueue`) if processor configured.
-   - `internal/service/uploads/processor.go`:
-     - loads pending uploads
-     - sets status to `processing`
-     - calls `ingest.Controller.TranscodeUpload(...)` with `SourceURL`
-     - on success sets status `ready`, `progress=100`, `playbackUrl`
-     - on error sets status `failed` and error text
+XHR progress measures transfer to the API, not transcoding completion. Backend
+processing status/progress is visible after list reload or the UI's **Refresh**
+action; `UploadManager` does not periodically poll processing status.
 
-7. **Where transcoding happens**
-   - `internal/ingest/http_controller.go` (`TranscodeUpload`) submits to transcoder adapter.
-   - `cmd/transcoder/main.go` exposes `/v1/uploads` job API.
+## Source cleanup and operator limitations
 
-8. **How status is exposed to UI**
-   - UI reads `GET /api/uploads?channelId=...` and renders `status`, `progress`, `error` (`UploadManager`).
-   - Upload transport progress bar is frontend XHR upload progress only.
-   - Backend processing progress/status appears after refresh/load.
+The server wires `UploadSourceCleaner` for both object and local sources.
+Successful processing schedules immediate original-source cleanup; failed
+processing schedules cleanup after 24 hours. Deleting an upload also cleans up
+its original source. Linked recordings/transcoded output have a separate
+lifecycle; source deletion is not a promise to remove every VOD artifact.
 
-## Recording/VOD linkage reality
+Cleanup runs on in-process timers tied to the processor context. A restart can
+cancel delayed cleanup, and cleanup failures are logged rather than retried by
+a durable retention scheduler. Do not treat the 24-hour delay as a guaranteed
+storage-retention SLA across restarts. Local fallback sources can also disappear
+when the API filesystem is replaced.
 
-- Public VOD list endpoint (`GET /api/channels/{id}/vods`) reads **published recordings**, not uploads directly: `internal/api/channels_directory_handlers.go`.
-- It iterates uploads and only includes entries with `upload.RecordingID != nil`, then loads recording and requires `PublishedAt != nil`.
-- Current upload processor updates upload status/playback URL but does **not create recordings** or set `RecordingID`.
-- Therefore, uploaded items can be `ready` in uploads list but absent from channel `vods` list unless another path sets recording linkage.
-
-## Concrete failure points / gaps observed
-
-1. **No multipart request/file size limit on API ingest path**
-   - `createUploadFromMultipart` + `saveMultipartFile` stream file with `io.Copy` and no max-bytes guard.
-
-2. **No server-side media type/extension validation**
-   - Accepted file content is persisted regardless of media type or extension.
-
-3. **Source media stored only on API local disk**
-   - Files are not moved to object storage in this flow.
-   - If API filesystem is ephemeral/replaced, DB upload rows can outlive file availability.
-
-4. **`sourceUrl` reachability depends on request host/header correctness**
-   - `uploadMediaURL` builds absolute URL from incoming host/forwarded headers.
-   - Misconfigured proxy/host can produce URLs unreachable by transcoder.
-
-5. **No automatic retry when transcode itself fails**
-   - Worker retries on DB update failure (`scheduleRetry`) but transcode errors call `failUpload` and stop.
-
-6. **No built-in recording creation/linking from successful upload**
-   - Processor marks upload `ready` but does not assign `RecordingID`.
-   - Public `/api/channels/{id}/vods` depends on recording linkage + publish state.
-
-7. **No explicit lifecycle cleanup for successful/failed upload source files**
-   - Media file deletion is wired to upload delete, but no automatic post-processing retention/cleanup path is evident in upload flow.
+The transcoder must reach the chosen source URL. Configure the canonical media
+base URL and trusted proxy policy correctly; verify object-storage and media
+delivery access policies independently. Publishing controls public listings,
+not authorization of every known object/CDN/playback URL. Private media access,
+external-source/SSRF behavior and media-parser/resource-abuse acceptance remain
+part of the broader [security review](security.md).

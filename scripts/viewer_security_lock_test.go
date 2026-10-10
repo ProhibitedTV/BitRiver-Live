@@ -19,7 +19,7 @@ func TestViewerSecurityPatchesAreLocked(t *testing.T) {
 	}
 	// Check nested copies too: an override string alone cannot prove that every
 	// consumer resolves the reviewed patch. npm ci/audit remain separate gates.
-	for name, want := range map[string]string{"sharp": "0.35.5", "source-map-js": "1.2.2"} {
+	for name, want := range map[string]string{"handlebars": "4.7.10", "sharp": "0.35.5", "source-map-js": "1.2.2"} {
 		found := false
 		for path, pkg := range lock.Packages {
 			if path != "node_modules/"+name && !strings.HasSuffix(path, "/node_modules/"+name) {

@@ -1,11 +1,11 @@
 # PLAN
 
-## Current scope - reject forged upload storage references (#1306) (2026-10-08)
+## Current scope - reject forged upload storage references (#1306) (2026-10-10)
 
-- PR #1436 head `7ae0ff4e` is locally qualified but blocked by protected run
-  `37930944368`: viewer integration/build pass; npm audit fails on newly
-  published critical Handlebars advisories. Keep the gate intact and qualify
-  the 4.7.10 tooling patch in a separate prerequisite PR, then rebase/requalify.
+- PR #1437 fixed the critical Handlebars blocker: protected run `38091283536`
+  passes, squash merged as `46a6a42f`. Merge qualified main into the preserved
+  #1436 branch without rewriting its published history; resolve only the plan,
+  task and changelog conflicts, retaining both scopes and qualification evidence.
 - Start from qualified main `65872686` in the reusable isolated worktree;
   preserve primary operator changes and completed #1435 ledger notes.
 - Read-only finding: authenticated owners can put `mediaPath`, `mediaToken`,
@@ -35,6 +35,52 @@
   existing upload baseline passes. All data was private temporary test data.
 - Publish a small reviewed PR only after local gates pass, then require exact
   head protected CI, clear review threads and squash merge before roadmap notes.
+- Correct the existing VOD current-state document against inspected code:
+  multipart size/type validation, optional object storage, bounded transient
+  retries, unpublished recording linkage, manual UI refresh/publish and source
+  cleanup. Distinguish listing visibility from media/object access, and explain
+  in-process cleanup timers and existing-row review. No runtime expansion.
+- Requalify focused/full API tests and Markdown links, then the actual eight-stage
+  product path and literal verifier on the integrated source. Preserve earlier
+  reports, scan the new report, remove owned fixtures and require refreshed CI.
+
+## Completed scope - Handlebars tooling security prerequisite (2026-10-09)
+
+- PR #1437 merged as `46a6a42f` after local verification and protected CI
+  `38091283536`; final Windows/Linux matrices pass 68 cases/three skips with
+  zero retries. #1436 resumes under its own API qualification tasks above.
+
+- PR #1436 is preserved at remote `7ae0ff4e`, with local checkpoint `1b2bd00d`.
+  Its protected run `37930944368` passes product/build checks but fails npm audit.
+  Start this separate dependency fix from main `65872686`; restore/requalify the
+  upload branch after this prerequisite merges. Preserve primary operator edits.
+- Official GHSA-xw65-4hp5-5hc7, GHSA-8r5x-fm3f-whwj and GHSA-p8wg-vrv2-v86f
+  published October 8 affect Handlebars through 4.7.9; all identify 4.7.10 as
+  patched. Local npm audit reproduces one critical plus 20 moderate findings.
+  `npm explain` places Handlebars under development dependency ts-jest 29.4.14.
+- Pin the patched transitive dependency, regenerate the portable lock in clean
+  Node 24 Alpine, extend the existing nested-copy security guard and document
+  the advisory/source/candidate boundary. No application API or player changes.
+- Risks: test transformer/compiler behavior, optional lock entries and package
+  provenance. Keep all existing audit thresholds, CI jobs and release rules.
+- Tests: focused lock/security guards, clean Windows/Alpine installs and audits,
+  full viewer integration/build/Playwright, Docker viewer build and literal
+  verifier. Require protected CI on the proposed commit before squash merge.
+- This does not alter published RC23, authorize a new candidate, or complete
+  broader #1306 acceptance. VOD documentation cleanup follows these blockers.
+- Qualification investigation: preserve the first Windows browser reports,
+  trace the two stalled WebKit cases in isolation, then assess a full matrix
+  without changing existing deadlines, retries or capability assertions.
+- The Windows matrix exposed a separate deterministic fixture race: creator
+  setup changes its mocked stream to live after request counts, while the real
+  page polls every four seconds. A slow run skips the asserted offline state.
+  Keep the fixture offline through repeated refreshes, then explicitly publish
+  its live response before the existing transition assertion. Verify fresh API
+  requests and both UI states; no runtime or polling-policy changes.
+- October 10 resume: host reboot ended the verifier before a final result was
+  captured and Docker Desktop is stopped. Restore the test prerequisite, retain
+  earlier failed browser reports, rerun final Windows qualification after the
+  fixture repair, and capture the literal verifier in a retained local log.
 
 ## Current scope - channel authorization and real product proof (#1306) (2026-10-07)
 
