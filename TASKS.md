@@ -1,5 +1,37 @@
 # TASKS
 
+## Scoped change: upload authorization coverage (#1306)
+
+- [x] Task 1 - Define the upload principal/action and capability boundary
+  - Acceptance: PLAN first, inspect shipped policy/helpers and focused baseline;
+    owner/admin-only management versus query-capability raw access, test-only
+    scope, private fixtures and no operator/runtime changes.
+  - Result: inspected list/detail/create/delete and media handlers plus existing
+    role/upload/context/enqueue fixtures. Focused upload/security baseline
+    passes (2.030s). No runtime policy change is proposed.
+- [x] Task 2 - Add the negative/positive authorization matrices and docs
+  - Acceptance: 30 management cases and 24 capability cases pass; denials leak
+    no token/reference, change no upload/channel/source and enqueue nothing.
+    Owner/admin management and valid bearer reads actually work; another upload
+    and its bytes remain untouched. Full API and documentation checks pass.
+  - Result: all 30 management and 24 capability cases pass (3.050s), including
+    non-owner file-first multipart cleanup and real owner/admin creation/delete.
+    Unrelated media, upload/channel state and private values remain protected.
+    Full API suite passes (7.933s); 92-file links and whitespace checks pass.
+    Security docs distinguish management ownership from bearer raw-media access;
+    existing helpers reused, with no production handler or policy changes.
+- [-] Task 3 - Qualify, publish, protect and merge the bounded test slice
+  - Acceptance: literal `./scripts/verify.sh --viewer`, reviewed staging, strict
+    scorecard, secret guard and exact-head protected checks pass; clear reviews,
+    squash merge and bounded #1306 evidence, with wider release gates open.
+  - Local result: literal forced-viewer verifier passes, including Go, real
+    migrations, docs/contracts, Docker builds, rendered/healthy Compose smoke,
+    strict lint and 231 Jest tests/four snapshots. Windows ownership and unset
+    production-mode digest skips are explicit. Owned stack/volumes/env removed,
+    generated OME restored and primary env/OME hashes unchanged. Retained log:
+    primary .artifacts/upload-authorization-verifier-20261010.log. Reviewed
+    four-path PR and protected exact-head qualification remain pending.
+
 ## Scoped change: reject forged upload storage references (#1306)
 
 - [x] Task 1 - Reproduce the upload ownership finding in private fixtures
@@ -61,7 +93,7 @@
     explicit. Both owned stacks/volumes/env removed, generated OME restored,
     primary env/OME hashes unchanged. New product report/log and verifier log
     retained under primary .artifacts/upload-source-integrated-*.
-- [-] Task 4 - Publish, protect, merge and update bounded roadmap evidence
+- [x] Task 4 - Publish, protect, merge and update bounded roadmap evidence
   - Acceptance: reviewed paths, strict scorecard, exact-head protected checks,
     no unresolved reviews and squash merge; broader #1306 remains open. No
     new candidate/stable/deployed-stack or CI/contract change.
@@ -72,9 +104,15 @@
     Resolved by #1437 (`46a6a42f`) with protected CI `38091283536`. Requalify
     the integrated API branch before updating and merging #1436; no audit
     exception, threshold change or failed-check bypass is permitted.
-  - Local integrated-source gates now pass; publish the reviewed seven-path
-    branch update and refreshed evidence. Exact-head protected CI and squash
-    merge remain pending; broader #1306 stays open.
+  - Result: reviewed seven-path head `11cd4d71` passes protected run
+    `38092639377` and Merge gate; clear review threads and unchanged base,
+    CLEAN/MERGEABLE. Squash merged as `0f794710` on October 10. Ubuntu logs
+    confirm installer lifecycle, real migrations and Compose smoke; Windows/
+    macOS Go, image/native ARM64 and viewer lint/unit/build/audit all pass.
+    CI browser matrix passes 68 cases/three established skips. Broader #1306
+    remains open; source proof does not qualify RC23 bytes or repair old rows.
+    Roadmap evidence: #1306 issuecomment-6103068236 and #1293
+    issuecomment-6103071600; neither release/security issue was closed.
 
 ## Scoped change: Handlebars tooling security prerequisite
 
