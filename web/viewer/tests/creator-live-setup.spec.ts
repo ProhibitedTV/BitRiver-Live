@@ -9,6 +9,7 @@ test.describe("creator live setup", () => {
     const livePlaybackUrl = "https://cdn.example.com/live/master.m3u8";
     let playbackChecks = 0;
     let sessionChecks = 0;
+    let encoderStarted = false;
 
     await page.addInitScript(() => {
       const clipboardWrites: string[] = [];
@@ -45,7 +46,7 @@ test.describe("creator live setup", () => {
 
     await page.route(`**/api/channels/${channelId}/playback`, async (route) => {
       playbackChecks += 1;
-      const isLive = playbackChecks > 2;
+      const isLive = encoderStarted;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -86,7 +87,7 @@ test.describe("creator live setup", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(
-          sessionChecks > 1
+          encoderStarted
             ? [
                 {
                   id: "session-live-1",
@@ -169,6 +170,12 @@ test.describe("creator live setup", () => {
 
     await expect(streamKeyInput).toHaveValue("********");
     await expect(copyObsButton).toBeVisible();
+    // Additional polls must not advance the fixture before the encoder starts.
+    for (let refresh = 0; refresh < 2; refresh += 1) {
+      const beforeRefresh = playbackChecks;
+      await page.getByRole("button", { name: "Refresh now" }).click();
+      await expect.poll(() => playbackChecks).toBeGreaterThan(beforeRefresh);
+    }
     await expect(
       page.getByTestId("test-stream-status-card").getByText("Waiting for stream", { exact: true })
     ).toBeVisible();
@@ -221,7 +228,12 @@ test.describe("creator live setup", () => {
     );
     expect(clipboardWrites).toContain(`http://127.0.0.1:3000/channels/${channelId}`);
 
+    const playbackBeforeLive = playbackChecks;
+    const sessionsBeforeLive = sessionChecks;
+    encoderStarted = true;
     await page.getByRole("button", { name: "Refresh now" }).click();
+    await expect.poll(() => playbackChecks).toBeGreaterThan(playbackBeforeLive);
+    await expect.poll(() => sessionChecks).toBeGreaterThan(sessionsBeforeLive);
     await expect(
       page.getByTestId("test-stream-status-card").getByText("Live", { exact: true })
     ).toBeVisible();
