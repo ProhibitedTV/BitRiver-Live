@@ -106,6 +106,15 @@ the Jest tooling chain must be reported, not described as a clean audit.
 These source patches do not change already published RC23 bytes; that candidate
 cannot be approved for stable promotion using the refreshed source audit.
 
+The October 9 tooling refresh pins Handlebars 4.7.10, consumed by ts-jest,
+for [unsafe template embedding](https://github.com/advisories/GHSA-xw65-4hp5-5hc7),
+[AST type confusion](https://github.com/advisories/GHSA-8r5x-fm3f-whwj) and
+[own-property check bypass](https://github.com/advisories/GHSA-p8wg-vrv2-v86f).
+The latter two advisories are critical; the existing npm gate remains mandatory
+even though this dependency belongs to development tooling. The lock guard checks
+all nested copies. This source update also requires fresh candidate qualification;
+it does not repair packages or images already published.
+
 The unpatched `braces@3.0.3` nesting advisory GHSA-vfj7-8cjw-p6xm affects the
 ESLint-only `fast-glob -> micromatch` dependency chain. A private MIT-licensed
 fork in `web/viewer/vendor/braces` bounds syntax nesting and validates external

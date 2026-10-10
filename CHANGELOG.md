@@ -36,6 +36,12 @@ The format is inspired by Keep a Changelog and the project follows the SemVer po
 
 ### Fixed
 
+- Pinned the viewer's transitive Handlebars tooling dependency to 4.7.10 for
+  critical JavaScript-injection advisories. Nested lock copies are checked;
+  existing audit thresholds remain unchanged and published candidates need
+  separate qualification.
+- Creator setup browser qualification now controls the simulated encoder state
+  explicitly, so background polling cannot skip its offline-state assertions.
 - Production Go dependency `golang.org/x/crypto` now requires patched v0.55.0
   after critical CVE-2026-56854 invalidated RC22 for stable promotion.
 - Viewer dependencies now require Next.js/ESLint config 16.3.8 and

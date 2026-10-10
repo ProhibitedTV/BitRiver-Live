@@ -1,5 +1,67 @@
 # TASKS
 
+## Scoped change: Handlebars tooling security prerequisite
+
+- [x] Task 1 - Reproduce and verify the new dependency blocker
+  - Acceptance: inspect current audit, dependency chain and official patched
+    range; PLAN first; preserve the API PR and unrelated operator work.
+  - Result: local audit confirms one critical/20 moderate findings; ts-jest
+    consumes Handlebars 4.7.9. Three October 8 GHSAs identify 4.7.10 as patched;
+    registry version/integrity verified. PR #1436 remains blocked, not merged.
+- [x] Task 2 - Apply the narrow security pin and portable lock
+  - Acceptance: only reviewed dependency entries change; nested-copy guard,
+    optional WASM guard and full high/critical audits pass; policy docs updated.
+  - Result: override/lock now resolve Handlebars 4.7.10; only that package's
+    version, integrity, URL and upstream minimist range changed in the lock.
+    Focused security/portable-lock/baseline guards pass. Clean Windows and
+    Node 24 Alpine installs plus full high/critical audits pass (20 moderate
+    tooling findings remain). Upstream release notes corroborate compiler/
+    property/precompiled-output fixes; policy and Unreleased notes updated.
+- [x] Task 3 - Qualify the complete viewer and repository
+  - Acceptance: clean Windows/Alpine installation, viewer integration/build,
+    Playwright matrix, Docker build and literal verifier pass with honest
+    audit counts and explicit platform skips; owned fixtures cleaned up.
+  - Qualification repair: reproduce the creator fixture race with repeated
+    refreshes, replace request-count state changes with explicit offline/live
+    phases, retain both UI assertions and verify fresh requests; focused test
+    first, then the unchanged full matrices and repository gate.
+  - First Windows attempt: lint, 231 Jest tests/four snapshots and production
+    build pass. Browser matrix: 66 pass, three existing skips, two WebKit
+    timeouts (page creation and page evaluation). Preserve reports and isolate
+    with tracing; no deadline, retry or capability assertion changes.
+  - Diagnostic: isolated WebKit cases pass 3/4; iPhone navigation spends 23.6s
+    in a click before timing out at Close. Trace retained outside source;
+    five minimal blank-page probes pass. Cause remains unconfirmed. Linux
+    comparison initially stopped at eslint because disposable tmpfs was
+    noexec; mount inspection confirmed it, and the rerun uses exec mounts.
+  - Linux: lint, 231 tests/four snapshots and production build pass. Container
+    HOSTNAME initially bound Next away from loopback (HTTP probes confirmed);
+    explicit loopback then passes all 68 browser cases with three established
+    desktop-touch skips, zero retries, and the full high/critical audit.
+  - Second Windows matrix: 66 pass/three skips; all WebKit cases pass, but the
+    creator fixture race and a Firefox failed-playlist deadline fail. Repeated
+    offline refreshes reproduce the creator failure in 8.1s; explicit fixture
+    phases then pass in 5.6s, including fresh playback/session request checks.
+    Reports retained; Firefox timing remains under investigation.
+  - October 10 resume: host reboot invalidated the running verifier session;
+    final completion was not captured. Docker Desktop restart and final browser/
+    verifier qualification are pending. No merge has occurred.
+  - Final Windows matrix after reboot and fixture repair: all 68 cases pass,
+    three established desktop-touch skips, zero retries (3.2m). A preceding
+    Firefox trace completed every page assertion but failed in browser-context
+    teardown; trace retained. No browser-version, timeout or capability changes.
+    Refreshed full audit still has zero high/critical and 20 moderate findings.
+  - Literal verifier passes: Go, docs/contracts, real Postgres migrations,
+    Docker viewer/builds, rendered Compose and healthy smoke, strict lint and
+    231 Jest tests/four snapshots. Linux ownership semantics and unset-mode
+    production digest enforcement are explicit local skips. Owned containers,
+    volumes and root env fixture removed; primary env/OME hashes unchanged.
+    Retained log: .artifacts/handlebars-verifier-20261010.log in primary checkout.
+- [-] Task 4 - Publish and merge the prerequisite, then resume #1436
+  - Acceptance: strict scorecard, protected CI, clear review state and squash
+    merge; update/requalify #1436 against new main before its merge. No gate
+    weakening, candidate publication or deployment changes.
+
 ## Scoped change: channel authorization and real product proof (#1306)
 
 - [x] Task 1 - Define the endpoint/role and evidence boundary
