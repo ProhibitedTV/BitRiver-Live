@@ -1,6 +1,34 @@
 # PLAN
 
-## Current scope - reject forged upload storage references (#1306) (2026-10-10)
+## Current scope - upload authorization coverage (#1306) (2026-10-10)
+
+- Start from qualified main `0f794710` in the same isolated worktree; carry
+  reviewed completion notes only and preserve primary operator changes.
+- Read-only audit: upload list/detail/create/delete require channel owner or
+  admin; raw media deliberately requires its query capability, not a session.
+  Existing tests lack a complete principal/action and capability boundary matrix.
+- Add test-only coverage for guest, viewer, unrelated creator, moderator, owner
+  and admin across list/detail/JSON-create/file-first multipart-create/delete.
+  Require exact denials, token/reference non-disclosure, unchanged denied state
+  and source bytes, useful authorized actions and unrelated-upload preservation.
+- Separately test all six principals with missing/wrong/another-upload/valid
+  media tokens. Even owner/admin must present the capability; a valid bearer
+  intentionally works without a session. This is not public VOD access policy.
+- Reuse existing real private-storage, upload, actor-context and enqueue helpers.
+  Risks: false-positive happy paths, source deletion, orphaned pending files and
+  accidental policy drift. Fixtures stay in per-test temporary directories.
+- Tests: focused existing upload baseline, new 54-case matrix, full API suite,
+  Markdown/whitespace/secret/scorecard guards and literal forced-viewer verifier.
+  Require exact-head protected CI, clear reviews and normal squash merge.
+- Update security docs with precise handler/capability boundaries. No runtime,
+  schema, workflow, deployment contract or candidate/deployed-stack changes;
+  legacy-row and candidate-bound wider #1306 acceptance remain open.
+- All 54 new cases, full API and literal forced-viewer verifier pass. Fresh
+  Compose smoke, 231 Jest tests/four snapshots and fixture teardown pass;
+  primary env/OME hashes remain unchanged. Publish four reviewed paths, then
+  require protected exact-head CI and clear review state before squash merge.
+
+## Completed scope - reject forged upload storage references (#1306) (2026-10-10)
 
 - PR #1437 fixed the critical Handlebars blocker: protected run `38091283536`
   passes, squash merged as `46a6a42f`. Merge qualified main into the preserved
@@ -46,8 +74,9 @@
 - Integrated-source qualification passes: all eight product stages in 25.765s,
   secret-scanned report `34acaec5...0924014`, plus literal forced-viewer verifier.
   Both owned projects/volumes/env removed; primary env/OME hashes unchanged.
-  Publish the reviewed seven-path update and require fresh protected exact-head
-  CI before squash merge; candidate and wider release acceptance remain separate.
+  Reviewed seven-path PR #1436 passes protected exact-head `11cd4d71` run
+  `38092639377`, including Merge gate; squash merged as `0f794710` with clear
+  reviews and fresh base. Candidate and wider release acceptance stay separate.
 
 ## Completed scope - Handlebars tooling security prerequisite (2026-10-09)
 

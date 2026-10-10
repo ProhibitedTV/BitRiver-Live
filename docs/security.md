@@ -41,6 +41,27 @@ CSRF/MFA, exposure, upload/media, flooding and candidate-bound review evidence.
 
 ## Upload source ownership boundary
 
+`TestUploadAuthorizationMatrix` covers 30 handler cases: guest, viewer,
+unrelated creator, moderator, owner and admin across list, detail, JSON create,
+file-first multipart create and delete. Management requires owner/admin;
+guests receive 401 and other non-owners receive 403. Denials reveal no source
+reference/token, persist/enqueue nothing and remove any pending multipart file.
+Positive cases prove real persistence, listing, source capabilities and deletion;
+all cases preserve unrelated uploads/source bytes and channel state.
+
+Raw `GET /api/uploads/{id}/media` intentionally uses a query-token capability,
+not session ownership. `TestUploadMediaCapabilityMatrix` covers 24 cases: all
+six principals with missing, wrong, another upload's or valid source tokens.
+Even owner/admin must supply the correct token; a valid bearer can read without
+a session so the transcoder can fetch its source. Within the tested upload
+management endpoints, only owner/admin responses disclose the capability.
+Keep it private; this is not public VOD
+listing policy, token revocation, middleware/session or complete DAST proof.
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestUpload(AuthorizationMatrix|MediaCapabilityMatrix)' -count=1 -timeout=120s
+```
+
 `POST /api/uploads` accepts custom metadata and external `sourceUrl` values,
 but clients must not supply `mediaPath`, `mediaToken`, `sourceObjectKey` or
 `sourceObjectURL`. These are server-managed source references/capabilities.
