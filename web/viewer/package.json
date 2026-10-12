@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.64.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -40,7 +40,7 @@
     "brace-expansion": "5.0.12",
     "braces": "file:vendor/braces",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.0",
     "jest": "30.5.2",
     "jest-environment-jsdom": "30.5.2",
     "ts-jest": "29.4.14",
