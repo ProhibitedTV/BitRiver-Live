@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "hls.js": "1.7.3",
-    "next": "16.3.8",
+    "next": "16.4.0",
     "ovenplayer": "0.10.54",
     "react": "19.3.0",
     "react-dom": "19.3.0"
