@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload redacted contract evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-contract-evidence
           path: ${{ env.BITRIVER_RELEASE_EVIDENCE_DIR }}
@@ -317,7 +317,7 @@ jobs:
           fi
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-live-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -405,7 +405,7 @@ jobs:
           fi
 
       - name: Upload bitriver binary artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bitriver-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -530,7 +530,7 @@ jobs:
           fi
 
       - name: Upload launcher archives
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: launcher-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-launcher-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -539,7 +539,7 @@ jobs:
 
       - name: Upload Linux installer packages
         if: matrix.goos == 'linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: launcher-linux-packages-${{ matrix.goarch }}
           path: |
@@ -624,7 +624,7 @@ jobs:
           rm -rf "$bundle_root"
 
       - name: Upload viewer bundle artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: viewer-bundle
           path: ${{ github.workspace }}/dist/bitriver-viewer-${{ github.ref_name }}.tar.gz
@@ -797,7 +797,7 @@ jobs:
           output-file: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: container-sbom-${{ matrix.component }}
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
@@ -805,7 +805,7 @@ jobs:
           retention-days: 7
 
       - name: Upload image signature bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: container-signature-${{ matrix.component }}
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.image.sigstore.json
@@ -964,7 +964,7 @@ jobs:
           output-file: bitriver-viewer-${{ env.RELEASE_TAG }}.spdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: container-sbom-viewer
           path: bitriver-viewer-${{ env.RELEASE_TAG }}.spdx.json
@@ -972,7 +972,7 @@ jobs:
           retention-days: 7
 
       - name: Upload image signature bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: container-signature-viewer
           path: bitriver-viewer-${{ env.RELEASE_TAG }}.image.sigstore.json
@@ -1077,7 +1077,7 @@ jobs:
 
       - name: Upload pull-only product evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-product-evidence
           path: |
@@ -1118,7 +1118,7 @@ jobs:
           scripts/generate-brew-formula.sh "$VERSION" "$arm_url" "$arm_sha" "$amd_url" "$amd_sha" dist/formula/bitriver-live.rb
 
       - name: Upload formula artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: homebrew-formula
           path: dist/formula/bitriver-live.rb
@@ -1229,7 +1229,7 @@ jobs:
           & $light -nologo -ext $wixUIExtension bitriver-live.wixobj bitriver-release-assets.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
 
       - name: Upload MSI artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-installer
           path: dist/bitriver-live-${{ github.ref_name }}.msi
@@ -1378,7 +1378,7 @@ jobs:
             --inventory "$BITRIVER_RELEASE_PUBLICATION_EVIDENCE/artifact-inventory.tsv"
 
       - name: Upload release publication evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-publication-evidence
           path: ${{ env.BITRIVER_RELEASE_PUBLICATION_EVIDENCE }}
