@@ -17,9 +17,9 @@ If you are evaluating the project, start here. If you are preparing a production
 | --- | --- | --- |
 | Windows Docker Desktop evaluation | You want a native PowerShell check that builds, starts, and probes the full local stack. | `.\scripts\verify-windows-docker.ps1 -Start` |
 | Source checkout | You want a local stack on Linux/macOS or plan to inspect/change code. | `./scripts/quickstart.sh` |
-| Ubuntu 24.04 amd64 host | You want a source-free, boot-managed Compose installation. | [`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13) `.deb` or launcher archive; follow [`installing-on-ubuntu.md`](installing-on-ubuntu.md) |
+| Ubuntu 24.04 amd64 host | You want a source-free, boot-managed Compose installation. | [`v1.2.3-rc.23`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.23) `.deb` or launcher archive; follow [`installing-on-ubuntu.md`](installing-on-ubuntu.md) |
 
-RC13 is a public prerelease, not the stable `v1.2.3` declaration. Its signed
+RC23 is a public prerelease, not the stable `v1.2.3` declaration. Its signed
 release set covers binaries, launcher archives, amd64/arm64 Linux packages, a
 Windows MSI, a Homebrew formula, SBOMs, five signed anonymous GHCR image
 digests, and sanitized product evidence. Package availability and hosted-runner

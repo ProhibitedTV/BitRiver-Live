@@ -11,12 +11,15 @@ Next.js viewer, media services, Postgres, and Redis ship as one Docker Compose
 stack.
 
 **Current public candidate:**
-[`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13).
+[`v1.2.3-rc.23`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.23).
 It is a prerelease for evaluation and staged home-hosting rollout, not a stable
-or managed-service promise. RC13 is the first public candidate produced by the
-current immutable release-set workflow. Its 46 assets, five exact image
+or managed-service promise. RC23 carries patched Go/viewer dependencies and
+the qualified browser matrix. Its 46 assets, five exact image
 digests, SBOMs, sanitized product evidence, and `CHECKSUMS.txt` are bound by a
 keylessly signed `release-set.json`.
+See the [published notes](docs/releases/v1.2.3-rc.23.md) for its exact signed
+root and remaining external gates. RC22 is historical and rejected for stable
+promotion after a critical dependency finding.
 
 ![BitRiver Live viewer home showing one live channel](docs/assets/screenshots/viewer-home.png)
 
@@ -45,7 +48,7 @@ capture, not concept art._
 | Goal | Supported entry point | What has been proved |
 | --- | --- | --- |
 | Evaluate on Windows | Source checkout + Docker Desktop Linux containers | Native PowerShell contract check and full local Compose/OME startup |
-| Host on Ubuntu | RC13 `.deb` or launcher archive on Ubuntu Server 24.04 amd64 | Signed release set, package install/remove, anonymous exact-image pulls, and pull-only media/API product gate |
+| Host on Ubuntu | RC23 `.deb` or launcher archive on Ubuntu Server 24.04 amd64 | Signed release set, package install/remove, anonymous exact-image pulls, and pull-only media/API product gate |
 | Develop or contribute | Source checkout on Windows, macOS, or Linux | Cross-platform Go and entrypoint CI plus the canonical repository gate |
 
 The Ubuntu package and archive are real public downloads. Clean XOA VM reboot,
@@ -117,7 +120,7 @@ Docker Engine and the Compose plugin. Download the package and checksum from
 the same immutable release:
 
 ```bash
-release_tag=v1.2.3-rc.13
+release_tag=v1.2.3-rc.23
 base_url="https://github.com/ProhibitedTV/BitRiver-Live/releases/download/${release_tag}"
 
 curl -fLO "${base_url}/bitriver-live_${release_tag}_amd64.deb"
@@ -214,7 +217,7 @@ the exact trusted-proxy, TLS, firewall, and media-port guidance.
 
 ## Production evidence boundary
 
-RC13 proves:
+RC23 proves:
 
 - a checksum-complete, signed public release set and five signed, anonymously
   readable GHCR image digests;

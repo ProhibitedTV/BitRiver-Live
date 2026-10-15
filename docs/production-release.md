@@ -8,14 +8,12 @@ For the promotion ladder that explains which checks are blocking or advisory at
 each stage, read [`docs/release-gates.md`](release-gates.md) before changing CI,
 release workflows, or operator-facing deployment behavior.
 
-Latest published candidate:
-[`v1.2.3-rc.22`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.22)
-is historical evidence, **not eligible for stable promotion** because its
-production dependency graph contains critical CVE-2026-56854. Patched source
-and successor preparation are tracked in the [stable-line draft](releases/v1.2.3-draft.md).
-A successor must pass publication and pull-only product gates, then bind every
-external gate to its own signed root. Do not infer target-host approval from
-source, CI, hosted VM, or an earlier candidate's evidence.
+Latest published candidate: [v1.2.3-rc.23](releases/v1.2.3-rc.23.md) passed
+signed publication and pull-only product gates. RC22 remains historical and
+rejected for stable promotion because it contains critical CVE-2026-56854.
+RC23 must still bind every external gate to its own signed root before stable
+approval. Do not infer target-host approval from source, CI, hosted VM, or an
+earlier candidate's evidence.
 
 **Canonical deployment path:** Production rollouts must flow through the
 repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails
@@ -108,13 +106,26 @@ tears down the disposable stack. Attach only
 `production-golden-path.json`; raw Compose logs and generated media-service
 configuration are not release evidence.
 
-Before tagging or promoting a release candidate, run the named golden-path release gate and attach its artifact directory to the release ticket/change request:
+Before tagging, run the named full source release gate in a disposable checkout
+with generated test credentials and owned Compose state. Keep the saved env at
+production; use the documented inline development override for source builds.
+The explicit network settings let clean Docker builders download the upstream
+production graph; they do not change the verifier's offline host-Go defaults:
 
 ```bash
-./scripts/release-gate-smoke.sh --tier full --target vX.Y.Z
+BITRIVER_LIVE_MODE=development \
+  GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org \
+  ./scripts/release-gate-smoke.sh --tier full --target vX.Y.Z
 ```
 
-The full tier writes `.artifacts/release-gate/release-gate-report.json`, redacted env evidence, a contract snapshot, Compose config output, quickstart/smoke logs, and Compose diagnostics. If Docker Compose is not available on a local review machine, the fast tier can still produce non-mutating evidence, but the full tier must pass on a Docker-capable release-candidate host before tagging:
+The full tier leaves its test stack running: tear down only the owned test
+project and remove its credentials after collecting evidence. It writes
+`.artifacts/release-gate/release-gate-report.json`, redacted env evidence, a
+contract snapshot, Compose config output, quickstart/smoke logs and diagnostics.
+Raw rendered config/logs can contain test secrets and stay private; share only
+scanner-approved evidence, not the entire raw directory. If Docker Compose is
+unavailable, fast tier can produce non-mutating evidence, but full tier must
+pass on a disposable Docker-capable source host before tagging:
 
 ```bash
 ./scripts/release-gate-smoke.sh --tier fast --target vX.Y.Z
