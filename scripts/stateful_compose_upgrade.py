@@ -21,6 +21,47 @@ class UpgradePreparationError(ValueError):
 DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 
 
+def compare_prereleases(source: str, target: str) -> int:
+    """Compare SemVer prerelease identifiers; stable outranks prerelease."""
+    if not source:
+        return 0 if not target else 1
+    if not target:
+        return -1
+    source_parts = source.split(".")
+    target_parts = target.split(".")
+    for left, right in zip(source_parts, target_parts):
+        if left == right:
+            continue
+        left_numeric = left.isascii() and left.isdecimal()
+        right_numeric = right.isascii() and right.isdecimal()
+        if left_numeric and right_numeric:
+            left_number, right_number = int(left), int(right)
+            return (left_number > right_number) - (left_number < right_number)
+        if left_numeric != right_numeric:
+            return -1 if left_numeric else 1
+        return (left > right) - (left < right)
+    return (len(source_parts) > len(target_parts)) - (
+        len(source_parts) < len(target_parts)
+    )
+
+
+def require_forward_upgrade(source_tag: str, target_tag: str) -> candidate.ReleaseMetadata:
+    """Refuse a no-op or downgrade before rendering any upgrade artifacts."""
+    source = candidate.parse_tag(source_tag)
+    target = candidate.parse_tag(target_tag)
+    source_core = (source.major, source.minor, source.patch)
+    target_core = (target.major, target.minor, target.patch)
+    if target_core < source_core or (
+        target_core == source_core
+        and compare_prereleases(source.prerelease, target.prerelease) >= 0
+    ):
+        raise UpgradePreparationError(
+            "stateful upgrade candidate must be newer than source: "
+            f"{source_tag} -> {target_tag}"
+        )
+    return source
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -175,6 +216,7 @@ def prepare_upgrade_pair(
     namespace: str,
     secret_factory: Callable[[str], str] = candidate.default_secret_factory,
 ) -> None:
+    source_metadata = require_forward_upgrade(source_tag, candidate_tag)
     template_content = source_template.read_text(encoding="utf-8")
     _, template_values = candidate.parse_env_template(template_content)
     source = read_release_set(
@@ -193,7 +235,6 @@ def prepare_upgrade_pair(
         namespace=namespace,
         template_values=template_values,
     )
-    source_metadata = candidate.parse_tag(source_tag)
     rendered_source, sentinels = candidate.prepare_environment(
         template_content,
         source_metadata,
