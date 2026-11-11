@@ -29,6 +29,23 @@ The planner prints a checklist with current-image detection, migration expectati
 
 The command is best-effort: if Docker is unavailable or the stack is stopped, it warns and falls back to `.env` tags when possible.
 
+### Forward-only rehearsal input validation
+
+The source/candidate release-set preparation helper,
+`scripts/stateful_compose_upgrade.py`, rejects identical or backward-ordered
+release tags **before generating either environment, sentinel or metadata
+evidence**. It uses semantic version precedence, so `v1.2.3-rc.10` is newer
+than `v1.2.3-rc.9` and `v1.2.3` is newer than any same-base prerelease.
+A valid release-set checksum and matching image digests alone do not make a
+same-version or downgrade pair an acceptable upgrade rehearsal.
+
+This preflight only checks forward ordering. The supported N-1/minor and
+one-major-at-a-time path restrictions above still apply, and passing the
+preflight does not approve a rejected RC as a production rollback source or
+replace the actual published-package/host upgrade and rollback rehearsal.
+The RC19 -> RC20 pair below remains a supported *test input* for the existing
+bounded rehearsal, not a promoted previous stable release.
+
 ### Current automated rehearsal boundary: RC19 to RC20
 
 The repository-owned stateful data-plane rehearsal uses the immediate immutable
