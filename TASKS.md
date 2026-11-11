@@ -1,5 +1,51 @@
 # TASKS
 
+## Scoped change: bind packaged-host Postgres migration fingerprint (#1299)
+
+- [x] Task 1 - Audit producer, host helper and restored-state contract
+  - Acceptance: confirm producer's exact ledger hash input, host backup
+    entry point, current fixture, and no package dependency on off-host CLI.
+  - Result: `backup-postgres.sh` hashes the sorted, pipe-delimited six-field
+    `psql -qAt -F '|'` ledger; `host_recovery.validate_postgres_set` only
+    copies the declared fingerprint. The host launcher includes the standalone
+    helper, not the off-host Python verifier. PLAN scoped the change first.
+- [x] Task 2 - Validate producer ledger and negative/positive fixtures
+  - Acceptance: require matching producer-compatible migration fingerprint,
+    applied-only nonempty rows, unique filenames and safe field encoding
+    before any host manifest is generated. Preserve existing host test paths.
+  - Result: the standalone host recovery helper recomputes the producer's
+    sorted, six-field pipe-delimited UTF-8 migration ledger hash and rejects
+    invalid or mismatched evidence before creating a host recovery manifest.
+    Tests now use producer-shaped evidence; 12 rechecksummed negative fixtures
+    include missing database, altered fingerprint/rows, malformed fields,
+    status and duplicate filenames. A valid two-row unsorted JSON case
+    demonstrates the producer's stable filename order.
+  - Added `scripts/host_recovery_contract_test.go` to invoke the full Python
+    host recovery suite from the existing `go test ./scripts` gate, without
+    editing CI/workflow requirements. Local Python/Go/full verifier execution
+    is blocked by unavailable local repository checkout and Docker. No test
+    pass is asserted before protected PR CI runs.
+- [x] Task 3 - Document limitations and qualify the PR
+  - Acceptance: update the packaged-host recovery runbook; review diff,
+    include test evidence and medium-risk release scorecard; require
+    exact-head protected CI before squash merge and record blocked local
+    commands honestly.
+  - Result: PR #1455 limits the fix to the standalone host helper, 12 negative
+    and two-row positive Python cases, Go test bridge, operations runbook,
+    PLAN and TASKS. Exact implementation head `0c6be23518a0a482520bf9f446a5d767981c68f5`
+    passed protected run 43082389322: Ubuntu test-all (including host
+    recovery Python tests via `go test ./scripts`, real PostgreSQL migration
+    lifecycle and Docker quickstart), Windows/macOS Go tests, Ubuntu/Windows/
+    macOS entrypoint checks, docs consistency, secret guard and Merge gate.
+  - This task-evidence commit requires a new protected *final-head* CI pass
+    before merge. Local `python3 -m unittest scripts.host_recovery_test`,
+    `go test ./scripts` and literal `./scripts/verify.sh` were unavailable
+    because there is no mounted repository checkout or Docker. They are
+    not claimed as local passes. No production recovery drill was performed.
+  - Boundaries: no producer, artifact schema, deployment contract, workflows,
+    restore service, real host or release package edits. #1299 remains
+    open until scheduled off-host and isolated lost-host restore proof.
+
 ## Scoped change: require forward-only stateful upgrade pairs (#1298)
 
 - [x] Task 1 - Audit the published-pair upgrade preflight

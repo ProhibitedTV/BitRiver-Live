@@ -484,6 +484,21 @@ one transaction. The public manifest contains hashes, counts, release identity,
 encryption parameters, and timestamps only. It never contains configuration,
 paths below the protected roots, object keys, passphrases, or row contents.
 
+Before publishing the host recovery manifest, the packaged-host helper now
+revalidates the nested Postgres manifest's migration fingerprint against its
+applied migration rows using the producer's exact sorted six-column ledger
+encoding. A missing, malformed, non-applied, duplicated or contradictory
+ledger fails the host backup step **even if the Postgres archive, manifest and
+checksum have been rechecksummed together**. This prevents those inner
+metadata inconsistencies from being carried forward as verified host recovery
+evidence. The helper remains standalone in the published launcher bundle.
+
+This is a **manifest consistency check**, not proof that the archive can be
+restored. Continue running the isolated Postgres restore and full lost-host
+recovery acceptance, and preserve separate scheduled off-host freshness and
+RPO/RTO evidence under issue #1299. Do not infer a passing restore from a
+passing host-backup manifest check.
+
 For a lost host, first verify and extract the exact release launcher on the
 fresh machine. Before installing or activating the package, restore only into
 absent `/etc/bitriver-live`, `/var/lib/bitriver-live`, and
