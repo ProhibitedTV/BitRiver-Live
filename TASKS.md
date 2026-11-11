@@ -8,11 +8,17 @@
   - Result: read-only inspection confirmed that only archive Size was checked;
     empty historical manifest/checksum keys still counted as complete, while
     only newest bytes were downloaded. PLAN recorded the exact scope first.
-- [ ] Task 2 - Require non-empty size for each listed backup asset
+- [x] Task 2 - Require non-empty size for each listed backup asset
   - Acceptance: reject missing, boolean, non-integer and zero/negative Size
     for archive, manifest and checksum assets, without downloading historical
     backups or changing the report schema. Add positive/negative focused tests.
-  - Result: pending code, tests and focused validation.
+  - Result: all three listed asset Size fields now require positive integers;
+    existing producer-compatible full-set fixture remains unchanged.
+    Regression tests cover zero-byte historical archive, manifest and checksum;
+    malformed/missing historical manifest Size metadata also fails closed.
+    Local runtime tests blocked: no mounted repository or Docker in this
+    execution environment. Exact-branch protected CI will exercise Python
+    tests via Go scripts package and full Ubuntu gate before any merge.
 - [ ] Task 3 - Document claim boundaries and qualify PR
   - Acceptance: run focused Python and Go tests plus literal verifier where
     possible, update runbook, review diff, open PR with complete release
