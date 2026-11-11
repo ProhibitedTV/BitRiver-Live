@@ -25,14 +25,26 @@
     editing CI/workflow requirements. Local Python/Go/full verifier execution
     is blocked by unavailable local repository checkout and Docker. No test
     pass is asserted before protected PR CI runs.
-- [ ] Task 3 - Document limitations and qualify the PR
+- [x] Task 3 - Document limitations and qualify the PR
   - Acceptance: update the packaged-host recovery runbook; review diff,
     include test evidence and medium-risk release scorecard; require
     exact-head protected CI before squash merge and record blocked local
     commands honestly.
+  - Result: PR #1455 limits the fix to the standalone host helper, 12 negative
+    and two-row positive Python cases, Go test bridge, operations runbook,
+    PLAN and TASKS. Exact implementation head `0c6be23518a0a482520bf9f446a5d767981c68f5`
+    passed protected run 43082389322: Ubuntu test-all (including host
+    recovery Python tests via `go test ./scripts`, real PostgreSQL migration
+    lifecycle and Docker quickstart), Windows/macOS Go tests, Ubuntu/Windows/
+    macOS entrypoint checks, docs consistency, secret guard and Merge gate.
+  - This task-evidence commit requires a new protected *final-head* CI pass
+    before merge. Local `python3 -m unittest scripts.host_recovery_test`,
+    `go test ./scripts` and literal `./scripts/verify.sh` were unavailable
+    because there is no mounted repository checkout or Docker. They are
+    not claimed as local passes. No production recovery drill was performed.
   - Boundaries: no producer, artifact schema, deployment contract, workflows,
-    restore service, real host or release package edits. #1299 must remain
-    open without real off-host and isolated lost-host restore proof.
+    restore service, real host or release package edits. #1299 remains
+    open until scheduled off-host and isolated lost-host restore proof.
 
 ## Scoped change: require forward-only stateful upgrade pairs (#1298)
 
