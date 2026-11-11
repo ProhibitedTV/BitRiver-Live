@@ -5,9 +5,10 @@
 - [x] Task 1 - Audit nested Postgres host manifest vs recovered evidence
   - Acceptance: locate the producer's seven-field trio result, the host manifest verifier, fresh-restore report and disaster-report consumers.
   - Result: the host backup records seven fields (three names, three SHA-256 digests and migration fingerprint), but the outer verifier only checks names, and the restore report discards the newly verified trio in favor of the declared metadata. PLAN records this mismatch and its impact on release evidence.
-- [ ] Task 2 - Reject contradictory host-backup and recovered trio identities
+- [x] Task 2 - Reject contradictory host-backup and recovered trio identities
   - Acceptance: require complete, valid Postgres trio metadata in outer host verification and compare exact freshly verified inner-trio fields before writing a passing restore report. Regression tests must rechecksum tampered outer manifests and exercise positive fresh recovery.
-  - Result: pending implementation and protected tests.
+  - Result: `host_recovery.py` now requires a producer-compatible Postgres archive basename, matching adjacent sidecar basenames, and four valid SHA-256 fields in the outer host manifest. `build_restore_report` compares the newly validated inner backup trio (all seven identity fields) to that outer inventory before emitting any report. Negative tests rechecksum tampered outer manifests (nine invalid names/missing/malformed identity cases, four well-formed but mismatched hash cases) and assert no passing restore report; preserved positive fresh-host recovery checks exact matching trio.
+  - The existing `scripts/host_recovery_contract_test.go` runs these Python cases from `go test ./scripts`. No workflow/required-check edits. A local repository checkout/Docker is unavailable in this environment, so focused Go/Python/verify commands are not claimed to have run locally; protected exact-head GitHub CI is required for qualification.
 - [ ] Task 3 - Document evidence boundary and qualify PR
   - Acceptance: update operations runbook, review diff and medium-risk PR scorecard, run focused and full checks where available, and require successful protected *exact-head* CI with no blocking reviews for merge.
   - Boundaries: no backup format/schema, Postgres producer, restore service, package, Compose/env, CI/workflow or real host changes. #1299 stays OPEN until actual off-host/scheduled lost-host recovery and measured RPO/RTO evidence exists.
