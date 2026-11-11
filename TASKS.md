@@ -24,14 +24,28 @@
     not mounted and Docker is unavailable in this environment; protected
     exact-head GitHub CI must execute the new and existing Python/Go tests
     before merge. No test execution is claimed here.
-- [ ] Task 3 - Document, verify and qualify an isolated PR
+- [x] Task 3 - Document, verify and qualify an isolated PR
   - Acceptance: update upgrade docs; execute focused Python and Go checks and
     literal verifier when possible; record blocked checks, review diff,
     submit full medium-risk scorecard, and require protected exact-head CI
     and no unresolved reviews before merge.
-  - Boundaries: do not edit Compose, CI/workflows, migrations, environment
-    contract, published assets, real hosts or runtime services. #1298 remains
-    open pending actual accepted-host upgrade/rollback proof.
+  - Result: PR #1454 includes the forward-only preflight, positive/refusal
+    regression cases, Go-to-Python test bridge, and updated upgrade docs.
+    Exact implementation head `867fe5278cc445b340b1aecfc38384e8224a886e`
+    passed GitHub Actions run 43053697531 (attempt 3): Ubuntu full test-all
+    including Go scripts/Python preflight, PostgreSQL migration and Docker
+    quickstart; macOS/Windows Go, macOS/Windows/Ubuntu quickstart entrypoints,
+    documentation consistency, secret-file guard and protected Merge gate.
+    Attempts 1 and 2 failed only at SRS apt-get from runner DNS outage;
+    no code/Compose/workflow change was used to clear the blocker.
+  - This final task-result-only commit must independently pass protected
+    exact-head checks before merge. No local checkout/Docker was available,
+    so literal local `./scripts/verify.sh` is not claimed as executed.
+    There were no inline review threads or blocking review submissions;
+    automated Codex review was unavailable due to usage limits.
+  - Boundaries: no Compose, CI/workflow, migration, environment contract,
+    published asset, real host or runtime service edits. #1298 remains open
+    pending accepted published-host upgrade/rollback proof.
 
 ## Scoped change: reject zero-byte retained backup sidecars (#1299)
 
