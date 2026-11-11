@@ -1,5 +1,27 @@
 # TASKS
 
+## Scoped change: require forward-only stateful upgrade pairs (#1298)
+
+- [x] Task 1 - Audit the published-pair upgrade preflight
+  - Acceptance: inspect both verified release-set identities, tag parser,
+    current RC19 -> RC20 test, and the documented no-downgrade contract.
+  - Result: the helper SHA-binds source/candidate release-set manifests and
+    renders both environments but only parses source tag metadata. There is
+    no order check before environment/evidence output. Scope recorded in PLAN.
+- [ ] Task 2 - Reject non-increasing candidate versions with regression tests
+  - Acceptance: compare canonical source and candidate SemVer tags including
+    prerelease numeric order and stable priority; reject equal/reversed pairs
+    before any outputs. Preserve RC19 -> RC20 and exact-image behavior.
+  - Result: pending implementation and focused regression evidence.
+- [ ] Task 3 - Document, verify and qualify an isolated PR
+  - Acceptance: update upgrade docs; execute focused Python and Go checks and
+    literal verifier when possible; record blocked checks, review diff,
+    submit full medium-risk scorecard, and require protected exact-head CI
+    and no unresolved reviews before merge.
+  - Boundaries: do not edit Compose, CI/workflows, migrations, environment
+    contract, published assets, real hosts or runtime services. #1298 remains
+    open pending actual accepted-host upgrade/rollback proof.
+
 ## Scoped change: reject zero-byte retained backup sidecars (#1299)
 
 - [x] Task 1 - Audit listed retention-set integrity semantics
