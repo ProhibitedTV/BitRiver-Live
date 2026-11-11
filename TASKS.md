@@ -1,5 +1,26 @@
 # TASKS
 
+## Scoped change: verify backup migration ledger fingerprint (#1299)
+
+- [x] Task 1 - Audit the off-host producer/verifier contract
+  - Acceptance: inspect the producer's ordered `psql -qAt -F '|'` migration
+    fields, off-host manifest and checksum verification, and current tests.
+  - Result: the backup producer hashes sorted ledger lines, while off-host
+    qualification checked only the fingerprint's 64-hex shape; scope recorded
+    in PLAN first. No backup format or deployment contract change.
+- [ ] Task 2 - Bind the manifest migration rows to the producer fingerprint
+  - Acceptance: rebuild the producer's six-column, newline-terminated UTF-8
+    ledger in filename order; reject missing/non-string or separator-bearing
+    fields, and SHA mismatches after other structural checks.
+  - Tests: known SHA, reordered multiple rows, mutated row and fingerprint
+    with valid enclosing archive/manifest checksums; existing fixtures pass.
+- [ ] Task 3 - Qualify the verifier, document scope, and open review PR
+  - Acceptance: focused Python and scripts-Go tests pass; full verifier and
+    protected PR checks attempted/reported; docs explain the stronger
+    consistency check and that restore/scheduling evidence remains separate.
+  - No production state, published candidates, host configs or CI workflows
+    are modified.
+
 ## Scoped change: upload authorization coverage (#1306)
 
 - [x] Task 1 - Define the upload principal/action and capability boundary
