@@ -1,5 +1,17 @@
 # TASKS
 
+## Scoped change: require exact PostgreSQL identity in restored host reports (#1299)
+
+- [x] Task 1 - Audit nested Postgres host manifest vs recovered evidence
+  - Acceptance: locate the producer's seven-field trio result, the host manifest verifier, fresh-restore report and disaster-report consumers.
+  - Result: the host backup records seven fields (three names, three SHA-256 digests and migration fingerprint), but the outer verifier only checks names, and the restore report discards the newly verified trio in favor of the declared metadata. PLAN records this mismatch and its impact on release evidence.
+- [ ] Task 2 - Reject contradictory host-backup and recovered trio identities
+  - Acceptance: require complete, valid Postgres trio metadata in outer host verification and compare exact freshly verified inner-trio fields before writing a passing restore report. Regression tests must rechecksum tampered outer manifests and exercise positive fresh recovery.
+  - Result: pending implementation and protected tests.
+- [ ] Task 3 - Document evidence boundary and qualify PR
+  - Acceptance: update operations runbook, review diff and medium-risk PR scorecard, run focused and full checks where available, and require successful protected *exact-head* CI with no blocking reviews for merge.
+  - Boundaries: no backup format/schema, Postgres producer, restore service, package, Compose/env, CI/workflow or real host changes. #1299 stays OPEN until actual off-host/scheduled lost-host recovery and measured RPO/RTO evidence exists.
+
 ## Scoped change: bind packaged-host Postgres migration fingerprint (#1299)
 
 - [x] Task 1 - Audit producer, host helper and restored-state contract
