@@ -151,6 +151,27 @@ class HostRecoveryTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def rewrite_host_manifest(self, payload: dict) -> None:
+        """Rechecksum the outer host set, bypassing only its byte-integrity gate."""
+        self.manifest.write_text(
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        self.checksum.write_text(
+            f"{sha256(self.archive)}  {self.archive.name}\n"
+            f"{sha256(self.manifest)}  {self.manifest.name}\n",
+            encoding="utf-8",
+        )
+
+    def recovered_host_root(self) -> Path:
+        target = self.root / "target"
+        shutil.copytree(self.config, target / "etc/bitriver-live")
+        shutil.copytree(self.data, target / "var/lib/bitriver-live")
+        recovered_postgres = target / Path(recovery.POSTGRES_RELATIVE.as_posix())
+        recovered_postgres.mkdir(parents=True)
+        for path in (self.postgres, self.postgres_manifest, self.postgres_checksum):
+            shutil.copy2(path, recovered_postgres / path.name)
+        return target
+
     def test_disaster_report_requires_digest_pinned_restore_helper(self) -> None:
         with self.assertRaisesRegex(recovery.RecoveryError, "digest-pinned"):
             recovery.build_disaster_report(
@@ -325,13 +346,7 @@ class HostRecoveryTest(unittest.TestCase):
             recovery.validate_archive_stream(manifest, self.tar_stream(link=True))
 
     def test_restore_report_matches_fresh_recovered_state(self) -> None:
-        target = self.root / "target"
-        shutil.copytree(self.config, target / "etc/bitriver-live")
-        shutil.copytree(self.data, target / "var/lib/bitriver-live")
-        recovered_postgres = target / Path(recovery.POSTGRES_RELATIVE.as_posix())
-        recovered_postgres.mkdir(parents=True)
-        for path in (self.postgres, self.postgres_manifest, self.postgres_checksum):
-            shutil.copy2(path, recovered_postgres / path.name)
+        target = self.recovered_host_root()
         report_path = self.root / "restore-report.json"
         recovery.build_restore_report(
             argparse.Namespace(
@@ -348,7 +363,75 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertEqual(report["status"], "passed")
         self.assertTrue(report["invariants"]["configuration"]["matched"])
         self.assertTrue(report["invariants"]["data"]["matched"])
+        self.assertEqual(
+            report["backup"]["postgres"],
+            recovery.validate_postgres_set(
+                self.postgres, expected_release=RELEASE, expected_commit=COMMIT
+            ),
+        )
         self.assertNotIn("unit-secret-value", report_path.read_text(encoding="utf-8"))
+
+    def test_host_manifest_refuses_invalid_nested_postgres_identity(self) -> None:
+        baseline = json.loads(self.manifest.read_text(encoding="utf-8"))
+        cases = (
+            ("archiveName", "../escape", "invalid Postgres archive name"),
+            ("archiveName", "wrong.sql.gz", "invalid Postgres archive name"),
+            ("manifestName", "wrong.manifest.json", "manifestName does not match"),
+            ("checksumName", "wrong.sha256", "checksumName does not match"),
+            ("archiveSha256", True, "archiveSha256 is invalid"),
+            ("manifestSha256", "not-a-hash", "manifestSha256 is invalid"),
+            ("checksumSha256", None, "checksumSha256 is invalid"),
+            ("migrationFingerprintSha256", "", "migrationFingerprintSha256 is invalid"),
+            ("archiveSha256", "__missing__", "archiveSha256 is invalid"),
+        )
+        for field, value, expected_error in cases:
+            with self.subTest(field=field, value=value):
+                payload = json.loads(json.dumps(baseline))
+                postgres = payload["payload"]["postgres"]
+                if value == "__missing__":
+                    del postgres[field]
+                else:
+                    postgres[field] = value
+                self.rewrite_host_manifest(payload)
+                with self.assertRaisesRegex(recovery.RecoveryError, expected_error):
+                    recovery.verify_backup_set(
+                        self.archive, expected_release=RELEASE, expected_commit=COMMIT
+                    )
+
+    def test_restore_report_refuses_rechecksummed_outer_postgres_hash_mismatch(self) -> None:
+        target = self.recovered_host_root()
+        baseline = json.loads(self.manifest.read_text(encoding="utf-8"))
+        report_path = self.root / "bad-restore-report.json"
+        for field in recovery.POSTGRES_EVIDENCE_HASH_FIELDS:
+            with self.subTest(field=field):
+                payload = json.loads(json.dumps(baseline))
+                old_hash = payload["payload"]["postgres"][field]
+                payload["payload"]["postgres"][field] = (
+                    "0" * 64 if old_hash != "0" * 64 else "1" * 64
+                )
+                self.rewrite_host_manifest(payload)
+                # The outer set is still syntactically valid and its checksum
+                # passes; the recovered inner trio must be bound independently.
+                recovery.verify_backup_set(
+                    self.archive, expected_release=RELEASE, expected_commit=COMMIT
+                )
+                with self.assertRaisesRegex(
+                    recovery.RecoveryError,
+                    "restored Postgres backup identity does not match",
+                ):
+                    recovery.build_restore_report(
+                        argparse.Namespace(
+                            archive=self.archive,
+                            root_prefix=target,
+                            expected_release=RELEASE,
+                            expected_commit=COMMIT,
+                            started_at_epoch=int(
+                                dt.datetime.now(dt.timezone.utc).timestamp()
+                            ),
+                            output=report_path,
+                        )
+                    )
+                self.assertFalse(report_path.exists())
 
     def test_release_package_refuses_identity_and_inventory_mismatch(self) -> None:
         package = self.root / recovery.RECOVERY_PACKAGE_NAME

@@ -494,10 +494,18 @@ metadata inconsistencies from being carried forward as verified host recovery
 evidence. The helper remains standalone in the published launcher bundle.
 
 This is a **manifest consistency check**, not proof that the archive can be
-restored. Continue running the isolated Postgres restore and full lost-host
+restored. The fresh-host restore reporter also requires the *reverified*
+recovered Postgres archive, manifest, checksum sidecars and migration ledger
+fingerprint to match all four digests declared by the enclosing encrypted
+host-backup manifest. An outer manifest with contradictory, even separately
+rechecksummed, Postgres metadata is rejected before a passing host-restore
+report can be emitted. Missing hashes, unsupported backup basenames and
+mismatched sidecar names are rejected during host-backup verification.
+
+Continue running the isolated Postgres restore and full lost-host
 recovery acceptance, and preserve separate scheduled off-host freshness and
-RPO/RTO evidence under issue #1299. Do not infer a passing restore from a
-passing host-backup manifest check.
+RPO/RTO evidence under issue #1299. A consistent manifest and host-restore
+report do not alone prove the full application golden path or off-host durability.
 
 For a lost host, first verify and extract the exact release launcher on the
 fresh machine. Before installing or activating the package, restore only into

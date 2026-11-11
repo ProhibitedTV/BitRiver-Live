@@ -1,5 +1,20 @@
 # TASKS
 
+## Scoped change: require exact PostgreSQL identity in restored host reports (#1299)
+
+- [x] Task 1 - Audit nested Postgres host manifest vs recovered evidence
+  - Acceptance: locate the producer's seven-field trio result, the host manifest verifier, fresh-restore report and disaster-report consumers.
+  - Result: the host backup records seven fields (three names, three SHA-256 digests and migration fingerprint), but the outer verifier only checks names, and the restore report discards the newly verified trio in favor of the declared metadata. PLAN records this mismatch and its impact on release evidence.
+- [x] Task 2 - Reject contradictory host-backup and recovered trio identities
+  - Acceptance: require complete, valid Postgres trio metadata in outer host verification and compare exact freshly verified inner-trio fields before writing a passing restore report. Regression tests must rechecksum tampered outer manifests and exercise positive fresh recovery.
+  - Result: `host_recovery.py` now requires a producer-compatible Postgres archive basename, matching adjacent sidecar basenames, and four valid SHA-256 fields in the outer host manifest. `build_restore_report` compares the newly validated inner backup trio (all seven identity fields) to that outer inventory before emitting any report. Negative tests rechecksum tampered outer manifests (nine invalid names/missing/malformed identity cases, four well-formed but mismatched hash cases) and assert no passing restore report; preserved positive fresh-host recovery checks exact matching trio.
+  - The existing `scripts/host_recovery_contract_test.go` runs these Python cases from `go test ./scripts`. No workflow/required-check edits. A local repository checkout/Docker is unavailable in this environment, so focused Go/Python/verify commands are not claimed to have run locally; protected exact-head GitHub CI is required for qualification.
+- [x] Task 3 - Document evidence boundary and qualify PR
+  - Acceptance: update operations runbook, review diff and medium-risk PR scorecard, run focused and full checks where available, and require successful protected *exact-head* CI with no blocking reviews for merge.
+  - Result: PR #1456 includes `host_recovery.py`, 13 rechecksummed negative scenarios, preserved positive host-restore proof, `docs/operations.md`, PLAN and TASKS. Implementation head `579366f9b69e277abc4c97e24e5bbeaf9ac9c81b` passed Ubuntu test-all (including Python host recovery via `go test ./scripts`, PostgreSQL migrations and Docker quickstart), three-platform quickstart, docs consistency and secret guard in GitHub Actions run 43121789355. The Merge gate rejected the original PR description because required scorecard headings/check-boxes were absent, **not** due to a code/test failure. PR body was corrected to exact repo template without workflow or source changes.
+  - This final TASKS result commit must pass an independent protected exact-head CI and Merge gate before squash merge. Local `python3 -m unittest scripts.host_recovery_test`, `go test ./scripts` and literal `./scripts/verify.sh` were not run: this environment has no checkout or Docker. No automated code review success or real host recovery drill is claimed.
+  - Boundaries: no backup format/schema, Postgres producer, restore service, package, Compose/env, CI/workflow or real host changes. #1299 stays OPEN until actual off-host/scheduled lost-host recovery and measured RPO/RTO evidence exists.
+
 ## Scoped change: bind packaged-host Postgres migration fingerprint (#1299)
 
 - [x] Task 1 - Audit producer, host helper and restored-state contract
