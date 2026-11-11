@@ -18,6 +18,10 @@
 - Add positive tests for rc.9 -> rc.10 and rc -> stable and failure tests for
   equal versions, stable -> same-base RC, reversed RC ordering and declining
   core versions; verify no output files are written when rejected.
+- The existing Go scripts test gate wraps off-host Python tests but does not
+  exercise `scripts.stateful_compose_upgrade_test`. Add a focused Go test
+  adapter using the existing Python/root test helpers, without changing
+  workflows, `scripts/verify.sh`, or CI path filters.
 - Update `docs/upgrades.md` and scoped TASKS for the upgraded rehearsal
   preflight, without changing the upgrade CLI, production services, Compose,
   migration ledger, release workflow, binary/package, or deployment contract.
