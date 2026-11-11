@@ -27,6 +27,16 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def producer_migration_fingerprint(migrations: list[dict[str, str]]) -> str:
+    """The producer hashes sorted psql -qAt -F '|' ledger lines, not JSON."""
+    fields = ("filename", "version", "checksumSha256", "status", "release", "commit")
+    rows = (
+        "|".join(migration[field] for field in fields) + "\n"
+        for migration in sorted(migrations, key=lambda item: item["filename"])
+    )
+    return hashlib.sha256("".join(rows).encode("utf-8")).hexdigest()
+
+
 def write_launcher_package(path: Path, *, unsafe_link: bool = False) -> None:
     root = "bitriver-launcher-linux-amd64"
     required = (
@@ -79,6 +89,17 @@ class HostRecoveryTest(unittest.TestCase):
         self.postgres = self.root / "bitriver-postgres-20260815T000000Z.sql.gz"
         self.postgres.write_bytes(b"postgres-backup-fixture")
         self.postgres_manifest = Path(f"{self.postgres}.manifest.json")
+        self.migrations = [
+            {
+                "filename": "0001_initial.sql",
+                "version": "0001",
+                "checksumSha256": "c" * 64,
+                "status": "applied",
+                "release": RELEASE,
+                "commit": COMMIT,
+            }
+        ]
+        self.postgres_fingerprint = producer_migration_fingerprint(self.migrations)
         self.postgres_manifest.write_text(
             json.dumps(
                 {
@@ -88,7 +109,10 @@ class HostRecoveryTest(unittest.TestCase):
                         "name": self.postgres.name,
                         "sha256": sha256(self.postgres),
                     },
-                    "database": {"migrationFingerprintSha256": "b" * 64},
+                    "database": {
+                        "migrationFingerprintSha256": self.postgres_fingerprint,
+                        "migrations": self.migrations,
+                    },
                 }
             )
             + "\n",
@@ -148,7 +172,7 @@ class HostRecoveryTest(unittest.TestCase):
         self.assertEqual(manifest["payload"]["data"]["fileCount"], 2)
         self.assertEqual(
             manifest["payload"]["postgres"]["migrationFingerprintSha256"],
-            "b" * 64,
+            self.postgres_fingerprint,
         )
 
     def test_wrong_release_and_corruption_are_refused(self) -> None:
