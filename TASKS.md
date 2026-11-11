@@ -8,11 +8,19 @@
   - Result: the helper SHA-binds source/candidate release-set manifests and
     renders both environments but only parses source tag metadata. There is
     no order check before environment/evidence output. Scope recorded in PLAN.
-- [ ] Task 2 - Reject non-increasing candidate versions with regression tests
+- [x] Task 2 - Reject non-increasing candidate versions with regression tests
   - Acceptance: compare canonical source and candidate SemVer tags including
     prerelease numeric order and stable priority; reject equal/reversed pairs
     before any outputs. Preserve RC19 -> RC20 and exact-image behavior.
-  - Result: pending implementation and focused regression evidence.
+  - Result: parsed both canonical tags and compared SemVer core and prerelease
+    identifiers, with numeric rc.10 > rc.9 and stable > same-base prerelease.
+    Refusal occurs before environment, sentinel or report writes. Added four
+    passing forward scenarios and eleven refused pairs asserting zero output
+    artifacts. Existing RC19 -> RC20 positive fixture is unchanged.
+  - Local focused/unit/full commands blocked because the GitHub checkout is
+    not mounted and Docker is unavailable in this environment; protected
+    exact-head GitHub CI must execute the new and existing Python/Go tests
+    before merge. No test execution is claimed here.
 - [ ] Task 3 - Document, verify and qualify an isolated PR
   - Acceptance: update upgrade docs; execute focused Python and Go checks and
     literal verifier when possible; record blocked checks, review diff,
