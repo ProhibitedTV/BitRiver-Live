@@ -26,8 +26,9 @@ S3-compatible bucket/prefix it:
 5. Verifies the complete `bitriver.postgres-backup/v1` manifest contract used by
    restore: archive identity/hash/size, exact candidate release and full commit,
    database/server identity, a non-empty applied migration set with valid
-   checksums, the migration fingerprint, numeric non-empty table row counts,
-   pg_dump/psql identity, and exported-snapshot/exact-row-count consistency.
+   checksums, the migration fingerprint **recomputed from the producer's
+   six-column, filename-sorted migration ledger**, numeric non-empty table row
+   counts, pg_dump/psql identity, and exported-snapshot/exact-row-count consistency.
 6. Measures backup age from manifest `createdAt` and fails when it exceeds the
    configured RPO threshold (default: 86,400 seconds).
 7. Writes one `bitriver.offhost-backup-proof/v1` JSON report without AWS
@@ -87,6 +88,9 @@ without touching production backups:
   unreachable disposable endpoint) and confirm the scheduled producer exits
   non-zero instead of reporting success.
 - Confirm the verifier rejects any partial remote trio left by a failed upload.
+- In disposable remote fixtures, rewrite a manifest migration field or its
+  fingerprint and regenerate the manifest checksum. Confirm the verifier still
+  rejects the internally inconsistent ledger before claiming qualified evidence.
 - Restore remote access, run the scheduled producer again, and confirm a fresh
   complete trio qualifies.
 - Remove the local disposable backup copy after a successful upload, rerun this
@@ -116,8 +120,8 @@ For the exact release candidate attach or link:
   release process.
 
 A passing off-host report proves remote-set completeness, byte integrity,
-freshness, canonical manifest validity, exact candidate identity, and the
-configured retained-set minimum. It **does not** by itself prove scheduled
+freshness, canonical manifest validity (including recomputed ledger SHA-256),
+exact candidate identity, and the configured retained-set minimum. It **does not** by itself prove scheduled
 provenance, an S3 provider's durability SLA, a restore, encrypted host-state
 recovery, alert delivery, or stable-release promotion. Those claims require
 their own existing release evidence.
