@@ -347,6 +347,46 @@ def postgres_assets(backup: Path) -> tuple[Path, Path]:
     return Path(f"{backup}.manifest.json"), Path(f"{backup}.sha256")
 
 
+def validate_postgres_migration_fingerprint(database: Any) -> str:
+    """Verify the exact six-column ledger hashed by backup-postgres.sh."""
+    if not isinstance(database, dict):
+        raise RecoveryError("Postgres backup manifest has no database evidence")
+    fingerprint = database.get("migrationFingerprintSha256")
+    if not isinstance(fingerprint, str) or not SHA256_PATTERN.fullmatch(fingerprint):
+        raise RecoveryError("Postgres backup manifest migration fingerprint is invalid")
+    migrations = database.get("migrations")
+    if not isinstance(migrations, list) or not migrations:
+        raise RecoveryError("Postgres backup manifest migrations must be nonempty")
+
+    fields = ("filename", "version", "checksumSha256", "status", "release", "commit")
+    rows: list[tuple[str, str]] = []
+    filenames: set[str] = set()
+    for index, migration in enumerate(migrations):
+        if not isinstance(migration, dict):
+            raise RecoveryError(f"Postgres backup migration[{index}] must be an object")
+        for field in fields:
+            value = migration.get(field)
+            if not isinstance(value, str) or any(
+                separator in value for separator in ("|", "\r", "\n")
+            ):
+                raise RecoveryError(f"Postgres backup migration[{index}].{field} is invalid")
+        filename = migration["filename"]
+        if not filename or filename in filenames:
+            raise RecoveryError("Postgres backup migration filename is empty or duplicated")
+        filenames.add(filename)
+        if migration["status"] != "applied":
+            raise RecoveryError(f"Postgres backup migration[{index}] is not applied")
+        if not SHA256_PATTERN.fullmatch(migration["checksumSha256"]):
+            raise RecoveryError(f"Postgres backup migration[{index}] checksum is invalid")
+        rows.append((filename, "|".join(migration[field] for field in fields) + "\n"))
+
+    # backup-postgres.sh captures psql -qAt -F '|' lines ordered by filename.
+    actual = hashlib.sha256("".join(row for _, row in sorted(rows)).encode("utf-8")).hexdigest()
+    if actual != fingerprint:
+        raise RecoveryError("Postgres backup migration fingerprint disagrees with ledger")
+    return fingerprint
+
+
 def validate_postgres_set(
     backup: Path, *, expected_release: str, expected_commit: str
 ) -> dict[str, Any]:
@@ -369,6 +409,7 @@ def validate_postgres_set(
         raise RecoveryError("Postgres backup manifest has no archive identity")
     if archive.get("name") != backup.name or archive.get("sha256") != sha256_file(backup):
         raise RecoveryError("Postgres backup manifest archive identity is inconsistent")
+    fingerprint = validate_postgres_migration_fingerprint(manifest.get("database"))
     return {
         "archiveName": backup.name,
         "manifestName": manifest_path.name,
@@ -376,9 +417,7 @@ def validate_postgres_set(
         "archiveSha256": sha256_file(backup),
         "manifestSha256": sha256_file(manifest_path),
         "checksumSha256": sha256_file(checksum_path),
-        "migrationFingerprintSha256": manifest.get("database", {}).get(
-            "migrationFingerprintSha256", ""
-        ),
+        "migrationFingerprintSha256": fingerprint,
     }
 
 
