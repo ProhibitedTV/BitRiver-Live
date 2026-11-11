@@ -22,6 +22,12 @@ HOST_RESTORE_SCHEMA = "bitriver.host-restore-report/v1"
 DISASTER_REPORT_SCHEMA = "bitriver.disaster-recovery/v1"
 OBJECT_INVENTORY_SCHEMA = "bitriver.object-inventory/v1"
 POSTGRES_BACKUP_SCHEMA = "bitriver.postgres-backup/v1"
+POSTGRES_EVIDENCE_HASH_FIELDS = (
+    "archiveSha256",
+    "manifestSha256",
+    "checksumSha256",
+    "migrationFingerprintSha256",
+)
 RELEASE_SET_SCHEMA = "bitriver.release-set/v1"
 RECOVERY_PACKAGE_NAME = "bitriver-launcher-linux-amd64.tar.gz"
 LAUNCHER_ROOT = PurePosixPath("bitriver-launcher-linux-amd64")
@@ -518,6 +524,27 @@ def outer_assets(archive: Path) -> tuple[Path, Path]:
     return Path(f"{archive}.manifest.json"), Path(f"{archive}.sha256")
 
 
+def validate_host_postgres_inventory(postgres: Any) -> None:
+    """Refuse incomplete or ambiguous nested backup identity before restoring."""
+    if not isinstance(postgres, dict):
+        raise RecoveryError("host backup manifest has no Postgres inventory")
+    archive_name = postgres.get("archiveName")
+    if not isinstance(archive_name, str) or not re.fullmatch(
+        r"bitriver-postgres-\\d{8}T\\d{6}Z\\.sql\\.gz", archive_name
+    ):
+        raise RecoveryError("host backup manifest has an invalid Postgres archive name")
+    for field, suffix in (
+        ("manifestName", ".manifest.json"),
+        ("checksumName", ".sha256"),
+    ):
+        if postgres.get(field) != archive_name + suffix:
+            raise RecoveryError(f"host backup manifest Postgres {field} does not match archive")
+    for field in POSTGRES_EVIDENCE_HASH_FIELDS:
+        value = postgres.get(field)
+        if not isinstance(value, str) or not SHA256_PATTERN.fullmatch(value):
+            raise RecoveryError(f"host backup manifest Postgres {field} is invalid")
+
+
 def verify_backup_set(
     archive: Path, *, expected_release: str, expected_commit: str
 ) -> dict[str, Any]:
@@ -573,13 +600,7 @@ def verify_backup_set(
         fingerprint = inventory.get("fingerprintSha256")
         if not isinstance(fingerprint, str) or not SHA256_PATTERN.fullmatch(fingerprint):
             raise RecoveryError(f"host backup manifest has invalid {key} fingerprint")
-    postgres = payload.get("postgres")
-    if not isinstance(postgres, dict):
-        raise RecoveryError("host backup manifest has no Postgres inventory")
-    for field in ("archiveName", "manifestName", "checksumName"):
-        value = postgres.get(field)
-        if not isinstance(value, str) or Path(value).name != value:
-            raise RecoveryError("host backup manifest has an unsafe Postgres asset name")
+    validate_host_postgres_inventory(payload.get("postgres"))
     external = payload.get("externalObjects")
     if external is not None:
         if not isinstance(external, dict):
@@ -763,11 +784,15 @@ def build_restore_report(args: argparse.Namespace) -> None:
     }
     postgres_info = payload["postgres"]
     recovered_postgres = prefix / Path(POSTGRES_RELATIVE.as_posix()) / postgres_info["archiveName"]
-    validate_postgres_set(
+    verified_postgres = validate_postgres_set(
         recovered_postgres,
         expected_release=args.expected_release,
         expected_commit=args.expected_commit,
     )
+    if verified_postgres != postgres_info:
+        raise RecoveryError(
+            "restored Postgres backup identity does not match the host backup manifest"
+        )
     external_match = True
     external = payload.get("externalObjects")
     if external is not None:
