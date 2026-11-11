@@ -1,5 +1,37 @@
 # PLAN
 
+## Current scope - validate packaged-host Postgres migration fingerprint (#1299) (2026-11-11)
+
+- Read-only audit: `host_recovery.validate_postgres_set` verifies the inner
+  Postgres archive/manifest checksums and the release identity, then copies
+  `database.migrationFingerprintSha256` directly into the encrypted host
+  recovery manifest. A manifest whose migration rows disagree with that
+  fingerprint (or whose database section is absent) can be rechecksummed
+  and accepted as valid host backup evidence.
+- Validate the producer's six-field migration ledger before accepting the
+  Postgres trio or publishing a host-state manifest: filename, version,
+  checksumSha256, status, release, commit ordered by filename, `|` delimited,
+  newline terminated and SHA-256 hashed. Require a nonempty applied-only
+  list, structurally valid fields and hashes, safe delimiters, unique
+  filenames and exact SHA-256 agreement.
+- Keep the existing packaged-only `host_recovery.py` script standalone: it
+  is included in the published launcher/recovery bundle without the off-host
+  qualifier. Do not import unpublished/unpackaged helpers or alter the backup
+  producer, Postgres backup schema, host report schema, restore scripts, CI
+  workflows, Compose/environment or live host state.
+- Replace the minimal unit fixture with producer-shaped migration rows and
+  its computed fingerprint. Add rechecksummed tampering, missing/invalid/
+  ambiguous ledger failures, multirow producer ordering and fail-before-host-
+  manifest regression tests. Preserve existing successful host recovery tests.
+- Document that the extra manifest consistency gate is **not** proof of
+  archive restorability or a replacement for isolated PostgreSQL restore,
+  off-host scheduling, lost-host acceptance, or RPO/RTO evidence.
+- Validation commands: `python3 -m unittest scripts.host_recovery_test`,
+  `go test ./scripts -count=1`, and `./scripts/verify.sh` where checkout
+  and dependencies exist; require protected exact-head GitHub CI before merge.
+  This environment has no local repo checkout/Docker, so do not claim
+  a local command passed merely because tests are committed.
+
 ## Current scope - reject non-forward stateful upgrade pairs (#1298) (2026-11-11)
 
 - Read-only finding: `scripts/stateful_compose_upgrade.py` SHA-binds and
