@@ -19,20 +19,26 @@
     Local runtime tests blocked: no mounted repository or Docker in this
     execution environment. Exact-branch protected CI will exercise Python
     tests via Go scripts package and full Ubuntu gate before any merge.
-- [ ] Task 3 - Document claim boundaries and qualify PR
+- [x] Task 3 - Document claim boundaries and qualify PR
   - Acceptance: run focused Python and Go tests plus literal verifier where
     possible, update runbook, review diff, open PR with complete release
     scorecard, and require protected exact-head CI before squash merge.
-  - Result so far: runbook now distinguishes positive-sized retained metadata
-    from checksum-verified newest bytes and states that older restore
-    viability remains unproven. Reviewed five-file main-branch diff; no
-    producer/restore/protocol, Compose, CI or release changes.
-  - Local Python/Go/full verification cannot run without an accessible checkout
-    and Docker; protect merge with exact-head GitHub test-all, Docs, quickstart,
-    secret guard and Merge gate. Do not mark this task complete until verified.
+  - Result: PR #1453 covers five scoped files. Runbook distinguishes
+    positive-sized retained metadata from checksum-verified newest bytes
+    and states that older restore viability remains unproven. No producer,
+    restore, report schema, Compose, workflow or release changes.
+  - Protected CI run 42958419133 at exact implementation head `037c2fd`
+    passed Ubuntu test-all (including `go test ./scripts`, the off-host Python
+    suite, PostgreSQL migration lifecycle and Compose quickstart), macOS,
+    Windows and Ubuntu quickstart entrypoints, docs consistency, committed
+    secret guard and the Merge gate. This Task 3 documentation commit
+    requires a new final exact-head protected CI pass before squash merge.
+  - Local literal Python/Go/`./scripts/verify.sh` could not run without a
+    local repository checkout or Docker; blocked results are not claimed
+    as local passes. Codex automated review was blocked by usage limits.
   - Limits: no object-store credentials or authorized scheduled endpoint for
-    genuine operator proof; do not close #1299 or claim historical restore
-    viability without actually restoring it.
+    genuine operator proof; #1299 must stay open and historical archives
+    are not asserted restore-ready.
 
 ## Scoped change: verify backup migration ledger fingerprint (#1299)
 
