@@ -23,6 +23,13 @@
   - Acceptance: run focused Python and Go tests plus literal verifier where
     possible, update runbook, review diff, open PR with complete release
     scorecard, and require protected exact-head CI before squash merge.
+  - Result so far: runbook now distinguishes positive-sized retained metadata
+    from checksum-verified newest bytes and states that older restore
+    viability remains unproven. Reviewed five-file main-branch diff; no
+    producer/restore/protocol, Compose, CI or release changes.
+  - Local Python/Go/full verification cannot run without an accessible checkout
+    and Docker; protect merge with exact-head GitHub test-all, Docs, quickstart,
+    secret guard and Merge gate. Do not mark this task complete until verified.
   - Limits: no object-store credentials or authorized scheduled endpoint for
     genuine operator proof; do not close #1299 or claim historical restore
     viability without actually restoring it.
