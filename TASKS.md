@@ -1,5 +1,26 @@
 # TASKS
 
+## Scoped change: reject zero-byte retained backup sidecars (#1299)
+
+- [x] Task 1 - Audit listed retention-set integrity semantics
+  - Acceptance: confirm producer prefix grouping, the current latest-trio
+    checksum/manifest validation, and how older sets count toward retention.
+  - Result: read-only inspection confirmed that only archive Size was checked;
+    empty historical manifest/checksum keys still counted as complete, while
+    only newest bytes were downloaded. PLAN recorded the exact scope first.
+- [ ] Task 2 - Require non-empty size for each listed backup asset
+  - Acceptance: reject missing, boolean, non-integer and zero/negative Size
+    for archive, manifest and checksum assets, without downloading historical
+    backups or changing the report schema. Add positive/negative focused tests.
+  - Result: pending code, tests and focused validation.
+- [ ] Task 3 - Document claim boundaries and qualify PR
+  - Acceptance: run focused Python and Go tests plus literal verifier where
+    possible, update runbook, review diff, open PR with complete release
+    scorecard, and require protected exact-head CI before squash merge.
+  - Limits: no object-store credentials or authorized scheduled endpoint for
+    genuine operator proof; do not close #1299 or claim historical restore
+    viability without actually restoring it.
+
 ## Scoped change: verify backup migration ledger fingerprint (#1299)
 
 - [x] Task 1 - Audit the off-host producer/verifier contract
