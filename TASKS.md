@@ -1,5 +1,45 @@
 # TASKS
 
+## Scoped change: reject zero-byte retained backup sidecars (#1299)
+
+- [x] Task 1 - Audit listed retention-set integrity semantics
+  - Acceptance: confirm producer prefix grouping, the current latest-trio
+    checksum/manifest validation, and how older sets count toward retention.
+  - Result: read-only inspection confirmed that only archive Size was checked;
+    empty historical manifest/checksum keys still counted as complete, while
+    only newest bytes were downloaded. PLAN recorded the exact scope first.
+- [x] Task 2 - Require non-empty size for each listed backup asset
+  - Acceptance: reject missing, boolean, non-integer and zero/negative Size
+    for archive, manifest and checksum assets, without downloading historical
+    backups or changing the report schema. Add positive/negative focused tests.
+  - Result: all three listed asset Size fields now require positive integers;
+    existing producer-compatible full-set fixture remains unchanged.
+    Regression tests cover zero-byte historical archive, manifest and checksum;
+    malformed/missing historical manifest Size metadata also fails closed.
+    Local runtime tests blocked: no mounted repository or Docker in this
+    execution environment. Exact-branch protected CI will exercise Python
+    tests via Go scripts package and full Ubuntu gate before any merge.
+- [x] Task 3 - Document claim boundaries and qualify PR
+  - Acceptance: run focused Python and Go tests plus literal verifier where
+    possible, update runbook, review diff, open PR with complete release
+    scorecard, and require protected exact-head CI before squash merge.
+  - Result: PR #1453 covers five scoped files. Runbook distinguishes
+    positive-sized retained metadata from checksum-verified newest bytes
+    and states that older restore viability remains unproven. No producer,
+    restore, report schema, Compose, workflow or release changes.
+  - Protected CI run 42958419133 at exact implementation head `037c2fd`
+    passed Ubuntu test-all (including `go test ./scripts`, the off-host Python
+    suite, PostgreSQL migration lifecycle and Compose quickstart), macOS,
+    Windows and Ubuntu quickstart entrypoints, docs consistency, committed
+    secret guard and the Merge gate. This Task 3 documentation commit
+    requires a new final exact-head protected CI pass before squash merge.
+  - Local literal Python/Go/`./scripts/verify.sh` could not run without a
+    local repository checkout or Docker; blocked results are not claimed
+    as local passes. Codex automated review was blocked by usage limits.
+  - Limits: no object-store credentials or authorized scheduled endpoint for
+    genuine operator proof; #1299 must stay open and historical archives
+    are not asserted restore-ready.
+
 ## Scoped change: verify backup migration ledger fingerprint (#1299)
 
 - [x] Task 1 - Audit the off-host producer/verifier contract

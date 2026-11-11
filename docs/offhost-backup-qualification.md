@@ -19,10 +19,13 @@ S3-compatible bucket/prefix it:
 1. Lists all `bitriver-postgres-*.sql.gz` backup assets beneath the exact prefix
    shape used by the existing producer, including configured separator bytes.
 2. Refuses any incomplete remote set. Every timestamp must have an archive,
-   `.manifest.json`, and `.sha256` companion.
-3. Requires the configured minimum retained complete sets (default: 3).
+   `.manifest.json`, and `.sha256` companion. **Every listed asset must
+   have a positive object size**, including historical manifests and checksum
+   files. Zero-byte sidecars never count toward retention.
+3. Requires the configured minimum retained non-empty trios (default: 3).
 4. Downloads only the newest complete trio and verifies the checksum file
-   against the downloaded archive and manifest bytes.
+   against the downloaded archive and manifest bytes. **Older retained sets
+   are not downloaded or independently checksum-verified.**
 5. Verifies the complete `bitriver.postgres-backup/v1` manifest contract used by
    restore: archive identity/hash/size, exact candidate release and full commit,
    database/server identity, a non-empty applied migration set with valid
@@ -119,12 +122,15 @@ For the exact release candidate attach or link:
 - the independent restore/recovery report already required by the production
   release process.
 
-A passing off-host report proves remote-set completeness, byte integrity,
-freshness, canonical manifest validity (including recomputed ledger SHA-256),
-exact candidate identity, and the configured retained-set minimum. It **does not** by itself prove scheduled
-provenance, an S3 provider's durability SLA, a restore, encrypted host-state
-recovery, alert delivery, or stable-release promotion. Those claims require
-their own existing release evidence.
+A passing off-host report proves the **newest trio's** byte integrity,
+freshness, canonical manifest validity (including recomputed ledger SHA-256)
+and exact candidate identity. For historical retained sets, it proves only
+that the archive, manifest and checksum keys exist and report positive
+object sizes; it **does not** prove their contents match or that they can
+restore. The configured retention minimum counts these non-empty trios.
+The report **does not** by itself prove scheduled provenance, an S3 provider's
+durability SLA, a restore, encrypted host-state recovery, alert delivery, or
+stable-release promotion. Those claims require their own release evidence.
 
 ## Focused tests
 
@@ -132,8 +138,8 @@ The verifier has deterministic unit coverage and is also invoked from the
 `scripts` Go test package, so the normal repository Go gate exercises it on
 Linux, macOS, and Windows. The suite includes canonical manifest-shape refusal,
 exact candidate identity, producer-prefix separator parity, stale RPO,
-retention, incomplete sets, checksum corruption, report atomicity, and
-credential-safe AWS failures.
+retention, zero-byte or invalid-size historical sidecars, incomplete sets,
+checksum corruption, report atomicity, and credential-safe AWS failures.
 
 ```bash
 python3 -m unittest scripts.qualify_offhost_backup_test

@@ -211,10 +211,14 @@ def discover_sets(objects: Iterable[Mapping[str, Any]], prefix: str) -> list[Bac
         if missing:
             incomplete.append(f"{stem}: missing {', '.join(missing)}")
             continue
-        archive = group["archive"]
-        archive_size = archive.get("Size")
-        if isinstance(archive_size, bool) or not isinstance(archive_size, int) or archive_size <= 0:
-            raise QualificationError(f"remote archive has an invalid size: {stem}")
+        # The newest trio is downloaded and checksum-verified below, but even
+        # older trios must have non-empty *listed* assets to count as retained.
+        # S3 list-objects-v2 includes Size for every object, not just archives.
+        for label in ("archive", "manifest", "checksum"):
+            listed_size = group[label].get("Size")
+            if isinstance(listed_size, bool) or not isinstance(listed_size, int) or listed_size <= 0:
+                raise QualificationError(f"remote {label} has an invalid size: {stem}")
+        archive_size = group["archive"]["Size"]
         complete.append(
             BackupSet(
                 archive_key=prefix_part + stem,
