@@ -291,6 +291,31 @@ def validate_database_contract(database: Mapping[str, Any]) -> None:
         checksum = migration.get("checksumSha256")
         if not isinstance(checksum, str) or not SHA256_RE.fullmatch(checksum):
             raise QualificationError(f"remote backup manifest migration[{index}] checksum is invalid")
+        # The producer hashes psql -qAt -F '|' output, not the JSON encoding.
+        for field in ("version", "release", "commit"):
+            if not isinstance(migration.get(field), str):
+                raise QualificationError(
+                    f"remote backup manifest migration[{index}].{field} must be a string"
+                )
+        for field in ("filename", "version", "checksumSha256", "status", "release", "commit"):
+            if any(separator in migration[field] for separator in ("|", "\r", "\n")):
+                raise QualificationError(
+                    f"remote backup manifest migration[{index}].{field} contains a ledger separator"
+                )
+
+    # Match backup-postgres.sh's SELECT ... ORDER BY filename and sha256sum.
+    ledger_rows = (
+        "|".join(
+            migration[field]
+            for field in ("filename", "version", "checksumSha256", "status", "release", "commit")
+        ) + "\n"
+        for migration in sorted(migrations, key=lambda item: item["filename"])
+    )
+    actual_fingerprint = hashlib.sha256("".join(ledger_rows).encode("utf-8")).hexdigest()
+    if actual_fingerprint != fingerprint:
+        raise QualificationError(
+            "remote backup manifest migration fingerprint does not match migration ledger"
+        )
 
     row_counts = database.get("rowCounts")
     if not isinstance(row_counts, Mapping) or not row_counts:

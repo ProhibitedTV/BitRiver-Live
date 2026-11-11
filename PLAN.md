@@ -1,5 +1,29 @@
 # PLAN
 
+## Current scope - bind off-host backup migration ledger to fingerprint (#1299) (2026-11-10)
+
+- Read-only finding: the off-host verifier validates the SHA-256 *shape* of
+  `database.migrationFingerprintSha256` but never compares it with the
+  migration rows that the PostgreSQL backup producer records from one snapshot.
+  An internally inconsistent manifest with recomputed outer checksums passes.
+- Reconstruct the producer's ordered `psql -qAt -F '|'` ledger (filename,
+  version, checksum, status, release and commit) as UTF-8 lines and require its
+  SHA-256 to match the manifest. Refuse missing/malformed ledger fields or
+  ambiguous field separators before claiming a complete remote proof.
+- Keep this change read-only, producer-compatible, isolated to the off-host
+  verifier and its focused tests/runbook. Do not change Compose, backup format,
+  restore scripts, automation policy, release identity, or deployed data.
+- Regression cases: known producer fingerprint, manipulated fingerprint,
+  manipulated migration row with rechecksummed manifest, multiple unordered
+  rows, and invalid ledger values. Preserve existing off-host unit coverage.
+- Validation: `python3 -m unittest scripts.qualify_offhost_backup_test`,
+  `go test ./scripts -run TestOffhostBackupQualificationPythonSuite -count=1`,
+  and `./scripts/verify.sh` where repository checkout and dependencies permit;
+  GitHub PR CI must independently qualify the exact PR head.
+- Limitation: fingerprint consistency is not recovery proof; a fresh isolated
+  restore, off-host scheduling and target-host acceptance remain separate
+  requirements under #1299.
+
 ## Current scope - upload authorization coverage (#1306) (2026-10-10)
 
 - Start from qualified main `0f794710` in the same isolated worktree; carry

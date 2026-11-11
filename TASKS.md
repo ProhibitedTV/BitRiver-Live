@@ -1,5 +1,38 @@
 # TASKS
 
+## Scoped change: verify backup migration ledger fingerprint (#1299)
+
+- [x] Task 1 - Audit the off-host producer/verifier contract
+  - Acceptance: inspect the producer's ordered `psql -qAt -F '|'` migration
+    fields, off-host manifest and checksum verification, and current tests.
+  - Result: the backup producer hashes sorted ledger lines, while off-host
+    qualification checked only the fingerprint's 64-hex shape; scope recorded
+    in PLAN first. No backup format or deployment contract change.
+- [x] Task 2 - Bind the manifest migration rows to the producer fingerprint
+  - Acceptance: rebuild the producer's six-column, newline-terminated UTF-8
+    ledger in filename order; reject missing/non-string or separator-bearing
+    fields, and SHA mismatches after other structural checks.
+  - Result: verifier now computes the producer's SHA-256 from sorted six-field
+    UTF-8 ledger rows. Fixed expected fixture hashes were independently checked
+    for one and two rows; rechecksummed tampering and malformed-field regression
+    tests added. Repository tests and CI remain to be run/observed.
+- [ ] Task 3 - Qualify the verifier, document scope, and open review PR
+  - Acceptance: focused Python and scripts-Go tests pass; full verifier and
+    protected PR checks attempted/reported; docs explain the stronger
+    consistency check and that restore/scheduling evidence remains separate.
+  - No production state, published candidates, host configs or CI workflows
+    are modified.
+  - Initial PR #1452 at `250de415`: Ubuntu test-all passed with all Go
+    packages, script Python suite, real PostgreSQL migration lifecycle and
+    healthy Docker Compose quickstart. Mac/Ubuntu/Windows entrypoint sanity,
+    docs consistency and secret guard also passed. Merge gate failed only
+    because PR-body risk scorecard was absent. PR body is now corrected with
+    medium-risk classification, exact evidence map, deployment boundaries and
+    explicitly skipped real-host/restore checks; a new exact-head CI run must
+    verify the corrected scorecard before merge.
+  - Codex review did not run because of account review-usage limits; this is
+    not a reviewed code pass. No automated-review bypass or release claim.
+
 ## Scoped change: upload authorization coverage (#1306)
 
 - [x] Task 1 - Define the upload principal/action and capability boundary
