@@ -530,7 +530,7 @@ def validate_host_postgres_inventory(postgres: Any) -> None:
         raise RecoveryError("host backup manifest has no Postgres inventory")
     archive_name = postgres.get("archiveName")
     if not isinstance(archive_name, str) or not re.fullmatch(
-        r"bitriver-postgres-\\d{8}T\\d{6}Z\\.sql\\.gz", archive_name
+        r"bitriver-postgres-\d{8}T\d{6}Z\.sql\.gz", archive_name
     ):
         raise RecoveryError("host backup manifest has an invalid Postgres archive name")
     for field, suffix in (
