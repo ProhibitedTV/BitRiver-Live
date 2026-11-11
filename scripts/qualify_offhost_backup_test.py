@@ -218,6 +218,45 @@ class OffhostBackupQualificationTests(unittest.TestCase):
         with self.assertRaisesRegex(proof.QualificationError, "incomplete remote backup set"):
             self.qualify(objects)
 
+    def test_refuses_empty_historical_backup_assets(self) -> None:
+        # Only the newest trio is downloaded. Earlier empty sidecars must not
+        # satisfy the retention minimum merely because their keys exist.
+        old_archive = f"{PREFIX}/bitriver-postgres-20260910T020000Z.sql.gz"
+        for suffix, label in (
+            ("", "archive"),
+            (".manifest.json", "manifest"),
+            (".sha256", "checksum"),
+        ):
+            with self.subTest(asset=label):
+                objects = fixture_remote()
+                objects[old_archive + suffix] = b""
+                with self.assertRaisesRegex(
+                    proof.QualificationError, f"remote {label} has an invalid size"
+                ):
+                    self.qualify(objects)
+
+    def test_refuses_malformed_historical_sidecar_sizes(self) -> None:
+        old_manifest = (
+            f"{PREFIX}/bitriver-postgres-20260910T020000Z.sql.gz.manifest.json"
+        )
+        for bad_size in (None, False, -1, "123", 0):
+            with self.subTest(size=bad_size):
+                listing = FakeObjectClient(fixture_remote()).list_objects(BUCKET, PREFIX)
+                manifest_item = next(item for item in listing if item["Key"] == old_manifest)
+                manifest_item["Size"] = bad_size
+                with self.assertRaisesRegex(
+                    proof.QualificationError, "remote manifest has an invalid size"
+                ):
+                    proof.discover_sets(listing, PREFIX)
+
+        listing = FakeObjectClient(fixture_remote()).list_objects(BUCKET, PREFIX)
+        manifest_item = next(item for item in listing if item["Key"] == old_manifest)
+        del manifest_item["Size"]
+        with self.assertRaisesRegex(
+            proof.QualificationError, "remote manifest has an invalid size"
+        ):
+            proof.discover_sets(listing, PREFIX)
+
     def test_refuses_insufficient_remote_retention(self) -> None:
         objects: dict[str, bytes] = {}
         objects.update(make_set("20260911T020000Z"))
