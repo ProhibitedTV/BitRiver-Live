@@ -175,6 +175,90 @@ class HostRecoveryTest(unittest.TestCase):
             self.postgres_fingerprint,
         )
 
+    def rewrite_postgres_manifest(self, payload: dict) -> None:
+        """Rechecksum after tampering so only the semantic gate can reject it."""
+        self.postgres_manifest.write_text(
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        self.postgres_checksum.write_text(
+            f"{sha256(self.postgres)}  {self.postgres.name}\n"
+            f"{sha256(self.postgres_manifest)}  {self.postgres_manifest.name}\n",
+            encoding="utf-8",
+        )
+
+    def test_refuses_rechecksummed_inconsistent_migration_evidence(self) -> None:
+        baseline = json.loads(self.postgres_manifest.read_text(encoding="utf-8"))
+        cases = (
+            ("database", None, "no database evidence"),
+            ("database.migrationFingerprintSha256", "f" * 64, "disagrees with ledger"),
+            ("database.migrationFingerprintSha256", "not-a-digest", "fingerprint is invalid"),
+            ("database.migrations", [], "migrations must be nonempty"),
+            ("database.migrations.0.version", "modified", "disagrees with ledger"),
+            ("database.migrations.0.status", "applying", "is not applied"),
+            ("database.migrations.0.filename", "", "filename is empty or duplicated"),
+            ("database.migrations.0.filename", "bad|name", "filename is invalid"),
+            ("database.migrations.0.commit", "invalid\ncommit", "commit is invalid"),
+            ("database.migrations.0.checksumSha256", "bad", "checksum is invalid"),
+            ("database.migrations.0.version", None, "version is invalid"),
+            ("database.migrations", self.migrations * 2, "filename is empty or duplicated"),
+        )
+        for dotted, value, expected in cases:
+            with self.subTest(field=dotted, value=str(value)[:50]):
+                payload = json.loads(json.dumps(baseline))
+                target = payload
+                parts = dotted.split(".")
+                for part in parts[:-1]:
+                    target = target[int(part)] if part.isdigit() else target[part]
+                target[parts[-1]] = value
+                self.rewrite_postgres_manifest(payload)
+                with self.assertRaisesRegex(recovery.RecoveryError, expected):
+                    recovery.validate_postgres_set(
+                        self.postgres, expected_release=RELEASE, expected_commit=COMMIT
+                    )
+
+                # The encrypted host backup producer must refuse before it emits
+                # a plausible public manifest, even after rechecksumming the trio.
+                output = self.root / "rejected-host-manifest.json"
+                with self.assertRaisesRegex(recovery.RecoveryError, expected):
+                    recovery.build_backup_manifest(
+                        argparse.Namespace(
+                            source_release=RELEASE,
+                            source_commit=COMMIT,
+                            created_at="2026-08-15T00:00:00Z",
+                            root_prefix=self.source,
+                            archive=self.archive,
+                            postgres_backup=self.postgres,
+                            object_inventory=None,
+                            iterations=200_000,
+                            output=output,
+                        )
+                    )
+                self.assertFalse(output.exists())
+
+    def test_accepts_valid_two_row_producer_fingerprint_in_unsorted_json(self) -> None:
+        payload = json.loads(self.postgres_manifest.read_text(encoding="utf-8"))
+        second = {
+            "filename": "0002_add_chat.sql",
+            "version": "0002",
+            "checksumSha256": "d" * 64,
+            "status": "applied",
+            "release": RELEASE,
+            "commit": COMMIT,
+        }
+        migrations = [self.migrations[0], second]
+        payload["database"]["migrations"] = list(reversed(migrations))
+        payload["database"]["migrationFingerprintSha256"] = producer_migration_fingerprint(
+            migrations
+        )
+        self.rewrite_postgres_manifest(payload)
+        info = recovery.validate_postgres_set(
+            self.postgres, expected_release=RELEASE, expected_commit=COMMIT
+        )
+        self.assertEqual(
+            info["migrationFingerprintSha256"],
+            payload["database"]["migrationFingerprintSha256"],
+        )
+
     def test_wrong_release_and_corruption_are_refused(self) -> None:
         with self.assertRaisesRegex(recovery.RecoveryError, "requested release"):
             recovery.verify_backup_set(
