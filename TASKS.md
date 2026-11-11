@@ -17,6 +17,9 @@
     Refusal occurs before environment, sentinel or report writes. Added four
     passing forward scenarios and eleven refused pairs asserting zero output
     artifacts. Existing RC19 -> RC20 positive fixture is unchanged.
+  - Added `scripts/stateful_compose_upgrade_contract_test.go` to execute
+    the Python suite from existing `go test ./scripts` verification, reusing
+    repository/Python discovery helpers. No workflow or required-check edits.
   - Local focused/unit/full commands blocked because the GitHub checkout is
     not mounted and Docker is unavailable in this environment; protected
     exact-head GitHub CI must execute the new and existing Python/Go tests
