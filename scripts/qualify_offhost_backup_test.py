@@ -62,6 +62,9 @@ def make_set(
     stem = f"bitriver-postgres-{stamp}.sql.gz"
     archive_key = f"{prefix}/{stem}"
     created = dt.datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    fingerprint = sha256(
+        f"0001_initial.sql|0001|{'c' * 64}|applied|{release}|{commit}\n".encode("utf-8")
+    )
     manifest = {
         "schemaVersion": proof.BACKUP_SCHEMA,
         "createdAt": created.isoformat().replace("+00:00", "Z"),
@@ -77,7 +80,7 @@ def make_set(
             "name": "bitriver",
             "serverVersion": "15.14",
             "serverVersionNum": 150014,
-            "migrationFingerprintSha256": "b" * 64,
+            "migrationFingerprintSha256": fingerprint,
             "migrations": [
                 {
                     "filename": "0001_initial.sql",
@@ -271,6 +274,74 @@ class OffhostBackupQualificationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(proof.QualificationError, "migration\[0\] checksum is invalid"):
             self.qualify(objects)
+
+    def test_migration_fingerprint_matches_producer_ledger_bytes(self) -> None:
+        manifest_key = (
+            f"{PREFIX}/bitriver-postgres-20260912T020000Z.sql.gz.manifest.json"
+        )
+        manifest = json.loads(fixture_remote()[manifest_key])
+        # Fixed SHA for psql -qAt -F '|' with one newline-terminated ledger row.
+        self.assertEqual(
+            manifest["database"]["migrationFingerprintSha256"],
+            "446cb3d4413794b22b229d6e87271c27a5db81ff977493e78579a6965016657c",
+        )
+        self.qualify(fixture_remote())
+
+    def test_refuses_rechecksummed_migration_fingerprint_mismatch(self) -> None:
+        objects = fixture_remote()
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["database"].__setitem__(
+                "migrationFingerprintSha256", "f" * 64
+            ),
+        )
+        with self.assertRaisesRegex(proof.QualificationError, "does not match migration ledger"):
+            self.qualify(objects)
+
+    def test_refuses_rechecksummed_migration_row_mismatch(self) -> None:
+        objects = fixture_remote()
+        mutate_manifest(
+            objects,
+            "20260912T020000Z",
+            lambda payload: payload["database"]["migrations"][0].__setitem__(
+                "version", "9999"
+            ),
+        )
+        with self.assertRaisesRegex(proof.QualificationError, "does not match migration ledger"):
+            self.qualify(objects)
+
+    def test_accepts_multiple_manifest_rows_in_filename_order(self) -> None:
+        objects = fixture_remote()
+
+        def add_second_migration(payload: dict[str, Any]) -> None:
+            first = payload["database"]["migrations"][0]
+            second = dict(first, filename="0002_add_channel.sql", version="0002", checksumSha256="d" * 64)
+            payload["database"]["migrations"] = [second, first]
+            payload["database"]["rowCounts"]["schema_migrations"] = 2
+            # Hash the producer's filename-sorted two-row psql output.
+            payload["database"]["migrationFingerprintSha256"] = (
+                "cb060df760ff60ab46915b852f71a0ba2f4ca9600401885521f904c36e795f1a"
+            )
+
+        mutate_manifest(objects, "20260912T020000Z", add_second_migration)
+        self.qualify(objects)
+
+    def test_refuses_malformed_migration_ledger_fields(self) -> None:
+        for field, value, expected_error in (
+            ("version", None, r"migration\[0\]\.version must be a string"),
+            ("release", "changed|release", "contains a ledger separator"),
+            ("commit", "changed\ncommit", "contains a ledger separator"),
+        ):
+            with self.subTest(field=field):
+                objects = fixture_remote()
+                mutate_manifest(
+                    objects,
+                    "20260912T020000Z",
+                    lambda payload: payload["database"]["migrations"][0].__setitem__(field, value),
+                )
+                with self.assertRaisesRegex(proof.QualificationError, expected_error):
+                    self.qualify(objects)
 
     def test_refuses_invalid_row_count_evidence(self) -> None:
         objects = fixture_remote()
