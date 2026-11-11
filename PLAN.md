@@ -1,5 +1,38 @@
 # PLAN
 
+## Current scope - reject non-forward stateful upgrade pairs (#1298) (2026-11-11)
+
+- Read-only finding: `scripts/stateful_compose_upgrade.py` SHA-binds and
+  validates both public release sets but never establishes candidate > source.
+  `prepare_upgrade_pair` therefore accepts same-release or reversed release
+  inputs and emits a "stateful upgrade" environment/evidence pair even though
+  `docs/upgrades.md` explicitly forbids downgrades.
+- Parse both release tags with the existing canonical
+  `prepare_release_candidate.parse_tag` contract, then compare semantic
+  major/minor/patch and prerelease identifiers: numeric identifiers compare as
+  integers (`rc.10 > rc.9`), a release is newer than its prerelease, and
+  prereleases compare identifier by identifier (numeric < non-numeric).
+- Refuse non-increasing source/candidate pairs before writing any source env,
+  candidate env, sentinel or metadata file; preserve exact digest/identity
+  checks and existing RC19 -> RC20 recovery rehearsal.
+- Add positive tests for rc.9 -> rc.10 and rc -> stable and failure tests for
+  equal versions, stable -> same-base RC, reversed RC ordering and declining
+  core versions; verify no output files are written when rejected.
+- The existing Go scripts test gate wraps off-host Python tests but does not
+  exercise `scripts.stateful_compose_upgrade_test`. Add a focused Go test
+  adapter using the existing Python/root test helpers, without changing
+  workflows, `scripts/verify.sh`, or CI path filters.
+- Update `docs/upgrades.md` and scoped TASKS for the upgraded rehearsal
+  preflight, without changing the upgrade CLI, production services, Compose,
+  migration ledger, release workflow, binary/package, or deployment contract.
+- Commands: `python3 -m unittest scripts.stateful_compose_upgrade_test`,
+  `go test ./scripts -count=1`, `./scripts/verify.sh` where checkout is
+  available, and protected exact-head GitHub CI before merge.
+- Limit: this checks ordering only. It does **not** establish a supported
+  published source/rollback host or satisfy #1298's final acceptance.
+  Local container lacks a GitHub checkout and Docker; report blocked local
+  commands rather than claiming an unrun test passed.
+
 ## Current scope - reject empty retained backup sidecars (#1299) (2026-11-10)
 
 - Read-only finding: `discover_sets` requires an archive plus manifest and

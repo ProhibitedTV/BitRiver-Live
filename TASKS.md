@@ -1,5 +1,52 @@
 # TASKS
 
+## Scoped change: require forward-only stateful upgrade pairs (#1298)
+
+- [x] Task 1 - Audit the published-pair upgrade preflight
+  - Acceptance: inspect both verified release-set identities, tag parser,
+    current RC19 -> RC20 test, and the documented no-downgrade contract.
+  - Result: the helper SHA-binds source/candidate release-set manifests and
+    renders both environments but only parses source tag metadata. There is
+    no order check before environment/evidence output. Scope recorded in PLAN.
+- [x] Task 2 - Reject non-increasing candidate versions with regression tests
+  - Acceptance: compare canonical source and candidate SemVer tags including
+    prerelease numeric order and stable priority; reject equal/reversed pairs
+    before any outputs. Preserve RC19 -> RC20 and exact-image behavior.
+  - Result: parsed both canonical tags and compared SemVer core and prerelease
+    identifiers, with numeric rc.10 > rc.9 and stable > same-base prerelease.
+    Refusal occurs before environment, sentinel or report writes. Added four
+    passing forward scenarios and eleven refused pairs asserting zero output
+    artifacts. Existing RC19 -> RC20 positive fixture is unchanged.
+  - Added `scripts/stateful_compose_upgrade_contract_test.go` to execute
+    the Python suite from existing `go test ./scripts` verification, reusing
+    repository/Python discovery helpers. No workflow or required-check edits.
+  - Local focused/unit/full commands blocked because the GitHub checkout is
+    not mounted and Docker is unavailable in this environment; protected
+    exact-head GitHub CI must execute the new and existing Python/Go tests
+    before merge. No test execution is claimed here.
+- [x] Task 3 - Document, verify and qualify an isolated PR
+  - Acceptance: update upgrade docs; execute focused Python and Go checks and
+    literal verifier when possible; record blocked checks, review diff,
+    submit full medium-risk scorecard, and require protected exact-head CI
+    and no unresolved reviews before merge.
+  - Result: PR #1454 includes the forward-only preflight, positive/refusal
+    regression cases, Go-to-Python test bridge, and updated upgrade docs.
+    Exact implementation head `867fe5278cc445b340b1aecfc38384e8224a886e`
+    passed GitHub Actions run 43053697531 (attempt 3): Ubuntu full test-all
+    including Go scripts/Python preflight, PostgreSQL migration and Docker
+    quickstart; macOS/Windows Go, macOS/Windows/Ubuntu quickstart entrypoints,
+    documentation consistency, secret-file guard and protected Merge gate.
+    Attempts 1 and 2 failed only at SRS apt-get from runner DNS outage;
+    no code/Compose/workflow change was used to clear the blocker.
+  - This final task-result-only commit must independently pass protected
+    exact-head checks before merge. No local checkout/Docker was available,
+    so literal local `./scripts/verify.sh` is not claimed as executed.
+    There were no inline review threads or blocking review submissions;
+    automated Codex review was unavailable due to usage limits.
+  - Boundaries: no Compose, CI/workflow, migration, environment contract,
+    published asset, real host or runtime service edits. #1298 remains open
+    pending accepted published-host upgrade/rollback proof.
+
 ## Scoped change: reject zero-byte retained backup sidecars (#1299)
 
 - [x] Task 1 - Audit listed retention-set integrity semantics

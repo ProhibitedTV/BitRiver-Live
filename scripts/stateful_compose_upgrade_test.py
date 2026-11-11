@@ -110,6 +110,62 @@ class StatefulComposeUpgradePreparationTests(unittest.TestCase):
                 )
                 self.assertIn(source_line, target_env.splitlines())
 
+    def test_accepts_forward_semver_prerelease_and_stable_pairs(self) -> None:
+        # SemVer compares numeric identifiers numerically: rc.10 > rc.9.
+        for source_tag, target_tag in (
+            ("v1.2.3-rc.9", "v1.2.3-rc.10"),
+            ("v1.2.3-alpha", "v1.2.3-beta"),
+            ("v1.2.3-rc.99", "v1.2.3"),
+            ("v1.2.3", "v1.2.4-rc.1"),
+        ):
+            with self.subTest(source=source_tag, target=target_tag):
+                with tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    source = self.release_set(source_tag, self.source_commit, "source")
+                    target = self.release_set(target_tag, self.candidate_commit, "target")
+                    target["dependencies"] = copy.deepcopy(source["dependencies"])
+                    self.prepare(
+                        root, source, target,
+                        source_tag=source_tag, candidate_tag=target_tag,
+                    )
+                    metadata = json.loads((root / "metadata.json").read_text())
+                    self.assertEqual(metadata["source"]["tag"], source_tag)
+                    self.assertEqual(metadata["candidate"]["tag"], target_tag)
+                    self.assertTrue(metadata["credentialsStableAcrossPair"])
+
+    def test_rejects_non_forward_pairs_before_any_outputs(self) -> None:
+        for source_tag, target_tag in (
+            ("v1.2.3", "v1.2.3"),
+            ("v1.2.3-rc.20", "v1.2.3-rc.20"),
+            ("v1.2.3-rc.20", "v1.2.3-rc.19"),
+            ("v1.2.3-rc.10", "v1.2.3-rc.9"),
+            ("v1.2.3", "v1.2.3-rc.99"),
+            ("v1.2.4", "v1.2.3"),
+            ("v1.3.0", "v1.2.99"),
+            ("v1.2.3-beta", "v1.2.3-alpha"),
+            ("v1.2.3-alpha.2", "v1.2.3-alpha.1"),
+            ("v1.2.3-rc.alpha", "v1.2.3-rc.2"),
+            ("v1.2.3-rc.1.1", "v1.2.3-rc.1"),
+        ):
+            with self.subTest(source=source_tag, target=target_tag):
+                with tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    source = self.release_set(source_tag, self.source_commit, "source")
+                    target = self.release_set(target_tag, self.candidate_commit, "target")
+                    target["dependencies"] = copy.deepcopy(source["dependencies"])
+                    with self.assertRaisesRegex(
+                        MODULE.UpgradePreparationError,
+                        "candidate must be newer than source",
+                    ):
+                        self.prepare(
+                            root, source, target,
+                            source_tag=source_tag, candidate_tag=target_tag,
+                        )
+                    for artifact in (
+                        "source.env", "candidate.env", "sentinels", "metadata.json"
+                    ):
+                        self.assertFalse((root / artifact).exists(), artifact)
+
     def test_rejects_release_set_hash_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
