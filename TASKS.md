@@ -1,5 +1,28 @@
 # TASKS
 
+## Scoped change: bind packaged-host Postgres migration fingerprint (#1299)
+
+- [x] Task 1 - Audit producer, host helper and restored-state contract
+  - Acceptance: confirm producer's exact ledger hash input, host backup
+    entry point, current fixture, and no package dependency on off-host CLI.
+  - Result: `backup-postgres.sh` hashes the sorted, pipe-delimited six-field
+    `psql -qAt -F '|'` ledger; `host_recovery.validate_postgres_set` only
+    copies the declared fingerprint. The host launcher includes the standalone
+    helper, not the off-host Python verifier. PLAN scoped the change first.
+- [ ] Task 2 - Validate producer ledger and negative/positive fixtures
+  - Acceptance: require matching producer-compatible migration fingerprint,
+    applied-only nonempty rows, unique filenames and safe field encoding
+    before any host manifest is generated. Preserve existing host test paths.
+  - Result: pending implementation and targeted tests.
+- [ ] Task 3 - Document limitations and qualify the PR
+  - Acceptance: update the packaged-host recovery runbook; review diff,
+    include test evidence and medium-risk release scorecard; require
+    exact-head protected CI before squash merge and record blocked local
+    commands honestly.
+  - Boundaries: no producer, artifact schema, deployment contract, workflows,
+    restore service, real host or release package edits. #1299 must remain
+    open without real off-host and isolated lost-host restore proof.
+
 ## Scoped change: require forward-only stateful upgrade pairs (#1298)
 
 - [x] Task 1 - Audit the published-pair upgrade preflight
