@@ -1,5 +1,30 @@
 # PLAN
 
+## Current scope - reject empty retained backup sidecars (#1299) (2026-11-10)
+
+- Read-only finding: `discover_sets` requires an archive plus manifest and
+  checksum key, but tests positive size only for the archive. Older backup sets
+  with zero-byte `.manifest.json` or `.sha256` objects are counted toward
+  `minCompleteSets` without being downloaded; the latest valid backup can
+  therefore yield a passing retention-minimum claim with unusable history.
+- Fail closed on any listed backup asset (archive, manifest or checksum) whose
+  object-store Size is missing, boolean, non-integer or non-positive; retain the
+  existing exact-producer prefix and timestamp grouping semantics. No API,
+  backup producer, object-store mutation, or output schema changes.
+- Add focused evidence that empty or missing-size historical sidecars and
+  archives fail before the newest backup is downloaded. Keep a passing
+  producer-compatible 3-set fixture and explicit handling for valid sizes.
+- Clarify in the off-host operator runbook that all listed retained trios must
+  have non-empty objects, **but only newest trio bytes are checksum/manifest
+  validated**. Retention count does not prove older archives can restore.
+- Validate `python3 -m unittest scripts.qualify_offhost_backup_test`,
+  `go test ./scripts -run TestOffhostBackupQualificationPythonSuite -count=1`,
+  and `./scripts/verify.sh` when checkout and dependencies permit; otherwise
+  report blocked local checks and require exact-head GitHub CI before merge.
+- Constraints: no S3 endpoint/credentials available for real scheduled cycles;
+  #1299 remains open. No Compose, generated OME, workflows, package, tag,
+  deployment or production-host changes; no assertion of live RPO evidence.
+
 ## Current scope - bind off-host backup migration ledger to fingerprint (#1299) (2026-11-10)
 
 - Read-only finding: the off-host verifier validates the SHA-256 *shape* of
