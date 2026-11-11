@@ -23,6 +23,10 @@
   its computed fingerprint. Add rechecksummed tampering, missing/invalid/
   ambiguous ledger failures, multirow producer ordering and fail-before-host-
   manifest regression tests. Preserve existing successful host recovery tests.
+- The standard Go scripts gate currently invokes some Python suites but not
+  `scripts.host_recovery_test`. Add a small Go test bridge using the existing
+  Python and repository-root discovery helpers; do not edit required CI jobs
+  or workflow files.
 - Document that the extra manifest consistency gate is **not** proof of
   archive restorability or a replacement for isolated PostgreSQL restore,
   off-host scheduling, lost-host acceptance, or RPO/RTO evidence.
