@@ -1,5 +1,14 @@
 # PLAN
 
+## Current scope - bind restored PostgreSQL trio to host recovery manifest (#1299) (2026-11-11)
+
+- Read-only finding: `build_restore_report` validates a recovered Postgres backup trio but discards the returned verified hashes and fingerprint, while `verify_backup_set` checks only the nested trio's filenames. A rechecksummed outer host manifest can therefore carry a different Postgres hash/fingerprint identity, yet a restored host report can claim `status: passed` and propagate the wrong binding into disaster-recovery evidence.
+- Fail closed on missing/malformed nested Postgres SHA-256 fields and unsafe or inconsistent asset names at outer host-manifest verification. At restore-report construction, require exact equality between the verified recovered trio and the Postgres inventory declared by the outer host backup. Reject **before** writing a passing report.
+- Use producer-compatible fixtures and add negative cases that recompute the outer `.sha256` after editing one nested field, plus positive existing fresh-restore coverage. Include missing/invalid hashes, wrong but valid 64-byte hashes, malformed/synthetic names, and explicit recovered triple mismatch. Preserve encrypted archive and report schemas, read-only proof and data retention semantics.
+- Runtime boundary: the standalone `scripts/host_recovery.py` remains bundled, no new dependencies, no Compose/env/workflow, backup producer, restore scripts, database, published packages or real host changes. #1299 remains open pending genuine fresh-host scheduled off-host recovery evidence.
+- Validate with `python3 -m unittest scripts.host_recovery_test`, `go test ./scripts -count=1` and `./scripts/verify.sh` when local checkout/Docker are available; this environment has no mounted checkout, so require exact-head protected CI and do not claim local execution.
+- Document scope and failure boundaries in `docs/operations.md`; retain medium-risk PR audit and complete TASKS in required order.
+
 ## Current scope - validate packaged-host Postgres migration fingerprint (#1299) (2026-11-11)
 
 - Read-only audit: `host_recovery.validate_postgres_set` verifies the inner
