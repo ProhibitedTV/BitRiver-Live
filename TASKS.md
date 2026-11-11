@@ -8,12 +8,14 @@
   - Result: the backup producer hashes sorted ledger lines, while off-host
     qualification checked only the fingerprint's 64-hex shape; scope recorded
     in PLAN first. No backup format or deployment contract change.
-- [ ] Task 2 - Bind the manifest migration rows to the producer fingerprint
+- [x] Task 2 - Bind the manifest migration rows to the producer fingerprint
   - Acceptance: rebuild the producer's six-column, newline-terminated UTF-8
     ledger in filename order; reject missing/non-string or separator-bearing
     fields, and SHA mismatches after other structural checks.
-  - Tests: known SHA, reordered multiple rows, mutated row and fingerprint
-    with valid enclosing archive/manifest checksums; existing fixtures pass.
+  - Result: verifier now computes the producer's SHA-256 from sorted six-field
+    UTF-8 ledger rows. Fixed expected fixture hashes were independently checked
+    for one and two rows; rechecksummed tampering and malformed-field regression
+    tests added. Repository tests and CI remain to be run/observed.
 - [ ] Task 3 - Qualify the verifier, document scope, and open review PR
   - Acceptance: focused Python and scripts-Go tests pass; full verifier and
     protected PR checks attempted/reported; docs explain the stronger
