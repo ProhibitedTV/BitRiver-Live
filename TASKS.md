@@ -22,6 +22,16 @@
     consistency check and that restore/scheduling evidence remains separate.
   - No production state, published candidates, host configs or CI workflows
     are modified.
+  - Initial PR #1452 at `250de415`: Ubuntu test-all passed with all Go
+    packages, script Python suite, real PostgreSQL migration lifecycle and
+    healthy Docker Compose quickstart. Mac/Ubuntu/Windows entrypoint sanity,
+    docs consistency and secret guard also passed. Merge gate failed only
+    because PR-body risk scorecard was absent. PR body is now corrected with
+    medium-risk classification, exact evidence map, deployment boundaries and
+    explicitly skipped real-host/restore checks; a new exact-head CI run must
+    verify the corrected scorecard before merge.
+  - Codex review did not run because of account review-usage limits; this is
+    not a reviewed code pass. No automated-review bypass or release claim.
 
 ## Scoped change: upload authorization coverage (#1306)
 
