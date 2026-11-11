@@ -9,11 +9,22 @@
     `psql -qAt -F '|'` ledger; `host_recovery.validate_postgres_set` only
     copies the declared fingerprint. The host launcher includes the standalone
     helper, not the off-host Python verifier. PLAN scoped the change first.
-- [ ] Task 2 - Validate producer ledger and negative/positive fixtures
+- [x] Task 2 - Validate producer ledger and negative/positive fixtures
   - Acceptance: require matching producer-compatible migration fingerprint,
     applied-only nonempty rows, unique filenames and safe field encoding
     before any host manifest is generated. Preserve existing host test paths.
-  - Result: pending implementation and targeted tests.
+  - Result: the standalone host recovery helper recomputes the producer's
+    sorted, six-field pipe-delimited UTF-8 migration ledger hash and rejects
+    invalid or mismatched evidence before creating a host recovery manifest.
+    Tests now use producer-shaped evidence; 12 rechecksummed negative fixtures
+    include missing database, altered fingerprint/rows, malformed fields,
+    status and duplicate filenames. A valid two-row unsorted JSON case
+    demonstrates the producer's stable filename order.
+  - Added `scripts/host_recovery_contract_test.go` to invoke the full Python
+    host recovery suite from the existing `go test ./scripts` gate, without
+    editing CI/workflow requirements. Local Python/Go/full verifier execution
+    is blocked by unavailable local repository checkout and Docker. No test
+    pass is asserted before protected PR CI runs.
 - [ ] Task 3 - Document limitations and qualify the PR
   - Acceptance: update the packaged-host recovery runbook; review diff,
     include test evidence and medium-risk release scorecard; require
