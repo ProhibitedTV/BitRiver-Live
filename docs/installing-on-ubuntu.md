@@ -2,7 +2,7 @@
 
 This is the artifact-only installation path for an operator-managed Ubuntu VM. It installs the canonical Docker Compose stack; it does not build application images or require a source checkout.
 
-> **Current candidate:** [`v1.2.3-rc.13`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13) publishes checksum-covered Ubuntu packages, launcher archives, SBOMs, five signed first-party image digests, sanitized product evidence, and a signed `release-set.json`. It is a prerelease, not stable promotion.
+> **Current candidate:** [`v1.2.3-rc.23`](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.23) publishes checksum-covered Ubuntu packages, launcher archives, SBOMs, five signed first-party image digests, sanitized product evidence, and a signed `release-set.json`. It is a prerelease, not stable promotion. RC22 remains historical/rejected; see the [RC23 notes](releases/v1.2.3-rc.23.md).
 
 A tag containing a hyphen is a GitHub prerelease and does not move the `latest`
 image tag. Official images use `ghcr.io/prohibitedtv`; forks and mirrors can
@@ -15,7 +15,7 @@ publishes the GitHub prerelease.
 - Production target: Ubuntu Server 24.04 LTS on amd64.
 - Package build coverage: amd64 and arm64 `.deb`/`.rpm` artifacts.
 - Package install coverage: Ubuntu 24.04, Debian 12, and Rocky Linux 9 containers.
-- RC13 release evidence: Ubuntu 24.04, Debian 12, and Rocky Linux 9 package
+- RC23 release evidence: Ubuntu 24.04, Debian 12, and Rocky Linux 9 package
   install/inspect/remove passed; the pull-only five-image stack passed real
   RTMP, decoded OME/transcoder media, chat/moderation, VOD, and aggregate
   status checks. The release set binds that evidence to source commit
@@ -25,7 +25,7 @@ publishes the GitHub prerelease.
   recovery, and repeated OME failure/media recovery.
 
 The installer proves rendered configuration, migration completion, process
-health, and critical Compose health. RC13's tag workflow also proved the real
+health, and critical Compose health. RC23's tag workflow also proved the real
 media/API product path from published images. Stable promotion still requires
 the package to be installed and exercised on the target Ubuntu VM through its
 real proxy, firewall, authenticated OvenMediaEngine control path, and reboot
@@ -94,11 +94,11 @@ Membership in the `docker` group is effectively root-level host access. Use a de
 ## 2. Download and verify a release artifact
 
 Download the Ubuntu amd64 `.deb` or launcher archive plus `CHECKSUMS.txt` from
-the same [RC13 release](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.13).
+the same [RC23 release](https://github.com/ProhibitedTV/BitRiver-Live/releases/tag/v1.2.3-rc.23).
 Never mix a package, archive, or checksum file from different tags.
 
 ```bash
-release_tag=v1.2.3-rc.13
+release_tag=v1.2.3-rc.23
 base_url="https://github.com/ProhibitedTV/BitRiver-Live/releases/download/${release_tag}"
 curl -fLO "${base_url}/bitriver-live_${release_tag}_amd64.deb"
 curl -fLO "${base_url}/bitriver-launcher-linux-amd64.tar.gz"
@@ -129,8 +129,8 @@ Do not install when the manifest has no exact entry or a signed revocation
 marker is attached to the candidate. Stable releases retain the RC package
 filename because promotion copies candidate bytes instead of rebuilding them.
 
-For RC13, the expected `release-set.json` SHA-256 is
-`795fffee84662aec91624eb4352b9c1a9ef5c34b17838939adaf567418797fa0`.
+For RC23, the expected `release-set.json` SHA-256 is
+`1bc19e64a77e49924852d722e9672b5b43da3c1acea6b99614d26bfea68c7bdd`.
 Confirm that value from the GitHub Release and tracked release note rather than
 copying it from an untrusted forum or installation script.
 
