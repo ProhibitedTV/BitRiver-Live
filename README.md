@@ -155,6 +155,19 @@ proves ordinary uninstall retains configuration and data. This hosted proof
 complements rather than replaces the real XOA/Nginx Proxy Manager checklist
 below.
 
+## BitRiver Studio OS interoperability
+
+Creators can download a **key-free Studio OS ingest profile** from their
+BitRiver-Live Creator Live page. The profile contains the RTMP server,
+channel ID and viewer URL, but **never the private stream key**.
+Studio OS can import it locally and publish through its existing OBS /
+MediaMTX RTMP pipeline, after the creator separately adds the key and
+explicitly enables the destination.
+
+See [Studio OS integration](docs/studio-os-integration.md). This is an
+early manual setup bridge, not cross-product account authorization or
+a verified one-click broadcasting flow.
+
 ## First broadcast
 
 1. Sign in with the bootstrapped administrator, or enable self-signup for a

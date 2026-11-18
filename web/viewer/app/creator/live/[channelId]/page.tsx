@@ -22,6 +22,7 @@ import { useAuth } from "../../../../hooks/useAuth";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
 import { buildViewerPath, buildViewerUrl } from "../../../../lib/viewer-links";
 import { deriveCreatorGoLiveStatus } from "./stream-status";
+import { buildStudioOSIngestProfile } from "../../../../lib/bitriver-studio-profile";
 import {
   ManagedChannel,
   StreamSession,
@@ -52,6 +53,7 @@ export default function CreatorLivePage() {
   const [ingestCopyMessage, setIngestCopyMessage] = useState<string | undefined>();
   const [copiedIngestEndpoint, setCopiedIngestEndpoint] = useState<string | undefined>();
   const [obsSettingsCopyMessage, setObsSettingsCopyMessage] = useState<string | undefined>();
+  const [studioExportMessage, setStudioExportMessage] = useState<string | undefined>();
   const [viewerLinkCopyMessage, setViewerLinkCopyMessage] = useState<string | undefined>();
   const [testStreamUpdatedAt, setTestStreamUpdatedAt] = useState<string | undefined>();
   const router = useRouter();
@@ -355,6 +357,34 @@ export default function CreatorLivePage() {
     }
   };
 
+  const handleExportStudioOSProfile = () => {
+    if (!isChannelOwner || !managedChannel) return;
+    const profile = buildStudioOSIngestProfile(
+      managedChannel.id,
+      preferredIngestEndpoint,
+      new URL(viewerPageHref, window.location.origin).toString()
+    );
+    if (!profile) {
+      setStudioExportMessage("No usable key-free RTMP ingest endpoint is configured for this channel.");
+      return;
+    }
+    // No stream key, account token or session cookie is included. The user
+    // supplies their stream key separately on their own Studio OS machine.
+    const blob = new Blob([JSON.stringify(profile, null, 2) + "\n"], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "bitriver-live-" + managedChannel.id + "-studio-os.json";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setStudioExportMessage("Downloaded a key-free BitRiver Studio OS ingest profile.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const handleCopyViewerLink = async () => {
     try {
       await navigator.clipboard.writeText(viewerPageHref);
@@ -467,6 +497,24 @@ export default function CreatorLivePage() {
           void handleCopyObsSettings();
         }}
       />
+
+      <section className="surface workspace-card" aria-label="BitRiver Studio OS integration">
+        <h3>Publish from BitRiver Studio OS</h3>
+        <p className="muted">
+          Download a profile for your own Studio OS computer. It contains the
+          channel ID, public RTMP server and viewer link — never your stream
+          key. Import it locally and supply the key separately.
+        </p>
+        <Button
+          variant="secondary"
+          data-testid="download-studio-os-profile"
+          disabled={!isChannelOwner || !preferredIngestEndpoint}
+          onClick={handleExportStudioOSProfile}
+        >
+          Download Studio OS profile
+        </Button>
+        {studioExportMessage && <p className="muted" role="status">{studioExportMessage}</p>}
+      </section>
 
       <LivePreviewPanel
         channelId={channelId}
