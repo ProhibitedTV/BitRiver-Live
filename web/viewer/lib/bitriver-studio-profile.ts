@@ -26,7 +26,7 @@ export function buildStudioOSIngestProfile(
         publish.username || publish.password || publish.search || publish.hash ||
         /[|\[\]\s]/.test(rtmpServer)) return null;
     if (!["http:", "https:"].includes(page.protocol) || !page.hostname ||
-        page.username || page.password || page.hash) return null;
+        page.username || page.password || page.search || page.hash) return null;
     return {
       schemaVersion: STUDIO_OS_INGEST_PROFILE_VERSION,
       provider: "bitriver-live",
