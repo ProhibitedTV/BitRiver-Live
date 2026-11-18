@@ -499,7 +499,7 @@ export default function CreatorLivePage() {
       />
 
       <section className="surface workspace-card" aria-label="BitRiver Studio OS integration">
-        <h3>Publish from BitRiver Studio OS</h3>
+        <h4>Publish from BitRiver Studio OS</h4>
         <p className="muted">
           Download a profile for your own Studio OS computer. It contains the
           channel ID, public RTMP server and viewer link — never your stream
