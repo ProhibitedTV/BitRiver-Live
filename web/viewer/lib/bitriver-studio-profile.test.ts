@@ -30,5 +30,6 @@ describe("BitRiver Studio OS export", () => {
   it("rejects unsafe channel and viewer URLs", () => {
     expect(buildStudioOSIngestProfile("../channel", "rtmp://ingest.example.test/live", viewer)).toBeNull();
     expect(buildStudioOSIngestProfile(channel, "rtmp://ingest.example.test/live", "https://alice:secret@watch.example.test/")).toBeNull();
+    expect(buildStudioOSIngestProfile(channel, "rtmp://ingest.example.test/live", "https://watch.example.test/viewer?session=secret")).toBeNull();
   });
 });
