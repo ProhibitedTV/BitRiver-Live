@@ -791,7 +791,7 @@ jobs:
 
       - name: Generate SBOM for ${{ matrix.component }} image
         id: sbom
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ steps.image-namespace.outputs.value }}/${{ matrix.image_name }}@${{ steps.build.outputs.digest }}
           output-file: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
@@ -958,7 +958,7 @@ jobs:
             >"$RUNNER_TEMP/bitriver-viewer-image-verification.json"
 
       - name: Generate SBOM for viewer image
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ steps.image-namespace.outputs.value }}/bitriver-viewer@${{ steps.manifest.outputs.digest }}
           output-file: bitriver-viewer-${{ env.RELEASE_TAG }}.spdx.json
